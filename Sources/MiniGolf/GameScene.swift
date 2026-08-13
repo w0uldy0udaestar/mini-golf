@@ -173,6 +173,7 @@ final class GameScene: SKScene {
     }
 
     private func startWalk() {
+        endShotTrail()
         let from = stickX, to = ball.x
         let dist = abs(to - from)
         if dist < 1 {
@@ -187,6 +188,9 @@ final class GameScene: SKScene {
     private func startSwing() {
         mode = .swinging
         swingAnim = SwingAnim(prof: profile, fromPose: renderPose)
+        if !club.isPutter {
+            SoundKit.shared.whoosh(power: heightPct, dur: profile.down + 0.05)
+        }
     }
 
     private func launchBall() {
@@ -194,20 +198,51 @@ final class GameScene: SKScene {
         Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir)
         strokes += 1
         trailPoints = []
+        trailNode.removeAllActions()
+        trailNode.alpha = 1
         mode = .motion
+        SoundKit.shared.impact(cat: club.cat, lie: lie, power: heightPct)
+        if lie == .rough || lie == .bunker { // 러프 풀잎·벙커 모래가 튄다
+            FX.dust(
+                on: self,
+                at: CGPoint(x: px(ball.x), y: groundY(ball.x)),
+                surface: lie,
+                intensity: 0.4 + 0.6 * heightPct
+            )
+        }
         updateHUD()
+    }
+
+    /// 샷이 끝나면 궤적은 잠시 여운을 남기고 사라진다
+    private func endShotTrail() {
+        guard !trailPoints.isEmpty else { return }
+        trailNode.removeAllActions()
+        trailNode.run(.sequence([
+            .fadeAlpha(to: 0, duration: 1.1),
+            .run { [weak self] in
+                self?.trailPoints.removeAll()
+                self?.trailNode.alpha = 1
+            },
+        ]))
     }
 
     /// ── 홀 이벤트 ──
     private func onHoled() {
         mode = .holed
         results.append((hole.par, strokes, false))
+        endShotTrail()
+        SoundKit.shared.holeIn()
+        FX.holePop(on: self, at: CGPoint(x: px(hole.holeX), y: groundY(hole.holeX)))
+        FX.flagWave(flagNode)
         toast(scoreName(strokes: strokes, par: hole.par), sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m")
         run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
     }
 
     private func onWater() {
         strokes += 1
+        endShotTrail()
+        SoundKit.shared.splash()
+        FX.ripple(on: self, at: CGPoint(x: px(ball.x), y: groundY(ball.x)))
         let wr = hole.waterRange ?? (ball.x - 3) ... (ball.x + 3)
         let dropX = dir > 0 ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
         ball = BallState(x: dropX, y: hole.ground(at: dropX))
@@ -222,6 +257,7 @@ final class GameScene: SKScene {
     private func giveUp() {
         mode = .holed
         results.append((hole.par, Phys.maxStrokes, true))
+        endShotTrail()
         toast("기권", sub: "\(Phys.maxStrokes)타 초과")
         run(.sequence([.wait(forDuration: 1.4), .run { [weak self] in self?.advanceHole() }]))
     }
@@ -238,6 +274,7 @@ final class GameScene: SKScene {
                 "\(i + 1)  ·  파 \(r.par)  ·  \(r.gaveUp ? "기권" : "\(r.strokes)타")  ·  \(scoreName(strokes: r.strokes, par: r.par))"
             }
             scorecard.show(rows: rows, title: "라운드 종료", footer: "합계 \(totalStr)  —  R로 새 라운드")
+            SoundKit.shared.chime()
         }
     }
 
@@ -450,22 +487,56 @@ final class GameScene: SKScene {
 
         if mode == .motion {
             acc += dt * timeScale
-            var event = StepEvent.none
+            var terminal = StepEvent.none
+            var landing: (speed: Double, surface: Surface, x: Double)?
+            var wallHit: (speed: Double, x: Double)?
+            var lipped = false
             while acc >= Phys.dt {
                 acc -= Phys.dt
-                event = Ballistics.step(&ball, hole: hole)
-                if event != .none {
+                let event = Ballistics.step(&ball, hole: hole)
+                switch event {
+                case .holed, .water:
+                    terminal = event
+                case let .bounce(speed, surface): // 프레임당 가장 강한 착지 하나만 연출
+                    if speed > (landing?.speed ?? 0) {
+                        landing = (speed, surface, ball.x)
+                    }
+                case let .wall(speed):
+                    if speed > (wallHit?.speed ?? 0) {
+                        wallHit = (speed, ball.x)
+                    }
+                case .lipOut:
+                    lipped = true
+                case .none:
                     break
                 }
+                if terminal != .none {
+                    break
+                }
+            }
+            if let l = landing, l.speed > 1.4 {
+                SoundKit.shared.bounce(speed: l.speed, surface: l.surface)
+                FX.dust(
+                    on: self,
+                    at: CGPoint(x: px(l.x), y: groundY(l.x)),
+                    surface: l.surface,
+                    intensity: min(1, l.speed / 12)
+                )
+            }
+            if let w = wallHit, w.speed > 0.8 {
+                SoundKit.shared.wall(speed: w.speed)
+            }
+            if lipped {
+                SoundKit.shared.lipOut()
             }
             trailPoints.append(CGPoint(x: px(ball.x), y: py(ball.y) + 5.5))
             if trailPoints.count > 400 {
                 trailPoints.removeFirst()
             }
-            switch event {
+            switch terminal {
             case .holed: onHoled()
             case .water: onWater()
-            case .none:
+            default:
                 if ball.phase == .rest {
                     if strokes >= Phys.maxStrokes {
                         giveUp()

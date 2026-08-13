@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: OverlayPanel!
     private var scene: GameScene!
     private var statusItem: NSStatusItem!
+    private var soundMenuItem: NSMenuItem!
     private var hotKeyRef: EventHotKeyRef?
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -94,9 +95,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "게임 재개 / 일시정지 (⌃⇧G)", action: #selector(toggleGame), keyEquivalent: "g").target = self
         menu.addItem(withTitle: "새 라운드", action: #selector(newRound), keyEquivalent: "r").target = self
+        soundMenuItem = menu.addItem(withTitle: "사운드", action: #selector(toggleSound), keyEquivalent: "")
+        soundMenuItem.target = self
+        soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
         menu.addItem(.separator())
         menu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
         statusItem.menu = menu
+    }
+
+    @objc private func toggleSound() {
+        SoundKit.shared.enabled.toggle()
+        soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
     }
 
     @objc private func panelResignedKey() {

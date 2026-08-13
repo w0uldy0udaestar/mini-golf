@@ -57,11 +57,14 @@ public struct BallState: Sendable {
     }
 }
 
-/// 스텝 결과 이벤트
-public enum StepEvent: Sendable {
+/// 스텝 결과 이벤트 — holed/water는 종결, 나머지는 연출(사운드·이펙트)용 신호
+public enum StepEvent: Sendable, Equatable {
     case none
     case holed
     case water // 입수 — 호출측에서 1벌타 + 드롭 처리
+    case bounce(speed: Double, surface: Surface) // 지면 충돌 (법선 속도 m/s)
+    case lipOut // 컵 턱에 맞고 튐
+    case wall(speed: Double) // 화면 가장자리 반사
 }
 
 public enum Ballistics {
@@ -81,6 +84,7 @@ public enum Ballistics {
 
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다
     public static func step(_ b: inout BallState, hole: Hole, dt: Double = Phys.dt) -> StepEvent {
+        var ev = StepEvent.none
         switch b.phase {
         case .rest:
             return .none
@@ -112,6 +116,7 @@ public enum Ballistics {
                 let nx = -s / len, ny = 1 / len, tx = 1 / len, ty = s / len
                 let vn = b.vx * nx + b.vy * ny
                 if vn < 0 {
+                    ev = .bounce(speed: -vn, surface: surfType)
                     var vt = b.vx * tx + b.vy * ty
                     let kick = min(b.spin, 12000) / 12000 * Phys.bounceSpinKick * b.spinSign
                     vt = vt * Phys.bounceVxKeep - kick
@@ -158,9 +163,11 @@ public enum Ballistics {
         // 좌우 벽 반사
         if b.x < 0.5 {
             b.x = 0.5; b.vx = -b.vx * Phys.wallRestitution
+            ev = .wall(speed: abs(b.vx))
         }
         if b.x > hole.worldW - 0.5 {
             b.x = hole.worldW - 0.5; b.vx = -b.vx * Phys.wallRestitution
+            ev = .wall(speed: abs(b.vx))
         }
 
         // 컵 캡처 / 립아웃 — 임계값 절벽을 연속 구간으로:
@@ -182,12 +189,13 @@ public enum Ballistics {
                     b.vy = 0.8 + over * 0.7 // 톡 튀어오르는 연출
                     b.vx = (b.vx > 0 ? 1 : -1) * (0.5 + over * 1.2)
                     b.spin = 0
+                    ev = .lipOut
                 }
             } else if b.phase == .fly, b.y < hole.ground(at: b.x) + 0.3, b.vy < 0, speed <= Phys.captureFly {
                 return .holed
             }
         }
-        return .none
+        return ev
     }
 }
 

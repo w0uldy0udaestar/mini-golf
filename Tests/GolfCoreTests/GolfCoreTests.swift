@@ -199,6 +199,39 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertEqual(event, .water)
     }
 
+    // ── 연출 이벤트 (M3 사운드·이펙트용) ──
+
+    func testBounceEventOnLanding() {
+        let hole = Hole.flatTest()
+        var b = BallState(x: 50, y: 0)
+        Ballistics.launch(&b, club: club("7I"), heightPct: 1, lie: .fairway, dir: 1)
+        var sawBounce = false
+        var t = 0.0
+        while b.phase != .rest, t < 60 {
+            if case let .bounce(speed, surface) = Ballistics.step(&b, hole: hole) {
+                XCTAssertGreaterThan(speed, 0)
+                XCTAssertEqual(surface, .fairway)
+                sawBounce = true
+            }
+            t += Phys.dt
+        }
+        XCTAssertTrue(sawBounce, "착지 시 bounce 이벤트가 나와야 함")
+    }
+
+    func testLipOutEmitsEvent() {
+        let hole = Hole.flatTest(worldW: 300, holeX: 150)
+        var b = BallState(x: 148, y: 0, vx: 4.5, phase: .roll)
+        var saw = false
+        var t = 0.0
+        while b.phase != .rest, t < 30 {
+            if Ballistics.step(&b, hole: hole) == .lipOut {
+                saw = true
+            }
+            t += Phys.dt
+        }
+        XCTAssertTrue(saw, "립아웃 시 lipOut 이벤트가 나와야 함")
+    }
+
     // ── 결정론 ──
 
     func testCourseGenerationIsDeterministic() {
