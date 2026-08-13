@@ -65,10 +65,11 @@ Render  (SpriteKit)
 - [x] 포커스 상실 — 타 앱 활성화 후 키 이벤트가 오버레이에 도달하지 않음을 실측 (didResignKeyNotification 훅 연결됨). 클릭 통과는 ignoresMouseEvents API 보장(수동 확인 권장)
 - 스파이크 코드: `Sources/MiniGolfSpike/main.swift` — 실행: `swift build && .build/debug/MiniGolfSpike` (Esc 종료)
 
-### M1 · 개발 환경 + 코어 루프
-- [ ] SwiftFormat 설정 후 실행·통과, XCTest 러너 + 샘플 테스트 1개 통과 (코드보다 검증 루프 먼저)
-- [ ] GolfCore: 클럽 테이블 + 탄도 엔진 + 단위 테스트 (사거리 단조성, 로프트↑→탄도↑, 백스핀 체크 동작 등)
-- [ ] 1홀 플레이 가능: 클럽 선택 → 높이 → 스윙 → 비행 → 바운스·롤 → 홀인 판정
+### M1 · 개발 환경 + 코어 루프 ✅ 완료 (2026-08-13)
+- [x] SwiftFormat 설정·통과, XCTest 14개 테스트 통과 (검증 루프 먼저)
+- [x] GolfCore 이식: SeededRandom(mulberry32)·ClubTable·Surface·Course(지형·벙커·워터·브레이크)·Ballistics(경사 물리·립아웃) — 프로토타입과 동일 로직, 순수 Swift
+- [x] 1홀 플레이 오버레이(`Sources/MiniGolf`): 실기에서 코스 렌더 + Space 스윙 → 공 비행 확인. 9홀 순회·점수 로직 포함
+- 남은 것(M2로): 스틱맨·걷기·스윙 애니메이션 이식, HUD 칩 배경(밝은 배경 위 가독성), 스코어카드, 메뉴바 앱, 포커스 상실 일시정지 연결
 
 ### M2 · MVP — 9홀 + 점수
 - [ ] HoleGenerator (시드 랜덤 + 파 산정) + 단위 테스트

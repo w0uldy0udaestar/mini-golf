@@ -1,0 +1,6 @@
+# SwiftFormat 설정 — 커뮤니티 표준 기본값 + 최소 조정
+--swiftversion 6.0
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--disable wrapMultilineStatementBraces

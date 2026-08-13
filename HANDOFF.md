@@ -23,7 +23,8 @@
 
 **0. 랜덤 코스 설계 ✅ 완료** — 지형·브레이크·벙커·워터 (프로토타입).
 **0.5 M0 Swift 스파이크 ✅ 통과 (2026-08-13, macOS 26)** — 투명 오버레이 렌더·키 캡처·포커스 상실 모두 실기 검증. PLAN.md M0 참고.
-**다음: M1** — SwiftFormat·XCTest 셋업 → GolfCore 이식(프로토타입의 PHYS/CLUBS/SURFACES/physicsStep/makeCourse를 순수 Swift로, 단위 테스트 포함) → 1홀 플레이 가능한 오버레이.
+**M1 ✅ 완료 (2026-08-13)** — SwiftFormat+XCTest 14개 통과, GolfCore 이식(Sources/GolfCore: SeededRandom·ClubTable·Surface·Course·Ballistics), 1홀 플레이 오버레이(Sources/MiniGolf) 실기 검증. 실행: `swift build && .build/debug/MiniGolf`
+**다음: M2** — MiniGolf 앱에 프로토타입 연출 이식: 스틱맨(P-System 포즈·포즈 스무딩)·걷기·클럽별 스윙 프로파일, HUD 칩 배경(밝은 배경 위 흰 글자 가독성 문제 있음), 스코어카드 UI, 메뉴바 앱(LSUIElement), 포커스 상실 자동 일시정지, 벙커/워터 질감. 참고 구현은 전부 `prototype/mini-golf-prototype.html`에 있음.
 
 
 **M0 리스크 스파이크부터 시작** — PLAN.md의 M0 체크리스트:

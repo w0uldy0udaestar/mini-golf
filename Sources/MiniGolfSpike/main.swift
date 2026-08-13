@@ -12,7 +12,7 @@ import SpriteKit
 final class SpikeScene: SKScene {
     private let ball = SKShapeNode(circleOfRadius: 9)
 
-    override func didMove(to view: SKView) {
+    override func didMove(to _: SKView) {
         backgroundColor = .clear // ⚠️ skView.backgroundColor는 절대 설정하지 않는다 (투명이 깨짐)
 
         ball.fillColor = .white
@@ -35,7 +35,7 @@ final class SpikeScene: SKScene {
         print("[spike] keyDown code=\(event.keyCode)")
         switch event.keyCode {
         case 123: ball.run(.moveBy(x: -30, y: 0, duration: 0.1)) // ←
-        case 124: ball.run(.moveBy(x: 30, y: 0, duration: 0.1))  // →
+        case 124: ball.run(.moveBy(x: 30, y: 0, duration: 0.1)) // →
         case 49: // Space: 포물선 샷 흉내
             ball.run(.sequence([
                 .moveBy(x: 60, y: 90, duration: 0.25),
@@ -48,13 +48,15 @@ final class SpikeScene: SKScene {
 }
 
 final class SpikePanel: NSPanel {
-    override var canBecomeKey: Bool { true } // borderless 패널도 키 입력을 받게
+    override var canBecomeKey: Bool {
+        true
+    } // borderless 패널도 키 입력을 받게
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: SpikePanel!
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationDidFinishLaunching(_: Notification) {
         guard let screen = NSScreen.main else { NSApp.terminate(nil); return }
 
         panel = SpikePanel(
