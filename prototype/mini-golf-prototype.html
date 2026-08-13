@@ -245,12 +245,18 @@ function scoreName(strokes, par) {
 
 /* ══════════════ 게임 상태 ══════════════ */
 const game = {
-  mode: 'aim',            // aim | motion | holed | end
+  mode: 'aim',            // aim | swinging | motion | holed | end
   course: [], holeIdx: 0, results: [],
   strokes: 0, clubIdx: 0, heightPct: 0.6,
   ball: { x: TEE_X, y: 0, vx: 0, vy: 0, spin: 0, spinSign: 1, phase: 'rest' },
   trail: [], holedAnim: 0,
+  stickX: TEE_X, stickDir: 1, // 스틱맨 위치·타격 방향
+  swingAnim: null,            // { t, launched } — 다운스윙~팔로스루 애니메이션
 };
+
+/* 스윙 애니메이션 타이밍 (초) */
+const SWING = { down: 0.18, total: 0.5, phiImpact: 22, phiEnd: 115 };
+const backswingPhi = (h) => -(30 + 120 * h); // 백스윙 각도: 0%=-30°, 100%=-150° (수직이면 몸과 겹쳐 안 보임)
 
 function newRound(seed) {
   game.course = makeCourse(seed ?? (Date.now() & 0x7fffffff));
@@ -263,17 +269,29 @@ function startHole() {
   game.strokes = 0;
   game.ball = { x: TEE_X, y: 0, vx: 0, vy: 0, spin: 0, spinSign: 1, phase: 'rest' };
   game.trail = [];
+  game.swingAnim = null;
+  enterAim();
+}
+
+function enterAim() {
   game.mode = 'aim';
+  game.stickX = game.ball.x;
+  game.stickDir = hole().holeX >= game.ball.x ? 1 : -1;
   updateHud();
 }
 
 function hole() { return game.course[game.holeIdx]; }
 
 /* ══════════════ 샷 ══════════════ */
-function swing() {
+function startSwing() {
+  game.mode = 'swinging';           // 입력 잠금, 다운스윙 시작
+  game.swingAnim = { t: 0, launched: false };
+}
+
+function launchBall() {
   const club = CLUBS[game.clubIdx];
   const b = game.ball;
-  const dir = hole().holeX >= b.x ? 1 : -1;
+  const dir = game.stickDir;
   const v0 = club.power * (PHYS.minPowerRatio + (1 - PHYS.minPowerRatio) * game.heightPct);
   const loftRad = (club.loft * Math.PI) / 180;
   b.vx = dir * v0 * Math.cos(loftRad);
@@ -371,7 +389,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'ArrowUp' || k === 'ArrowDown') held.add(k);
   if (k === 'ArrowLeft')  { game.clubIdx = Math.max(0, game.clubIdx - 1); updateHud(); }
   if (k === 'ArrowRight') { game.clubIdx = Math.min(CLUBS.length - 1, game.clubIdx + 1); updateHud(); }
-  if (k === 'Space') swing();
+  if (k === 'Space') startSwing();
 });
 window.addEventListener('keyup', (e) => held.delete(e.code));
 window.addEventListener('blur', () => held.clear()); // 포커스 잃으면 입력 해제 (실제 앱: 자동 일시정지)
@@ -470,6 +488,8 @@ function draw() {
     }
   }
 
+  drawStickman();
+
   // 공 그림자 (높이 단서)
   if (b.y > 0.2) {
     const s = Math.max(2, 6 - b.y * 0.08);
@@ -485,13 +505,11 @@ function draw() {
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
   ctx.lineWidth = 1; ctx.stroke();
 
-  // 조준 UI (스윙 높이 게이지 + 발사각 가이드)
+  // 발사각 가이드 (길이 = 파워)
   if (game.mode === 'aim') {
     const club = CLUBS[game.clubIdx];
-    const dir = h.holeX >= b.x ? 1 : -1;
+    const dir = game.stickDir;
     const bx = mx(b.x), by = ballY - 6;
-
-    // 발사각 가이드 (길이 = 파워)
     const loftRad = (club.loft * Math.PI) / 180;
     const len = 30 + 70 * game.heightPct;
     ctx.setLineDash([4, 5]);
@@ -501,20 +519,69 @@ function draw() {
     ctx.lineTo(bx + dir * Math.cos(loftRad) * len, by - Math.sin(loftRad) * len);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+}
 
-    // 스윙 높이 게이지 (공 뒤쪽 수직 바)
-    const gx = bx - dir * 26, gh = 110, gy0 = by - 8;
-    ctx.fillStyle = 'rgba(12, 22, 18, 0.65)';
-    ctx.beginPath(); ctx.roundRect(gx - 6, gy0 - gh, 12, gh, 6); ctx.fill();
-    const fill = gh * game.heightPct;
-    const grad = ctx.createLinearGradient(0, gy0, 0, gy0 - gh);
-    grad.addColorStop(0, '#7ac989'); grad.addColorStop(0.6, '#e8c95c'); grad.addColorStop(1, '#e8604c');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.roundRect(gx - 4, gy0 - fill, 8, Math.max(fill, 4), 4); ctx.fill();
+/* 스틱맨: 백스윙 높이가 곧 파워 게이지 */
+function stickmanPhi() {
+  if (game.swingAnim) {
+    const a = game.swingAnim;
+    if (a.t < SWING.down) {
+      const u = a.t / SWING.down;               // 다운스윙: 가속 (u²)
+      return backswingPhi(game.heightPct) + (SWING.phiImpact - backswingPhi(game.heightPct)) * u * u;
+    }
+    const v = Math.min(1, (a.t - SWING.down) / (SWING.total - SWING.down));
+    return SWING.phiImpact + (SWING.phiEnd - SWING.phiImpact) * (1 - (1 - v) * (1 - v)); // 팔로스루: 감속
+  }
+  if (game.mode === 'aim') return backswingPhi(game.heightPct);
+  return 25; // 어드레스 자세
+}
+
+function drawStickman() {
+  const s = 1.5; // 스윙이 잘 읽히도록 확대
+  const dir = game.stickDir;
+  const px = mx(game.stickX) - dir * 13 * s;   // 몸 중심: 공 뒤
+  const gy = groundY;
+  const shoulder = { x: px, y: gy - 36 * s };
+
+  ctx.strokeStyle = 'rgba(234, 242, 238, 0.95)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+
+  // 머리·몸통·다리
+  ctx.beginPath(); ctx.arc(px, gy - 46 * s, 5.5 * s, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px, gy - 40.5 * s); ctx.lineTo(px, gy - 20 * s); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px, gy - 20 * s); ctx.lineTo(px - dir * 6 * s, gy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px, gy - 20 * s); ctx.lineTo(px + dir * 7 * s, gy); ctx.stroke();
+
+  // 클럽 (어깨 피벗, phi: 0°=수직 아래, +=전방, -=백스윙)
+  const phi = (stickmanPhi() * Math.PI) / 180;
+  const clubLen = 26 * s;
+  const tip = { x: shoulder.x + Math.sin(phi) * clubLen * dir, y: shoulder.y + Math.cos(phi) * clubLen };
+  const grip = { x: shoulder.x + (tip.x - shoulder.x) * 0.42, y: shoulder.y + (tip.y - shoulder.y) * 0.42 };
+
+  // 팔 두 개 (어깨 → 그립)
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(shoulder.x, shoulder.y); ctx.lineTo(grip.x, grip.y - 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(shoulder.x, shoulder.y - 3); ctx.lineTo(grip.x, grip.y); ctx.stroke();
+
+  // 샤프트 + 클럽헤드
+  ctx.strokeStyle = 'rgba(200, 214, 206, 0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+  ctx.strokeStyle = '#e8c95c';
+  ctx.lineWidth = 5;
+  const headAng = phi + Math.PI / 2;
+  ctx.beginPath(); ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(tip.x + Math.sin(headAng) * 8 * dir, tip.y + Math.cos(headAng) * 8);
+  ctx.stroke();
+
+  // 백스윙 % 라벨 (조준 중일 때만)
+  if (game.mode === 'aim') {
     ctx.fillStyle = '#eaf2ee';
-    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.font = '600 12px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${Math.round(game.heightPct * 100)}%`, gx, gy0 - gh - 8);
+    ctx.fillText(`${Math.round(game.heightPct * 100)}%`, px, gy - 62 * s);
   }
 }
 
@@ -528,6 +595,14 @@ function frame(now) {
   if (game.mode === 'aim') {
     if (held.has('ArrowUp'))   { game.heightPct = Math.min(1, game.heightPct + 0.85 * dtReal); }
     if (held.has('ArrowDown')) { game.heightPct = Math.max(0, game.heightPct - 0.85 * dtReal); }
+  }
+
+  // 스윙 애니메이션: 임팩트 순간에 공 발사, 팔로스루는 발사 후에도 이어짐
+  if (game.swingAnim) {
+    const a = game.swingAnim;
+    a.t += dtReal;
+    if (!a.launched && a.t >= SWING.down) { a.launched = true; launchBall(); }
+    if (a.t >= SWING.total) game.swingAnim = null;
   }
 
   if (game.mode === 'motion') {
@@ -544,7 +619,7 @@ function frame(now) {
     if (result === 'holed') onHoled();
     else if (game.ball.phase === 'rest') {
       if (game.strokes >= PHYS.maxStrokes) onGiveUp();
-      else { game.mode = 'aim'; }
+      else enterAim();
     }
     updateHud();
   }
@@ -555,7 +630,7 @@ function frame(now) {
 }
 
 /* 디버그/QA 훅 */
-window.__proto = { game, CLUBS, PHYS, swing, physicsStep, newRound };
+window.__proto = { game, CLUBS, PHYS, startSwing, launchBall, physicsStep, newRound };
 
 newRound();
 requestAnimationFrame(frame);
