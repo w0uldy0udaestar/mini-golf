@@ -101,7 +101,7 @@ final class GameScene: SKScene {
         hintLabel.position = CGPoint(x: size.width - 24, y: size.height - 98)
         hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료")
         pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46)
-        pauseLabel.setText("일시정지 — ⌃⌥⌘G로 재개")
+        pauseLabel.setText("일시정지 — ⌃⇧G로 재개")
         pauseLabel.isHidden = true
         toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
         toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
