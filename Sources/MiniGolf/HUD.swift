@@ -1,78 +1,72 @@
 import SpriteKit
 
-/// 어두운 반투명 칩 배경 + 텍스트 — 밝은 데스크탑 위에서도 읽히는 HUD (프로토타입 디자인)
-final class ChipNode: SKNode {
-    enum Align { case left, right, center }
+/// "조용한 계기판" 디자인 — 상자 없이 타이포그래피만으로 만드는 초심플 HUD.
+/// 가는 서체 + 자간 + 1px 미세 그림자로 어떤 배경에서도 조용히 읽힌다.
+enum HUDFont {
+    static let light = "AppleSDGothicNeo-Light"
+    static let regular = "AppleSDGothicNeo-Regular"
+    static let medium = "AppleSDGothicNeo-Medium"
+    static let semibold = "AppleSDGothicNeo-SemiBold"
+}
 
-    private let bg = SKShapeNode()
-    private let mainLabel = SKLabelNode(fontNamed: "AppleSDGothicNeo-Bold")
-    private let subLabel = SKLabelNode(fontNamed: "AppleSDGothicNeo-Medium")
-    private let align: Align
-    private let padX: CGFloat = 14
-    private let padY: CGFloat = 9
+/// 상자 없는 텍스트: 본문 + 오프셋 그림자 두 겹
+final class GlassLabel: SKNode {
+    private let shadowLabel = SKLabelNode()
+    private let mainLabel = SKLabelNode()
+    private let font: String
+    private let size: CGFloat
+    private let textAlpha: CGFloat
+    private let kern: CGFloat
 
-    init(align: Align, mainSize: CGFloat = 15, subSize: CGFloat = 12) {
-        self.align = align
+    init(
+        font: String,
+        size: CGFloat,
+        alpha: CGFloat = 1,
+        align: SKLabelHorizontalAlignmentMode = .center,
+        kern: CGFloat = 0.6
+    ) {
+        self.font = font
+        self.size = size
+        textAlpha = alpha
+        self.kern = kern
         super.init()
-        bg.fillColor = NSColor(white: 0.09, alpha: 0.82)
-        bg.strokeColor = NSColor(white: 1, alpha: 0.12)
-        bg.lineWidth = 1
-        mainLabel.fontSize = mainSize
-        mainLabel.fontColor = NSColor(white: 0.93, alpha: 1)
-        subLabel.fontSize = subSize
-        subLabel.fontColor = NSColor(white: 0.93, alpha: 0.68)
-        for n in [bg, mainLabel, subLabel] as [SKNode] {
-            addChild(n)
-        }
+        shadowLabel.horizontalAlignmentMode = align
+        mainLabel.horizontalAlignmentMode = align
+        shadowLabel.verticalAlignmentMode = .top
+        mainLabel.verticalAlignmentMode = .top
+        shadowLabel.position = CGPoint(x: 1, y: -1.2)
+        addChild(shadowLabel)
+        addChild(mainLabel)
     }
 
     @available(*, unavailable) required init?(coder _: NSCoder) {
         fatalError()
     }
 
-    /// position 기준: left→왼쪽 위 모서리, right→오른쪽 위 모서리, center→가운데 위
-    func setText(_ main: String, sub: String? = nil) {
-        mainLabel.text = main
-        subLabel.text = sub
-        subLabel.isHidden = sub == nil
-        let mainW = mainLabel.frame.width
-        let subW = sub == nil ? 0 : subLabel.frame.width
-        let w = max(mainW, subW) + padX * 2
-        let lineH = mainLabel.fontSize + 6
-        let subH = sub == nil ? 0 : subLabel.fontSize + 6
-        let h = lineH + subH + padY * 2
+    func setText(_ text: String) {
+        mainLabel.attributedText = attributed(text, color: NSColor(white: 0.98, alpha: textAlpha))
+        shadowLabel.attributedText = attributed(text, color: NSColor(white: 0, alpha: 0.5))
+    }
 
-        let anchorX: CGFloat = switch align {
-        case .left: 0
-        case .right: -w
-        case .center: -w / 2
-        }
-        bg.path = CGPath(
-            roundedRect: CGRect(x: anchorX, y: -h, width: w, height: h),
-            cornerWidth: 12,
-            cornerHeight: 12,
-            transform: nil
-        )
-
-        let cx = anchorX + w / 2
-        mainLabel.horizontalAlignmentMode = .center
-        subLabel.horizontalAlignmentMode = .center
-        mainLabel.position = CGPoint(x: cx, y: -padY - mainLabel.fontSize)
-        subLabel.position = CGPoint(x: cx, y: -padY - lineH - subLabel.fontSize)
+    private func attributed(_ text: String, color: NSColor) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: NSFont(name: font, size: size) ?? NSFont.systemFont(ofSize: size),
+            .foregroundColor: color,
+            .kern: kern,
+        ])
     }
 }
 
-/// 여러 줄 스코어카드 칩 (라운드 종료 화면)
+/// 라운드 종료 스코어카드 — 아주 옅은 스크림 위 텍스트 컬럼
 final class ScorecardNode: SKNode {
-    private let bg = SKShapeNode()
-    private var lines: [SKLabelNode] = []
+    private let scrim = SKShapeNode()
+    private var lines: [GlassLabel] = []
 
     override init() {
         super.init()
-        bg.fillColor = NSColor(white: 0.08, alpha: 0.92)
-        bg.strokeColor = NSColor(white: 1, alpha: 0.14)
-        bg.lineWidth = 1
-        addChild(bg)
+        scrim.fillColor = NSColor(white: 0, alpha: 0.32)
+        scrim.strokeColor = .clear
+        addChild(scrim)
     }
 
     @available(*, unavailable) required init?(coder _: NSCoder) {
@@ -84,27 +78,23 @@ final class ScorecardNode: SKNode {
             l.removeFromParent()
         }
         lines = []
-        let all = [title] + rows + [footer]
-        let lineH: CGFloat = 24
-        let h = CGFloat(all.count) * lineH + 30
-        var w: CGFloat = 0
-        for (i, text) in all.enumerated() {
-            let label = SKLabelNode(fontNamed: i == 0 ? "AppleSDGothicNeo-Bold" : "AppleSDGothicNeo-Medium")
-            label.text = text
-            label.fontSize = i == 0 ? 19 : 14
-            label.fontColor = NSColor(white: 0.93, alpha: i == 0 || i == all.count - 1 ? 1 : 0.78)
-            label.horizontalAlignmentMode = .center
-            label.position = CGPoint(x: 0, y: h / 2 - 24 - CGFloat(i) * lineH)
+        let all = [(title, HUDFont.semibold, CGFloat(20))]
+            + rows.map { ($0, HUDFont.regular, CGFloat(13.5)) }
+            + [(footer, HUDFont.medium, CGFloat(14))]
+        let lineH: CGFloat = 27
+        let h = CGFloat(all.count) * lineH + 44
+        var y = h / 2 - 34
+        for (text, font, size) in all {
+            let label = GlassLabel(font: font, size: size, alpha: font == HUDFont.regular ? 0.82 : 1)
+            label.setText(text)
+            label.position = CGPoint(x: 0, y: y)
             addChild(label)
             lines.append(label)
-            w = max(w, label.frame.width)
+            y -= lineH
         }
-        w += 68
-        bg.path = CGPath(
-            roundedRect: CGRect(x: -w / 2, y: -h / 2, width: w, height: h),
-            cornerWidth: 18,
-            cornerHeight: 18,
-            transform: nil
+        scrim.path = CGPath(
+            roundedRect: CGRect(x: -190, y: -h / 2, width: 380, height: h),
+            cornerWidth: 22, cornerHeight: 22, transform: nil
         )
         isHidden = false
     }
