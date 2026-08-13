@@ -1,0 +1,21 @@
+# Swift / SPM
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserdatad/
+xcuserdata/
+
+# macOS
+.DS_Store
+
+# 산출물
+dist/
+*.app
+*.dmg
+*.zip
+
+# 시크릿 (전역 안전 규칙)
+.env*
+*.key
+*.pem
+credentials*
