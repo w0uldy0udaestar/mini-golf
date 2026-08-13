@@ -191,6 +191,8 @@ const SURFACES = {
   rough:    { label: '러프',     roll: 4.5, rest: 0.25, power: 0.75, spin: 0.5 },
   apron:    { label: '에이프런', roll: 1.6, rest: 0.38, power: 1.0,  spin: 0.9 },
   green:    { label: '그린',     roll: 1.1, rest: 0.35, power: 1.0,  spin: 0.9 },
+  bunker:   { label: '벙커',     roll: 8.0, rest: 0.05, power: 0.45, spin: 0.25 }, // 공이 박힘, 탈출샷만
+  water:    { label: '워터',     roll: 99,  rest: 0,    power: 1.0,  spin: 1.0 },  // 입수 = 1벌타 + 드롭
 };
 
 /* ══════════════ 물리 상수 (GolfCore.BallisticsEngine으로 이식 예정) ══════ */
@@ -235,6 +237,19 @@ function mulberry32(seed) {
 const PAR_COMPOSITION = [3, 3, 4, 4, 4, 4, 4, 5, 5];
 const DIST_RANGE = { 3: [110, 170], 4: [250, 360], 5: [430, 500] };
 
+/* 세그먼트 배열에서 [from, to) 구간을 지정 타입으로 대체 (겹치는 밴드는 쪼갬) */
+function carveSegment(segments, from, to, type) {
+  const out = [];
+  for (const s of segments) {
+    if (s.to <= from || s.from >= to) { out.push(s); continue; }
+    if (s.from < from) out.push({ from: s.from, to: from, type: s.type });
+    if (s.to > to) out.push({ from: to, to: s.to, type: s.type });
+  }
+  out.push({ from, to, type });
+  out.sort((a, b) => a.from - b.from);
+  return out;
+}
+
 function makeCourse(seed) {
   const rand = mulberry32(seed);
   const pars = [...PAR_COMPOSITION];
@@ -249,13 +264,13 @@ function makeCourse(seed) {
     const worldW = holeX + 45;
 
     // 그린·에이프런 (홀 주변)
-    const greenStart = holeX - (9 + rand() * 4);
-    const greenEnd = holeX + (6 + rand() * 3);
+    const greenStart = holeX - (10 + rand() * 5);
+    const greenEnd = holeX + (7 + rand() * 4);
     const apronStart = greenStart - (4 + rand() * 3);
 
     // 티~에이프런 사이를 페어웨이/러프 랜덤 밴드로 채움
     const teeEnd = TEE_X + 10;
-    const segments = [{ from: 0, to: teeEnd, type: 'tee' }];
+    let segments = [{ from: 0, to: teeEnd, type: 'tee' }];
     let x = teeEnd;
     let cur = rand() < 0.75 ? 'fairway' : 'rough';
     while (x < apronStart) {
@@ -268,13 +283,86 @@ function makeCourse(seed) {
     segments.push({ from: greenStart, to: greenEnd, type: 'green' });
     segments.push({ from: greenEnd, to: worldW, type: 'rough' });
 
-    return { par, dist, holeX, worldW, segments, greenStart, greenEnd, apronStart };
+    /* ── 지형 고저: 30~50m 간격 제어점에 완만한 언덕·계곡, 티는 평지 ── */
+    const nodes = [{ x: 0, e: 0 }, { x: teeEnd + 8, e: 0 }];
+    let nx = teeEnd + 8, ne = 0;
+    while (nx < worldW) {
+      nx += 30 + rand() * 20;
+      ne = Math.max(-5, Math.min(7, ne + (rand() * 2 - 1) * 3.5));
+      nodes.push({ x: Math.min(nx, worldW), e: ne });
+    }
+    // 1m 간격 샘플로 굽기 (코사인 보간)
+    const elev = new Float32Array(Math.ceil(worldW) + 2);
+    let ni = 0;
+    for (let i = 0; i < elev.length; i++) {
+      while (ni < nodes.length - 2 && i > nodes[ni + 1].x) ni++;
+      const a = nodes[ni], b = nodes[Math.min(ni + 1, nodes.length - 1)];
+      const u = b.x === a.x ? 0 : Math.min(1, Math.max(0, (i - a.x) / (b.x - a.x)));
+      elev[i] = a.e + (b.e - a.e) * (0.5 - 0.5 * Math.cos(u * Math.PI));
+    }
+
+    /* ── 워터 해저드: 파4·5의 중반부에 35% 확률, 평평한 저지대 ── */
+    let waterRange = null;
+    if (par >= 4 && rand() < 0.35) {
+      const wFrom = teeEnd + 40 + rand() * (apronStart - teeEnd - 100);
+      const wTo = wFrom + 15 + rand() * 15;
+      if (wTo < apronStart - 25) {
+        waterRange = { from: wFrom, to: wTo };
+        segments = carveSegment(segments, wFrom, wTo, 'water');
+        const wl = Math.min(elev[Math.floor(wFrom)], elev[Math.ceil(wTo)]) - 1.2;
+        for (let i = Math.floor(wFrom); i <= Math.ceil(wTo) && i < elev.length; i++) elev[i] = wl;
+        for (let k = 1; k <= 4; k++) { // 물가 경사 자연스럽게
+          const uu = k / 5;
+          const li = Math.floor(wFrom) - k, ri = Math.ceil(wTo) + k;
+          if (li >= 0) elev[li] = wl * (1 - uu) + elev[li] * uu;
+          if (ri < elev.length) elev[ri] = wl * (1 - uu) + elev[ri] * uu;
+        }
+      }
+    }
+
+    /* ── 벙커: 그린 앞 1개(60%) + 페어웨이 중반 1개(35%), 얕은 모래 구덩이 ── */
+    const addBunker = (bFrom, width) => {
+      const bTo = bFrom + width;
+      if (waterRange && bFrom < waterRange.to + 6 && bTo > waterRange.from - 6) return;
+      if (bTo >= greenStart - 1 || bFrom <= teeEnd + 5) return;
+      segments = carveSegment(segments, bFrom, bTo, 'bunker');
+      const mid = (bFrom + bTo) / 2;
+      for (let i = Math.floor(bFrom); i <= Math.ceil(bTo) && i < elev.length; i++) {
+        const d = 1 - Math.abs(i - mid) / (width / 2 + 0.5); // 가운데가 깊게
+        elev[i] -= Math.max(0, d) * 0.9;
+      }
+    };
+    if (rand() < 0.6) addBunker(greenStart - 4 - (3 + rand() * 5), 5 + rand() * 3);
+    if (rand() < 0.35) addBunker(teeEnd + 50 + rand() * (apronStart - teeEnd - 90), 6 + rand() * 4);
+
+    /* ── 그린: 주변 지형 흐름을 따르는 미세 경사(브레이크) ── */
+    const gFrom = Math.floor(apronStart - 2), gTo = Math.min(Math.ceil(greenEnd + 6), elev.length - 1);
+    const trend = elev[gTo] >= elev[gFrom] ? 1 : -1;
+    const gSlope = trend * (0.02 + rand() * 0.04); // 2~6% 브레이크
+    const gBase = elev[gFrom];
+    for (let i = gFrom; i <= gTo; i++) elev[i] = gBase + gSlope * (i - gFrom);
+    for (let k = 1; k <= 5; k++) { // 그린 뒤 러프와 자연 연결
+      const ri = gTo + k;
+      if (ri < elev.length) elev[ri] = (elev[gTo] * (5 - k)) / 5 + (elev[ri] * k) / 5;
+    }
+
+    return { par, dist, holeX, worldW, segments, greenStart, greenEnd, apronStart, elev, waterRange, gSlope };
   });
 }
 
 function surfaceAt(h, x) {
   for (const s of h.segments) if (x >= s.from && x < s.to) return s.type;
   return 'rough';
+}
+
+/* 지형 표고·경사 조회 */
+function gAt(h, x) {
+  const xi = Math.max(0, Math.min(h.elev.length - 2, x));
+  const i = Math.floor(xi);
+  return h.elev[i] + (h.elev[i + 1] - h.elev[i]) * (xi - i);
+}
+function slopeAt(h, x) {
+  return gAt(h, x + 0.5) - gAt(h, x - 0.5);
 }
 
 function scoreName(strokes, par) {
@@ -448,7 +536,9 @@ function launchBall() {
   updateHud();
 }
 
-/* ══════════════ 물리 (결정론적 스텝 — 단위 테스트 대상) ══════════════ */
+/* ══════════════ 물리 (결정론적 스텝 — 단위 테스트 대상) ══════════════
+   지형 표고 gAt(x)·경사 slopeAt(x) 기반: 경사면 바운스는 법선 반사,
+   굴림은 중력의 경사 성분이 더해져 오르막은 서고 내리막은 흘러내린다 */
 function physicsStep(b, dt) {
   const h = hole();
   if (b.phase === 'fly') {
@@ -463,29 +553,50 @@ function physicsStep(b, dt) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.spin *= 1 - PHYS.spinDecayFlight * dt;
 
-    if (b.y <= 0 && b.vy < 0) {
-      b.y = 0;
-      const surf = SURFACES[surfaceAt(h, b.x)];
-      const reboundVy = -b.vy * surf.rest;
-      const kick = (Math.min(b.spin, 12000) / 12000) * PHYS.bounceSpinKick * b.spinSign;
-      b.vx = b.vx * PHYS.bounceVxKeep - kick;
-      b.spin *= PHYS.bounceSpinKeep;
-      if (reboundVy > PHYS.bounceToRoll) {
-        b.vy = reboundVy;
-      } else {
-        b.vy = 0; b.phase = 'roll';
+    const ground = gAt(h, b.x);
+    if (b.y <= ground) {
+      const surfType = surfaceAt(h, b.x);
+      if (surfType === 'water') return 'water';
+      const surf = SURFACES[surfType];
+      b.y = ground;
+      // 경사면 법선/접선 분해 반사
+      const s = slopeAt(h, b.x);
+      const L = Math.hypot(1, s);
+      const nx = -s / L, ny = 1 / L, tx = 1 / L, ty = s / L;
+      const vn = b.vx * nx + b.vy * ny;
+      if (vn < 0) {
+        let vt = b.vx * tx + b.vy * ty;
+        const kick = (Math.min(b.spin, 12000) / 12000) * PHYS.bounceSpinKick * b.spinSign;
+        vt = vt * PHYS.bounceVxKeep - kick;
+        const vnNew = -vn * surf.rest;
+        b.spin *= PHYS.bounceSpinKeep;
+        if (vnNew > PHYS.bounceToRoll) {
+          b.vx = vt * tx + vnNew * nx;
+          b.vy = vt * ty + vnNew * ny;
+        } else {
+          b.phase = 'roll';
+          b.vx = vt * tx; // 접선 속도의 수평 성분으로 롤 전환
+          b.vy = 0;
+        }
       }
     }
   } else if (b.phase === 'roll') {
     b.x += b.vx * dt;
-    const surf = SURFACES[surfaceAt(h, b.x)];
+    const surfType = surfaceAt(h, b.x);
+    if (surfType === 'water') return 'water';
+    const surf = SURFACES[surfType];
+    const s = slopeAt(h, b.x);
+    b.vx -= PHYS.g * s * 0.85 * dt;                    // 경사 중력: 그린 브레이크의 원천
     const dv = surf.roll * dt;
     if (Math.abs(b.vx) <= dv) b.vx = 0; else b.vx -= Math.sign(b.vx) * dv;
-    if (Math.abs(b.vx) < PHYS.stopSpeed) {
+    b.y = gAt(h, b.x);
+    // 정지: 마찰이 경사 중력을 이길 때만 (가파른 내리막에선 계속 흘러내림)
+    if (Math.abs(b.vx) < PHYS.stopSpeed && surf.roll >= PHYS.g * Math.abs(s) * 0.85) {
       b.vx = 0; b.phase = 'rest';
       // 립아웃 직후 컵 위에서 멈추면 컵 가장자리에 걸친 것으로 처리
       if (b.lipped && Math.abs(b.x - h.holeX) < PHYS.cupHalfWidth) {
         b.x = h.holeX + (b.x >= h.holeX ? 1 : -1) * (PHYS.cupHalfWidth + 0.05);
+        b.y = gAt(h, b.x);
       }
     }
   }
@@ -510,7 +621,7 @@ function physicsStep(b, dt) {
         b.vx = Math.sign(b.vx) * (0.5 + over * 1.2);   // 컵 너머 0.3~1.5m에 멈추는 수준
         b.spin = 0;
       }
-    } else if (b.phase === 'fly' && b.y < 0.3 && b.vy < 0 && speed <= PHYS.captureFly) {
+    } else if (b.phase === 'fly' && b.y < gAt(h, b.x) + 0.3 && b.vy < 0 && speed <= PHYS.captureFly) {
       return 'holed';
     }
   }
@@ -529,6 +640,19 @@ function onHoled() {
     if (game.holeIdx < 8) { game.holeIdx++; startHole(); }
     else { game.mode = 'end'; showScorecard(); }
   }, 1700);
+}
+
+/* 워터 해저드: 1벌타 + 입수 지점 앞 드롭 */
+function onWater() {
+  game.strokes++; // 벌타
+  const h = hole();
+  const wr = h.waterRange || { from: game.ball.x - 3, to: game.ball.x + 3 };
+  const dropX = game.stickDir > 0 ? wr.from - 2.5 : wr.to + 2.5;
+  game.ball = { x: dropX, y: gAt(h, dropX), vx: 0, vy: 0, spin: 0, spinSign: 1, phase: 'rest', lipped: false };
+  showToast('워터 해저드 💧', '+1 벌타 · 드롭');
+  setTimeout(hideToast, 1500);
+  if (game.strokes >= PHYS.maxStrokes) { onGiveUp(); return; }
+  startWalk();
 }
 
 function onGiveUp() {
@@ -606,7 +730,8 @@ window.addEventListener('resize', resize);
 resize();
 
 const mx = (m) => m * pxPerM;            // world m → px (x)
-const my = (m) => groundY - m * pxPerM;  // world m → px (y, 높이)
+const my = (m) => groundY - m * pxPerM;  // world m → px (y, 표고 기준)
+const gpxAt = (xm) => groundY - gAt(hole(), xm) * pxPerM; // 지형 표면의 화면 y
 
 /* 지면 밴드 스타일 — 회색 그라데이션으로 라이 구분 (밝을수록 잘 다듬어진 잔디) */
 const SURF_STYLE = {
@@ -615,7 +740,22 @@ const SURF_STYLE = {
   rough:   { color: 'rgba(120, 123, 126, 0.8)',  width: 9 },
   apron:   { color: 'rgba(238, 239, 240, 0.85)', width: 4 },
   green:   { color: 'rgba(255, 255, 255, 0.95)', width: 3 },
+  bunker:  { color: 'rgba(199, 192, 175, 0.9)',  width: 6 }, // 모래: 살짝 따뜻한 회색
+  water:   { color: 'rgba(128, 150, 168, 0.9)',  width: 5 }, // 물: 탈색된 청회색
 };
+
+/* 지형을 따라 폴리라인으로 지면 구간을 그린다 */
+function drawGroundRange(from, to, style) {
+  if (to - from < 0.1) return;
+  ctx.strokeStyle = style.color;
+  ctx.lineWidth = style.width;
+  ctx.beginPath();
+  const step = Math.max(2 / pxPerM, 0.5); // 화면 ~2px 간격 샘플
+  ctx.moveTo(mx(from), gpxAt(from));
+  for (let x = from + step; x < to; x += step) ctx.lineTo(mx(x), gpxAt(x));
+  ctx.lineTo(mx(to), gpxAt(to));
+  ctx.stroke();
+}
 
 function draw() {
   ctx.clearRect(0, 0, W, H);
@@ -625,44 +765,58 @@ function draw() {
   const cupPx = mx(h.holeX);
   const cupHalf = Math.max(mx(PHYS.cupHalfWidth), 5);
 
-  // 지면: 라이별 밴드 (컵 부분은 끊김)
+  // 지면: 지형을 따르는 라이별 폴리라인 (컵 구간은 끊김)
   ctx.lineCap = 'round';
+  const cupHalfM = Math.max(PHYS.cupHalfWidth, 5 / pxPerM);
+  const cupL = h.holeX - cupHalfM, cupR = h.holeX + cupHalfM;
   for (const seg of h.segments) {
     const st = SURF_STYLE[seg.type];
-    ctx.strokeStyle = st.color;
-    ctx.lineWidth = st.width;
-    const x0 = mx(seg.from), x1 = mx(seg.to);
-    ctx.beginPath();
-    if (x1 < cupPx - cupHalf || x0 > cupPx + cupHalf) {
-      ctx.moveTo(x0, groundY); ctx.lineTo(x1, groundY);
+    if (seg.to <= cupL || seg.from >= cupR) {
+      drawGroundRange(seg.from, seg.to, st);
     } else { // 컵을 포함하는 밴드는 둘로 쪼갬
-      ctx.moveTo(x0, groundY); ctx.lineTo(cupPx - cupHalf, groundY);
-      ctx.moveTo(cupPx + cupHalf, groundY); ctx.lineTo(x1, groundY);
+      drawGroundRange(seg.from, Math.max(seg.from, cupL), st);
+      drawGroundRange(Math.min(seg.to, cupR), seg.to, st);
     }
-    ctx.stroke();
+    if (seg.type === 'bunker') { // 모래 점 텍스처
+      ctx.fillStyle = 'rgba(199, 192, 175, 0.55)';
+      for (let x = seg.from + 1; x < seg.to; x += 1.7) {
+        ctx.beginPath(); ctx.arc(mx(x), gpxAt(x) + 4, 1.1, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (seg.type === 'water') { // 물결 표시
+      ctx.strokeStyle = 'rgba(128, 150, 168, 0.5)';
+      ctx.lineWidth = 1.5;
+      for (let x = seg.from + 2; x < seg.to - 2; x += 5) {
+        ctx.beginPath();
+        ctx.moveTo(mx(x), gpxAt(x) + 5);
+        ctx.quadraticCurveTo(mx(x + 1.2), gpxAt(x) + 3, mx(x + 2.4), gpxAt(x) + 5);
+        ctx.stroke();
+      }
+    }
   }
 
-  // 컵
+  // 컵 (그린 표고 위)
+  const cupY = gpxAt(h.holeX);
   ctx.fillStyle = 'rgba(18, 19, 21, 0.9)';
-  ctx.fillRect(cupPx - cupHalf, groundY, cupHalf * 2, 12);
+  ctx.fillRect(cupPx - cupHalf, cupY, cupHalf * 2, 12);
   ctx.strokeStyle = 'rgba(238, 239, 240, 0.85)';
   ctx.lineWidth = 2;
-  ctx.strokeRect(cupPx - cupHalf, groundY, cupHalf * 2, 12);
+  ctx.strokeRect(cupPx - cupHalf, cupY, cupHalf * 2, 12);
 
   // 깃발 (포인트 컬러)
   ctx.strokeStyle = 'rgba(232, 233, 234, 0.9)';
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cupPx, groundY); ctx.lineTo(cupPx, groundY - 58); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cupPx, cupY); ctx.lineTo(cupPx, cupY - 58); ctx.stroke();
   ctx.fillStyle = ACCENT;
   ctx.beginPath();
-  ctx.moveTo(cupPx, groundY - 58);
-  ctx.quadraticCurveTo(cupPx + 20, groundY - 56, cupPx + 26, groundY - 50);
-  ctx.quadraticCurveTo(cupPx + 20, groundY - 45, cupPx, groundY - 42);
+  ctx.moveTo(cupPx, cupY - 58);
+  ctx.quadraticCurveTo(cupPx + 20, cupY - 56, cupPx + 26, cupY - 50);
+  ctx.quadraticCurveTo(cupPx + 20, cupY - 45, cupPx, cupY - 42);
   ctx.closePath(); ctx.fill();
 
   // 티 마커
   ctx.fillStyle = 'rgba(232, 233, 234, 0.45)';
-  ctx.fillRect(mx(TEE_X) - 1.5, groundY - 7, 3, 7);
+  ctx.fillRect(mx(TEE_X) - 1.5, gpxAt(TEE_X) - 7, 3, 7);
 
   // 궤적 트레일
   if (game.trail.length > 1) {
@@ -677,16 +831,17 @@ function draw() {
 
   drawStickman();
 
-  // 공 그림자 (높이 단서)
-  if (b.y > 0.2) {
-    const s = Math.max(2, 6 - b.y * 0.08);
+  // 공 그림자 (높이 단서 — 지형 표면 위에)
+  const heightAbove = b.y - gAt(h, b.x);
+  if (heightAbove > 0.2) {
+    const s = Math.max(2, 6 - heightAbove * 0.08);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.beginPath(); ctx.ellipse(mx(b.x), groundY - 1, s * 1.6, s * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(mx(b.x), gpxAt(b.x) - 1, s * 1.6, s * 0.45, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   // 공 (홀인 시 컵으로 낙하 연출)
   let ballY = my(b.y);
-  if (game.mode === 'holed') { game.holedAnim = Math.min(1, game.holedAnim + 0.06); ballY = groundY + 8 * game.holedAnim; }
+  if (game.mode === 'holed') { game.holedAnim = Math.min(1, game.holedAnim + 0.06); ballY = gpxAt(h.holeX) + 8 * game.holedAnim; }
   ctx.fillStyle = '#ffffff';
   ctx.beginPath(); ctx.arc(mx(b.x), ballY - 6, 6, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
@@ -715,7 +870,7 @@ function drawStickman() {
 function drawPoseRig(p) {
   const dir = game.stickDir;
   const ballPx = mx(game.stickX);
-  const gy = groundY;
+  const gy = gpxAt(game.stickX); // 지형 표고 위에 선다
   const px = ballPx - dir * game.renderBf;         // 스탠스 중심 (클럽별 공 위치, 스무딩됨)
   const hip = { x: px + dir * (p.hipDx - 5), y: gy - 42 };
   const shoulder = { x: hip.x + dir * (6 + 0.5 * p.tilt), y: gy - 66 };
@@ -771,7 +926,7 @@ function drawWalking() {
   const w = game.walkAnim;
   const dir = game.stickDir;
   const px = mx(game.stickX);
-  const gy = groundY;
+  const gy = gpxAt(game.stickX); // 지형 위를 걷는다
   const s1 = Math.sin(w.phase), c1 = Math.cos(w.phase);
   const vAmp = Math.min(1, w.vPx / 30);        // 속도 기반 강도: 발 들기·들썩임·팔 흔들림
 
@@ -791,9 +946,11 @@ function drawWalking() {
   limb(shoulder.x, shoulder.y, hip.x, hip.y, -dir * 1.5, 0);
 
   // 다리: 지지발은 지면에 서 있고, 스윙발은 무릎을 들어 앞으로 내딛는다
-  // (발이 앞으로 움직이는 반주기 동안만 들림 = max(0, ±cos))
-  const f1 = { x: px + dir * WALK_STRIDE * s1, y: gy - 7 * vAmp * Math.max(0, c1) };
-  const f2 = { x: px - dir * WALK_STRIDE * s1, y: gy - 7 * vAmp * Math.max(0, -c1) };
+  // (발이 앞으로 움직이는 반주기 동안만 들림 = max(0, ±cos)). 각 발은 밟는 지점의 표고를 따름
+  const f1x = px + dir * WALK_STRIDE * s1;
+  const f2x = px - dir * WALK_STRIDE * s1;
+  const f1 = { x: f1x, y: gpxAt(f1x / pxPerM) - 7 * vAmp * Math.max(0, c1) };
+  const f2 = { x: f2x, y: gpxAt(f2x / pxPerM) - 7 * vAmp * Math.max(0, -c1) };
   const k1 = { x: (hip.x + f1.x) / 2 + dir * 3, y: (hip.y + f1.y) / 2 - 3 - 6 * vAmp * Math.max(0, c1) };
   const k2 = { x: (hip.x + f2.x) / 2 + dir * 3, y: (hip.y + f2.y) / 2 - 3 - 6 * vAmp * Math.max(0, -c1) };
   ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.quadraticCurveTo(k1.x, k1.y, f1.x, f1.y); ctx.stroke();
@@ -908,12 +1065,13 @@ function frame(now) {
     while (acc >= DT) {
       acc -= DT;
       result = physicsStep(game.ball, DT);
-      if (result === 'holed') break;
+      if (result === 'holed' || result === 'water') break;
     }
     game.trail.push({ x: game.ball.x, y: game.ball.y, age: 0 });
     if (game.trail.length > 400) game.trail.shift();
 
     if (result === 'holed') onHoled();
+    else if (result === 'water') onWater();
     else if (game.ball.phase === 'rest') {
       if (game.strokes >= PHYS.maxStrokes) onGiveUp();
       else startWalk();
