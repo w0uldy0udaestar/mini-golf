@@ -179,7 +179,7 @@ const CLUBS = [
   { id: '9I', name: '9번 아이언', cat: 'iron',   loft: 42,   spin: 8500,  power: 44 },
   { id: 'PW', name: '피칭 웨지',  cat: 'wedge',  loft: 46,   spin: 9300,  power: 41 },
   { id: 'SW', name: '샌드 웨지',  cat: 'wedge',  loft: 56,   spin: 10500, power: 35 },
-  { id: 'PT', name: '퍼터',       cat: 'putter', loft: 0,    spin: 0,     power: 12, putter: true },
+  { id: 'PT', name: '퍼터',       cat: 'putter', loft: 0,    spin: 0,     power: 13, putter: true },
 ];
 const CAT_LABEL = { wood: '우드', iron: '아이언', wedge: '웨지', putter: '퍼터' };
 
@@ -297,6 +297,7 @@ const game = {
   trail: [], holedAnim: 0,
   stickX: TEE_X, stickDir: 1, // 스틱맨 위치·타격 방향
   swingAnim: null,            // { t, launched } — 다운스윙~팔로스루 애니메이션
+  walkAnim: null,             // { from, to, t, dur } — 샷 후 공까지 걸어가는 이동
 };
 
 /* 스윙 애니메이션 타이밍 (초). phi 12° = 어드레스에서 클럽이 공에 닿는 각 */
@@ -320,8 +321,20 @@ function startHole() {
 
 function enterAim() {
   game.mode = 'aim';
+  game.walkAnim = null;
   game.stickX = game.ball.x;
   game.stickDir = hole().holeX >= game.ball.x ? 1 : -1;
+  updateHud();
+}
+
+/* 샷 후 실제 골퍼처럼 공이 멈춘 자리까지 걸어간다 */
+function startWalk() {
+  const from = game.stickX, to = game.ball.x;
+  const dist = Math.abs(to - from);
+  if (dist < 1) { enterAim(); return; }
+  game.mode = 'walking';
+  game.stickDir = to >= from ? 1 : -1;
+  game.walkAnim = { from, to, t: 0, dur: Math.min(2.2, Math.max(0.5, dist / 140)) };
   updateHud();
 }
 
@@ -339,10 +352,10 @@ function launchBall() {
   const dir = game.stickDir;
   // 라이 페널티: 첫 타는 티샷(클린), 이후는 공이 놓인 지면 기준
   const lie = game.strokes === 0 ? SURFACES.tee : SURFACES[surfaceAt(hole(), b.x)];
-  // 퍼터 정밀 입력: 저파워 구간 미세 조절(제곱 곡선) + 낮은 바닥값(탭인)
-  const hEff = club.putter ? game.heightPct * game.heightPct : game.heightPct;
+  // 퍼터: 선형 파워(예측 가능) + 낮은 바닥값(탭인 가능). 제곱 곡선은 중간 파워를
+  // 뭉개서 퍼팅이 약해지는 문제로 폐기 (2026-08-13) — 정밀함은 조절 속도 절반으로 확보
   const minR = club.putter ? PHYS.putterMinRatio : PHYS.minPowerRatio;
-  const v0 = club.power * lie.power * (minR + (1 - minR) * hEff);
+  const v0 = club.power * lie.power * (minR + (1 - minR) * game.heightPct);
   b.lipped = false;
   const loftRad = (club.loft * Math.PI) / 180;
   b.vx = dir * v0 * Math.cos(loftRad);
@@ -625,6 +638,7 @@ function limb(x0, y0, x1, y1, bendX, bendY) {
 }
 
 function drawStickman() {
+  if (game.mode === 'walking' && game.walkAnim) { drawWalking(); return; }
   /* 실제 골프 어드레스 자세: 공은 스탠스 앞쪽, 척추 전경사, 무릎 굽힘,
      팔은 어깨에서 그립으로 늘어뜨림. 어깨가 클럽 피벗 */
   const dir = game.stickDir;
@@ -679,6 +693,57 @@ function drawStickman() {
   }
 }
 
+/* 걷기 자세: 몸을 세우고 클럽을 옆에 든 채 다리를 교차하며 이동 */
+function drawWalking() {
+  const w = game.walkAnim;
+  const dir = game.stickDir;
+  const px = mx(game.stickX);
+  const gy = groundY;
+  const phase = w.t * 11;                 // 걸음 주기 (빠른 종종걸음)
+  const swing = Math.sin(phase);
+  const bob = Math.abs(Math.cos(phase)) * 2; // 걸을 때 몸 위아래 들썩임
+
+  const hip = { x: px, y: gy - 46 - bob };
+  const shoulder = { x: px + dir * 2, y: gy - 70 - bob };
+  const head = { x: px + dir * 4, y: gy - 82 - bob };
+
+  ctx.strokeStyle = STICK;
+  ctx.fillStyle = STICK;
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // 머리·척추 (걸을 땐 거의 직립, 진행 방향으로 살짝 기울임)
+  ctx.beginPath(); ctx.arc(head.x, head.y, 10, 0, Math.PI * 2); ctx.fill();
+  limb(shoulder.x, shoulder.y, hip.x, hip.y, -dir * 1.5, 0);
+
+  // 다리: 교차 (무릎 컨트롤 포인트로 자연스러운 곡선)
+  const stride = 13;
+  ctx.beginPath(); ctx.moveTo(hip.x, hip.y);
+  ctx.quadraticCurveTo(px + dir * swing * stride * 0.5, gy - 24,
+                       px + dir * swing * stride, gy - Math.max(0, -swing * 4));
+  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hip.x, hip.y);
+  ctx.quadraticCurveTo(px - dir * swing * stride * 0.5, gy - 24,
+                       px - dir * swing * stride, gy - Math.max(0, swing * 4));
+  ctx.stroke();
+
+  // 클럽 든 팔: 몸 뒤로 늘어뜨려 클럽을 들고 감
+  const grip = { x: px - dir * 12, y: gy - 52 - bob };
+  ctx.lineWidth = 5.5;
+  limb(shoulder.x, shoulder.y, grip.x, grip.y, -dir * 3, 2);
+  // 반대 팔: 다리와 반대 위상으로 흔들림
+  limb(shoulder.x, shoulder.y, px + dir * (6 + swing * 6), gy - 52 - bob, dir * 2, 3);
+
+  // 클럽: 뒤로 비스듬히 든 채 이동
+  const tip = { x: grip.x - dir * 16, y: gy - 14 - bob };
+  ctx.strokeStyle = 'rgba(190, 193, 196, 0.9)';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+  const carryPhi = Math.atan2((tip.x - grip.x) * dir, tip.y - grip.y);
+  drawClubHead(CLUBS[game.clubIdx].cat, tip, carryPhi, dir);
+}
+
 /* 클럽 헤드 디자인 — 숫자 대신 생김새로 클럽을 구분한다 */
 function drawClubHead(cat, tip, phi, dir) {
   const along = { x: Math.sin(phi) * dir, y: Math.cos(phi) };      // 샤프트 방향
@@ -731,6 +796,16 @@ function frame(now) {
     if (held.has('ArrowDown')) { game.heightPct = Math.max(0, game.heightPct - rate * dtReal); }
   }
 
+  // 걷기: 공이 멈춘 자리까지 이동 후 조준 재개
+  if (game.mode === 'walking' && game.walkAnim) {
+    const w = game.walkAnim;
+    w.t += dtReal;
+    const u = Math.min(1, w.t / w.dur);
+    const smooth = u * u * (3 - 2 * u); // smoothstep — 출발·도착이 부드럽게
+    game.stickX = w.from + (w.to - w.from) * smooth;
+    if (u >= 1) enterAim();
+  }
+
   // 스윙 애니메이션: 임팩트 순간에 공 발사, 팔로스루는 발사 후에도 이어짐
   if (game.swingAnim) {
     const a = game.swingAnim;
@@ -753,7 +828,7 @@ function frame(now) {
     if (result === 'holed') onHoled();
     else if (game.ball.phase === 'rest') {
       if (game.strokes >= PHYS.maxStrokes) onGiveUp();
-      else enterAim();
+      else startWalk();
     }
     updateHud();
   }
