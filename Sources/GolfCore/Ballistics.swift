@@ -16,8 +16,8 @@ public enum Phys {
     public static let minPowerRatio = 0.25 // 백스윙 0%의 파워 바닥값
     public static let putterMinRatio = 0.08 // 퍼터 전용 (탭인 가능)
     public static let cupHalfWidth = 0.7
-    public static let captureRoll = 3.0 // 홀인 최대 굴림 속도
-    public static let lipOutSpeed = 5.5 // 이 속도까지 립아웃, 초과 시 통과
+    public static let captureRoll = 3.6 // 홀인 최대 굴림 속도 (퍼팅 스윕 실측으로 확대)
+    public static let lipOutSpeed = 6.0 // 이 속도까지 립아웃, 초과 시 통과
     public static let captureFly = 10.0
     public static let wallRestitution = 0.5
     public static let maxStrokes = 12

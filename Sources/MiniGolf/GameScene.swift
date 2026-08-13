@@ -101,7 +101,7 @@ final class GameScene: SKScene {
         hintLabel.position = CGPoint(x: size.width - 24, y: size.height - 98)
         hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료")
         pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46)
-        pauseLabel.setText("일시정지 — ⌥⌘G로 재개")
+        pauseLabel.setText("일시정지 — ⌃⌥⌘G로 재개")
         pauseLabel.isHidden = true
         toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
         toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
@@ -159,7 +159,17 @@ final class GameScene: SKScene {
         walkAnim = nil
         stickX = ball.x
         dir = hole.holeX >= ball.x ? 1 : -1
+        presetPutterHeight()
         updateHUD()
+    }
+
+    /// 퍼터를 잡으면 남은 거리에 맞는 백스윙에서 시작한다 — 평지 기준 계산이라
+    /// 그린 경사 읽기는 여전히 플레이어의 몫 (어시스트가 아니라 합리적 시작점)
+    private func presetPutterHeight() {
+        guard club.isPutter, mode == .aim else { return }
+        let d = abs(hole.holeX - ball.x)
+        let v0 = min(13.0, (2 * 1.1 * d + 4).squareRoot()) // 도착 속도 ~2m/s 목표
+        heightPct = min(0.92, max(0.03, (v0 / 13.0 - Phys.putterMinRatio) / (1 - Phys.putterMinRatio)))
     }
 
     private func startWalk() {
@@ -378,8 +388,8 @@ final class GameScene: SKScene {
         guard mode == .aim, !isGamePaused else { return }
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
-        case 123: clubIdx = max(0, clubIdx - 1); updateHUD() // ←
-        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); updateHUD() // →
+        case 123: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // ←
+        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // →
         case 49: startSwing() // Space
         default: break
         }

@@ -6,7 +6,7 @@ import SpriteKit
 // ═══════════════════════════════════════════════════════════════
 // MiniGolf — 데스크탑 오버레이 골프
 // 조작: ←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료
-// 활성화: ⌥⌘G (전역 단축키 — 어디서든 게임 재개/일시정지 토글)
+// 활성화: ⌃⌥⌘G (전역 단축키 — 어디서든 게임 재개/일시정지 토글, 시스템 충돌 없는 3중 수정자)
 // 다른 창을 클릭해 포커스를 잃으면 자동 일시정지된다
 // ═══════════════════════════════════════════════════════════════
 
@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerGlobalHotKey()
     }
 
-    /// ⌥⌘G — 어느 앱에 있든 게임을 다시 잡는 전역 단축키 (접근성 권한 불필요한 Carbon 핫키)
+    /// ⌃⌥⌘G — 어느 앱에 있든 게임을 다시 잡는 전역 단축키 (접근성 권한 불필요한 Carbon 핫키)
     private func registerGlobalHotKey() {
         let hotKeyID = EventHotKeyID(signature: OSType(0x4D47_4C46), id: 1) // 'MGLF'
         var eventType = EventTypeSpec(
@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         RegisterEventHotKey(
             UInt32(kVK_ANSI_G),
-            UInt32(optionKey | cmdKey),
+            UInt32(controlKey | optionKey | cmdKey),
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -92,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "⛳️"
         let menu = NSMenu()
-        menu.addItem(withTitle: "게임 재개 / 일시정지 (⌥⌘G)", action: #selector(toggleGame), keyEquivalent: "g").target = self
+        menu.addItem(withTitle: "게임 재개 / 일시정지 (⌃⌥⌘G)", action: #selector(toggleGame), keyEquivalent: "g").target = self
         menu.addItem(withTitle: "새 라운드", action: #selector(newRound), keyEquivalent: "r").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
