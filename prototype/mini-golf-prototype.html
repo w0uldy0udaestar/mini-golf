@@ -10,7 +10,9 @@
   html, body { width: 100%; height: 100%; overflow: hidden; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
-    background: linear-gradient(165deg, #37393d 0%, #26282b 50%, #1c1e20 100%);
+    /* 배경 = 사용자의 실제 데스크탑 대체물 — 게임 디자인 시스템(회색)을 적용하지 않는다.
+       실제 오버레이 앱에서는 이 자리에 진짜 데스크탑이 그대로 보인다 */
+    background: linear-gradient(165deg, #24473a 0%, #16332a 45%, #0c1f19 100%);
     color: #e8e9ea;
     user-select: none;
   }
@@ -21,8 +23,8 @@
   .menubar {
     position: absolute; top: 0; left: 0; right: 0; height: 26px;
     display: flex; align-items: center; gap: 18px; padding: 0 14px;
-    background: rgba(40, 42, 46, 0.6); backdrop-filter: blur(18px);
-    font-size: 12.5px; color: rgba(232, 233, 234, 0.85);
+    background: rgba(20, 34, 28, 0.55); backdrop-filter: blur(18px);
+    font-size: 12.5px; color: rgba(234, 242, 238, 0.85);
   }
   .menubar .apple { font-size: 14px; }
   .menubar .appname { font-weight: 700; }
@@ -30,7 +32,7 @@
 
   .fakewin {
     position: absolute; border-radius: 14px; overflow: hidden;
-    background: rgba(46, 48, 52, 0.75); backdrop-filter: blur(14px);
+    background: rgba(28, 38, 34, 0.72); backdrop-filter: blur(14px);
     box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
@@ -48,7 +50,7 @@
   .dock {
     position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 10px; align-items: center; padding: 9px 14px;
-    background: rgba(50, 52, 56, 0.55); backdrop-filter: blur(20px);
+    background: rgba(30, 44, 38, 0.5); backdrop-filter: blur(20px);
     border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.09);
   }
   .dock .icon { width: 46px; height: 46px; border-radius: 14px; }
@@ -118,26 +120,26 @@
   </div>
   <div class="fakewin" id="win-notes">
     <div class="titlebar">
-      <span class="dot" style="background:#5a5d61"></span><span class="dot" style="background:#5a5d61"></span><span class="dot" style="background:#5a5d61"></span>
+      <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
       메모 — 오늘 할 일
     </div>
     <div class="body">□ 데스크탑에서 골프 연습<br>□ 페어웨이 지키기<br>□ 백스핀으로 홀 앞에 세우기<br>□ 이글 한 번만…</div>
   </div>
   <div class="fakewin" id="win-term">
     <div class="titlebar">
-      <span class="dot" style="background:#5a5d61"></span><span class="dot" style="background:#5a5d61"></span><span class="dot" style="background:#5a5d61"></span>
+      <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
       터미널 — zsh
     </div>
     <div class="body mono">$ swift build<br>Building for debugging...<br>Build complete! (1.2s)<br>$ █</div>
   </div>
   <div class="dock">
-    <div class="icon" style="background:linear-gradient(145deg,#6d7074,#4c4f53)"></div>
-    <div class="icon" style="background:linear-gradient(145deg,#8a8d91,#5f6266)"></div>
-    <div class="icon" style="background:linear-gradient(145deg,#54575b,#3a3d41)"></div>
-    <div class="icon" style="background:linear-gradient(145deg,#7d8084,#55585c)"></div>
-    <div class="icon" style="background:linear-gradient(145deg,#606366,#45484c)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#5da8e8,#2f6fb2)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#f0b35c,#c97e2a)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#79c988,#3c8f52)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#e88a9c,#b34d63)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#9aa7b5,#5c6773)"></div>
     <div class="sep"></div>
-    <div class="icon" style="background:linear-gradient(145deg,#3d4044,#2a2d31)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#3d4a44,#242e29)"></div>
   </div>
 </div>
 
@@ -157,8 +159,9 @@
 <script>
 'use strict';
 
-/* 포인트 컬러: 스틱맨·깃발에만 사용 (회색 베이스 원칙) */
+/* 포인트 컬러는 깃발 하나에만 — 스틱맨을 포함한 게임 요소는 회색 베이스 */
 const ACCENT = '#d64533';
+const STICK = 'rgba(224, 226, 228, 0.95)';
 
 /* ══════════════ 클럽 데이터 (GolfCore.ClubTable로 이식 예정) ══════════════
    loft/spin/power는 내부 물리용 — UI에는 숫자를 노출하지 않는다 (조준 어시스트 배제).
@@ -296,9 +299,9 @@ const game = {
   swingAnim: null,            // { t, launched } — 다운스윙~팔로스루 애니메이션
 };
 
-/* 스윙 애니메이션 타이밍 (초) */
-const SWING = { down: 0.18, total: 0.5, phiImpact: 22, phiEnd: 115 };
-const backswingPhi = (h) => -(30 + 120 * h); // 백스윙 각도: 0%=-30°, 100%=-150°
+/* 스윙 애니메이션 타이밍 (초). phi 12° = 어드레스에서 클럽이 공에 닿는 각 */
+const SWING = { down: 0.18, total: 0.5, phiImpact: 12, phiEnd: 110 };
+const backswingPhi = (h) => -(25 + 115 * h); // 백스윙 각도: 0%=-25°, 100%=-140°
 
 function newRound(seed) {
   game.course = makeCourse(seed ?? (Date.now() & 0x7fffffff));
@@ -622,38 +625,45 @@ function limb(x0, y0, x1, y1, bendX, bendY) {
 }
 
 function drawStickman() {
-  const s = 1.5;
+  /* 실제 골프 어드레스 자세: 공은 스탠스 앞쪽, 척추 전경사, 무릎 굽힘,
+     팔은 어깨에서 그립으로 늘어뜨림. 어깨가 클럽 피벗 */
   const dir = game.stickDir;
-  const px = mx(game.stickX) - dir * 13 * s;   // 몸 중심: 공 뒤
+  const ballPx = mx(game.stickX);
   const gy = groundY;
-  const shoulder = { x: px, y: gy - 36 * s };
+  const px = ballPx - dir * 20;                    // 스탠스 중심
+  const hip = { x: px - dir * 5, y: gy - 42 };
+  const shoulder = { x: px + dir * 7, y: gy - 65 }; // 전경사 척추의 어깨
+  const head = { x: px + dir * 14, y: gy - 76 };    // 공을 내려다보는 머리
 
-  ctx.strokeStyle = ACCENT;
-  ctx.fillStyle = ACCENT;
+  ctx.strokeStyle = STICK;
+  ctx.fillStyle = STICK;
   ctx.lineWidth = 7;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // 머리: 꽉 찬 원 (레퍼런스처럼 큼직하게)
-  ctx.beginPath(); ctx.arc(px + dir * 1.5, gy - 49 * s, 8.5, 0, Math.PI * 2); ctx.fill();
-  // 몸통: 살짝 휜 곡선
-  limb(px, gy - 42 * s, px, gy - 19 * s, -dir * 2.5, 0);
-  // 다리: 넓게 벌린 곡선 스탠스
-  limb(px, gy - 19 * s, px - dir * 8 * s, gy, -dir * 4, 2);
-  limb(px, gy - 19 * s, px + dir * 9 * s, gy, dir * 4, 2);
+  // 머리: 꽉 찬 원
+  ctx.beginPath(); ctx.arc(head.x, head.y, 10, 0, Math.PI * 2); ctx.fill();
+  // 척추: 어깨→엉덩이, 살짝 굽은 전경사
+  limb(shoulder.x, shoulder.y, hip.x, hip.y, -dir * 3, 0);
+  // 다리: 무릎을 굽힌 스탠스 (컨트롤 포인트 = 무릎)
+  ctx.beginPath(); ctx.moveTo(hip.x, hip.y);
+  ctx.quadraticCurveTo(px - dir * 14, gy - 21, px - dir * 16, gy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hip.x, hip.y);
+  ctx.quadraticCurveTo(px + dir * 6, gy - 20, px + dir * 11, gy); ctx.stroke();
 
   // 클럽 (어깨 피벗, phi: 0°=수직 아래, +=전방, -=백스윙)
   const phi = (stickmanPhi() * Math.PI) / 180;
-  const clubLen = 27 * s;
+  const clubLen = 62; // 어드레스(12°)에서 헤드가 정확히 공 위치에 닿는 길이
   const tip = { x: shoulder.x + Math.sin(phi) * clubLen * dir, y: shoulder.y + Math.cos(phi) * clubLen };
-  const grip = { x: shoulder.x + (tip.x - shoulder.x) * 0.4, y: shoulder.y + (tip.y - shoulder.y) * 0.4 };
+  const grip = { x: shoulder.x + (tip.x - shoulder.x) * 0.32, y: shoulder.y + (tip.y - shoulder.y) * 0.32 };
 
-  // 팔: 어깨 → 그립, 부드러운 곡선
-  ctx.lineWidth = 6;
-  limb(shoulder.x, shoulder.y, grip.x, grip.y, dir * 3, -2);
+  // 팔 두 개: 어깨→그립, 늘어뜨린 곡선
+  ctx.lineWidth = 5.5;
+  limb(shoulder.x, shoulder.y, grip.x, grip.y, dir * 2, -2);
+  limb(shoulder.x, shoulder.y - 2.5, grip.x, grip.y, dir * 4, 0);
 
-  // 샤프트 (회색 — 포인트 컬러 최소 원칙)
-  ctx.strokeStyle = 'rgba(200, 202, 204, 0.9)';
+  // 샤프트
+  ctx.strokeStyle = 'rgba(190, 193, 196, 0.9)';
   ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
 
@@ -665,7 +675,7 @@ function drawStickman() {
     ctx.fillStyle = '#e8e9ea';
     ctx.font = '600 12px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${Math.round(game.heightPct * 100)}%`, px, gy - 64 * s);
+    ctx.fillText(`${Math.round(game.heightPct * 100)}%`, px, gy - 96);
   }
 }
 
