@@ -217,7 +217,7 @@ const PHYS = {
   timeScale: 2.5,        // 재생 배속
 };
 
-const TEE_X = 15;
+const TEE_X = 25; // 백스윙·피니시 포즈가 화면 왼쪽에서 잘리지 않도록 여유 확보
 const DT = 1 / 240; // 고정 물리 스텝
 
 /* ══════════════ 시드 랜덤 ══════════════ */
@@ -254,8 +254,9 @@ function makeCourse(seed) {
     const apronStart = greenStart - (4 + rand() * 3);
 
     // 티~에이프런 사이를 페어웨이/러프 랜덤 밴드로 채움
-    const segments = [{ from: 0, to: 22, type: 'tee' }];
-    let x = 22;
+    const teeEnd = TEE_X + 10;
+    const segments = [{ from: 0, to: teeEnd, type: 'tee' }];
+    let x = teeEnd;
     let cur = rand() < 0.75 ? 'fairway' : 'rough';
     while (x < apronStart) {
       const w = 30 + rand() * 55;
@@ -300,9 +301,45 @@ const game = {
   walkAnim: null,             // { from, to, t, dur } — 샷 후 공까지 걸어가는 이동
 };
 
-/* 스윙 애니메이션 타이밍 (초). phi 12° = 어드레스에서 클럽이 공에 닿는 각 */
-const SWING = { down: 0.18, total: 0.5, phiImpact: 12, phiEnd: 110 };
-const backswingPhi = (h) => -(25 + 115 * h); // 백스윙 각도: 0%=-25°, 100%=-140°
+/* 스윙 타이밍(초): 다운스윙이 가장 빠른 비대칭 리듬이 스윙 느낌의 핵심 (P-System 리서치) */
+const SWING = { down: 0.13, follow: 0.14, finish: 0.22, total: 0.5 };
+
+/* P-System 키프레임 (골프 교습 표준 P1~P10 중 6개 — docs/research-swing-pose.md)
+   hipDx: 힙 수평 이동(체중 이동, +=타겟 쪽) · tilt: 척추 측면 기울기(+=타겟 쪽)
+   handA: 어깨→손 방향각(0=수직 아래, +=타겟 쪽) · handD: 어깨→손 거리(팔 접힘)
+   clubA: 샤프트 절대각(0=수직 아래, +=타겟 쪽) · heel: 뒷발꿈치 들림(px) */
+const POSES = {
+  P1:  { hipDx: 0,  tilt: -5,  handA: 12,   handD: 34, clubA: 12,   heel: 0 },  // 어드레스
+  P2:  { hipDx: -2, tilt: -9,  handA: -40,  handD: 34, clubA: -85,  heel: 0 },  // 테이크어웨이
+  P4:  { hipDx: -6, tilt: -18, handA: -145, handD: 28, clubA: -175, heel: 0 },  // 톱
+  P7:  { hipDx: 6,  tilt: -12, handA: 14,   handD: 34, clubA: 6,    heel: 5 },  // 임팩트
+  P8:  { hipDx: 9,  tilt: 18,  handA: 80,   handD: 34, clubA: 95,   heel: 9 },  // 팔로스루
+  P10: { hipDx: 11, tilt: 25,  handA: 135,  handD: 22, clubA: 205,  heel: 11 }, // 피니시
+};
+const lerpPose = (a, b, u) => { const o = {}; for (const k in a) o[k] = a[k] + (b[k] - a[k]) * u; return o; };
+
+/* 백스윙 궤적: ↑↓ 입력이 어드레스→테이크어웨이→톱 경로 위의 몸 전체 포즈를 움직인다 */
+function backswingPose(h) {
+  const s = 0.22 + 0.78 * h;
+  return s < 0.35 ? lerpPose(POSES.P1, POSES.P2, s / 0.35)
+                  : lerpPose(POSES.P2, POSES.P4, (s - 0.35) / 0.65);
+}
+
+function currentPose() {
+  if (game.swingAnim) {
+    const t = game.swingAnim.t;
+    if (t < SWING.down) { // 다운스윙: 급가속
+      const u = t / SWING.down;
+      return lerpPose(backswingPose(game.heightPct), POSES.P7, u * u);
+    }
+    const t2 = t - SWING.down;
+    if (t2 < SWING.follow) return lerpPose(POSES.P7, POSES.P8, t2 / SWING.follow);
+    const v = Math.min(1, (t2 - SWING.follow) / SWING.finish);
+    return lerpPose(POSES.P8, POSES.P10, 1 - (1 - v) * (1 - v)); // 감속하며 피니시
+  }
+  if (game.mode === 'aim') return backswingPose(game.heightPct);
+  return POSES.P10; // 볼 비행 중엔 피니시 자세 유지
+}
 
 function newRound(seed) {
   game.course = makeCourse(seed ?? (Date.now() & 0x7fffffff));
@@ -614,21 +651,6 @@ function draw() {
   ctx.lineWidth = 1; ctx.stroke();
 }
 
-/* 스틱맨: 백스윙 높이가 곧 파워 게이지. 굵고 둥근 획 + 포인트 컬러 */
-function stickmanPhi() {
-  if (game.swingAnim) {
-    const a = game.swingAnim;
-    if (a.t < SWING.down) {
-      const u = a.t / SWING.down;               // 다운스윙: 가속 (u²)
-      return backswingPhi(game.heightPct) + (SWING.phiImpact - backswingPhi(game.heightPct)) * u * u;
-    }
-    const v = Math.min(1, (a.t - SWING.down) / (SWING.total - SWING.down));
-    return SWING.phiImpact + (SWING.phiEnd - SWING.phiImpact) * (1 - (1 - v) * (1 - v)); // 팔로스루: 감속
-  }
-  if (game.mode === 'aim') return backswingPhi(game.heightPct);
-  return 25; // 어드레스 자세
-}
-
 /* 부드러운 곡선 획 헬퍼: 시작→끝을 살짝 휜 곡선으로 */
 function limb(x0, y0, x1, y1, bendX, bendY) {
   ctx.beginPath();
@@ -639,15 +661,21 @@ function limb(x0, y0, x1, y1, bendX, bendY) {
 
 function drawStickman() {
   if (game.mode === 'walking' && game.walkAnim) { drawWalking(); return; }
-  /* 실제 골프 어드레스 자세: 공은 스탠스 앞쪽, 척추 전경사, 무릎 굽힘,
-     팔은 어깨에서 그립으로 늘어뜨림. 어깨가 클럽 피벗 */
+  /* P-System 포즈 기반 렌더링: 척추 기울기·힙 이동(체중)·팔 접힘·뒷발꿈치까지
+     키프레임에서 보간된 값으로 몸 전체를 그린다 */
+  const p = currentPose();
   const dir = game.stickDir;
   const ballPx = mx(game.stickX);
   const gy = groundY;
-  const px = ballPx - dir * 20;                    // 스탠스 중심
-  const hip = { x: px - dir * 5, y: gy - 42 };
-  const shoulder = { x: px + dir * 7, y: gy - 65 }; // 전경사 척추의 어깨
-  const head = { x: px + dir * 14, y: gy - 76 };    // 공을 내려다보는 머리
+  const px = ballPx - dir * 20;                    // 스탠스 중심 (공은 앞발 쪽)
+  const hip = { x: px + dir * (p.hipDx - 5), y: gy - 42 };
+  const shoulder = { x: hip.x + dir * (6 + 0.5 * p.tilt), y: gy - 66 };
+  const head = { x: shoulder.x + dir * 7, y: shoulder.y - 12 };
+  const aH = (p.handA * Math.PI) / 180;
+  const aC = (p.clubA * Math.PI) / 180;
+  const hands = { x: shoulder.x + Math.sin(aH) * p.handD * dir, y: shoulder.y + Math.cos(aH) * p.handD };
+  const clubLen = 31;
+  const tip = { x: hands.x + Math.sin(aC) * clubLen * dir, y: hands.y + Math.cos(aC) * clubLen };
 
   ctx.strokeStyle = STICK;
   ctx.fillStyle = STICK;
@@ -655,34 +683,28 @@ function drawStickman() {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // 머리: 꽉 찬 원
+  // 머리 (스윙의 시각 앵커 — 어깨를 따라 최소한만 이동)
   ctx.beginPath(); ctx.arc(head.x, head.y, 10, 0, Math.PI * 2); ctx.fill();
-  // 척추: 어깨→엉덩이, 살짝 굽은 전경사
+  // 척추: 기울기가 키프레임마다 변함 (리서치: 가장 중요한 개선점)
   limb(shoulder.x, shoulder.y, hip.x, hip.y, -dir * 3, 0);
-  // 다리: 무릎을 굽힌 스탠스 (컨트롤 포인트 = 무릎)
+  // 다리: 발 위치 고정, 힙 이동으로 체중 표현. 뒷발꿈치는 임팩트 이후 들림
   ctx.beginPath(); ctx.moveTo(hip.x, hip.y);
-  ctx.quadraticCurveTo(px - dir * 14, gy - 21, px - dir * 16, gy); ctx.stroke();
+  ctx.quadraticCurveTo(px - dir * 13 + dir * p.hipDx * 0.5, gy - 22, px - dir * 16, gy - p.heel);
+  ctx.stroke();
   ctx.beginPath(); ctx.moveTo(hip.x, hip.y);
-  ctx.quadraticCurveTo(px + dir * 6, gy - 20, px + dir * 11, gy); ctx.stroke();
+  ctx.quadraticCurveTo(px + dir * 6 + dir * p.hipDx * 0.5, gy - 21, px + dir * 11, gy);
+  ctx.stroke();
 
-  // 클럽 (어깨 피벗, phi: 0°=수직 아래, +=전방, -=백스윙)
-  const phi = (stickmanPhi() * Math.PI) / 180;
-  const clubLen = 62; // 어드레스(12°)에서 헤드가 정확히 공 위치에 닿는 길이
-  const tip = { x: shoulder.x + Math.sin(phi) * clubLen * dir, y: shoulder.y + Math.cos(phi) * clubLen };
-  const grip = { x: shoulder.x + (tip.x - shoulder.x) * 0.32, y: shoulder.y + (tip.y - shoulder.y) * 0.32 };
-
-  // 팔 두 개: 어깨→그립, 늘어뜨린 곡선
+  // 팔 두 개: 어깨→손 (handD가 줄면 접힌 느낌)
   ctx.lineWidth = 5.5;
-  limb(shoulder.x, shoulder.y, grip.x, grip.y, dir * 2, -2);
-  limb(shoulder.x, shoulder.y - 2.5, grip.x, grip.y, dir * 4, 0);
+  limb(shoulder.x, shoulder.y, hands.x, hands.y, dir * 2, -2);
+  limb(shoulder.x, shoulder.y - 2.5, hands.x, hands.y, dir * 4, 0);
 
-  // 샤프트
+  // 샤프트 + 클럽헤드
   ctx.strokeStyle = 'rgba(190, 193, 196, 0.9)';
   ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(grip.x, grip.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
-
-  // 클럽헤드: 카테고리별 디자인
-  drawClubHead(CLUBS[game.clubIdx].cat, tip, phi, dir);
+  ctx.beginPath(); ctx.moveTo(hands.x, hands.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+  drawClubHead(CLUBS[game.clubIdx].cat, tip, aC, dir);
 
   // 백스윙 % 라벨 (조준 중일 때만)
   if (game.mode === 'aim') {
