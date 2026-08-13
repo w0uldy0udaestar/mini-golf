@@ -297,48 +297,93 @@ const game = {
   ball: { x: TEE_X, y: 0, vx: 0, vy: 0, spin: 0, spinSign: 1, phase: 'rest' },
   trail: [], holedAnim: 0,
   stickX: TEE_X, stickDir: 1, // 스틱맨 위치·타격 방향
-  swingAnim: null,            // { t, launched } — 다운스윙~팔로스루 애니메이션
-  walkAnim: null,             // { from, to, t, dur } — 샷 후 공까지 걸어가는 이동
+  swingAnim: null,            // { t, launched, prof, fromPose } — 다운스윙~피니시
+  walkAnim: null,             // { from, to, t, dur, relax } — 피니시 풀기 → 걷기
+  aimBlend: null,             // { t, dur } — 걷기 도착 → 어드레스 전환
+  lastFinishPose: null,       // 볼 비행 중 유지할 피니시 포즈
 };
 
 /* 스윙 타이밍(초): 다운스윙이 가장 빠른 비대칭 리듬이 스윙 느낌의 핵심 (P-System 리서치) */
-const SWING = { down: 0.13, follow: 0.14, finish: 0.22, total: 0.5 };
+const SWING = { follow: 0.14, finish: 0.22, total: 0.5 };
 
 /* P-System 키프레임 (골프 교습 표준 P1~P10 중 6개 — docs/research-swing-pose.md)
    hipDx: 힙 수평 이동(체중 이동, +=타겟 쪽) · tilt: 척추 측면 기울기(+=타겟 쪽)
    handA: 어깨→손 방향각(0=수직 아래, +=타겟 쪽) · handD: 어깨→손 거리(팔 접힘)
-   clubA: 샤프트 절대각(0=수직 아래, +=타겟 쪽) · heel: 뒷발꿈치 들림(px) */
+   clubA: 샤프트 절대각(0=수직 아래, +=타겟 쪽) · heel: 뒷발꿈치 들림(px) · headDx: 머리 오프셋 */
 const POSES = {
-  P1:  { hipDx: 0,  tilt: -5,  handA: 12,   handD: 34, clubA: 12,   heel: 0 },  // 어드레스
-  P2:  { hipDx: -2, tilt: -9,  handA: -40,  handD: 34, clubA: -85,  heel: 0 },  // 테이크어웨이
-  P4:  { hipDx: -6, tilt: -18, handA: -145, handD: 28, clubA: -175, heel: 0 },  // 톱
-  P7:  { hipDx: 6,  tilt: -12, handA: 14,   handD: 34, clubA: 6,    heel: 5 },  // 임팩트
-  P8:  { hipDx: 9,  tilt: 18,  handA: 80,   handD: 34, clubA: 95,   heel: 9 },  // 팔로스루
-  P10: { hipDx: 11, tilt: 25,  handA: 135,  handD: 22, clubA: 205,  heel: 11 }, // 피니시
+  P1:  { hipDx: 0,  tilt: -5,  handA: 12,   handD: 34, clubA: 12,   heel: 0,  headDx: 7 },  // 어드레스
+  P2:  { hipDx: -2, tilt: -9,  handA: -40,  handD: 34, clubA: -85,  heel: 0,  headDx: 7 },  // 테이크어웨이
+  P4:  { hipDx: -6, tilt: -18, handA: -145, handD: 28, clubA: -175, heel: 0,  headDx: 6 },  // 톱
+  P7:  { hipDx: 6,  tilt: -12, handA: 14,   handD: 34, clubA: 6,    heel: 5,  headDx: 7 },  // 임팩트
+  P8:  { hipDx: 9,  tilt: 18,  handA: 85,   handD: 34, clubA: 100,  heel: 9,  headDx: 9 },  // 팔로스루: 타겟 방향 풀 익스텐션
+  P10: { hipDx: 12, tilt: 22,  handA: 150,  handD: 24, clubA: 270,  heel: 13, headDx: 12 }, // 피니시: 클럽이 목 뒤로 감김, 몸은 타겟을 향함
 };
+/* 퍼터 전용: 몸을 쓰지 않는 펜듈럼 스트로크 (어깨 진자, 체중 이동·피니시 없음) */
+const PT_POSES = {
+  A:   { hipDx: 0, tilt: -3, handA: 10,  handD: 30, clubA: 8,   heel: 0, headDx: 7 },
+  TOP: { hipDx: 0, tilt: -4, handA: -22, handD: 30, clubA: -30, heel: 0, headDx: 7 },
+  IMP: { hipDx: 1, tilt: -3, handA: 12,  handD: 30, clubA: 10,  heel: 0, headDx: 7 },
+  FIN: { hipDx: 2, tilt: -2, handA: 30,  handD: 30, clubA: 38,  heel: 0, headDx: 8 },
+};
+/* 클럽을 옆에 들고 선 직립 자세 — 걷기와 어드레스 사이의 전환 기준 포즈 */
+const UPRIGHT = { hipDx: 0, tilt: 2, handA: -18, handD: 30, clubA: -35, heel: 0, headDx: 5 };
+
+/* 클럽별 스윙 프로파일: 실제 골프처럼 클럽마다 스윙 폭·볼 위치·피니시가 다르다
+   topScale: 백스윙 최대 폭 · ballFwd: 스탠스에서 공 위치(px, 드라이버=앞발 쪽)
+   finishScale: 피니시 감김 정도 · down: 다운스윙 시간(퍼터는 진자라 더 느림) */
+const SWING_PROFILE = {
+  wood:   { topScale: 1.0,  ballFwd: 24, finishScale: 1.0,  down: 0.13 },
+  iron:   { topScale: 0.88, ballFwd: 20, finishScale: 0.9,  down: 0.13 },
+  wedge:  { topScale: 0.72, ballFwd: 17, finishScale: 0.72, down: 0.13 },
+  putter: { topScale: 1.0,  ballFwd: 18, finishScale: 1.0,  down: 0.2, putter: true },
+};
+const clubProfile = () => SWING_PROFILE[CLUBS[game.clubIdx].cat];
+
 const lerpPose = (a, b, u) => { const o = {}; for (const k in a) o[k] = a[k] + (b[k] - a[k]) * u; return o; };
+const smoothstep = (u) => u * u * (3 - 2 * u);
 
 /* 백스윙 궤적: ↑↓ 입력이 어드레스→테이크어웨이→톱 경로 위의 몸 전체 포즈를 움직인다 */
 function backswingPose(h) {
-  const s = 0.22 + 0.78 * h;
+  const prof = clubProfile();
+  if (prof.putter) return lerpPose(PT_POSES.A, PT_POSES.TOP, h);
+  const s = 0.22 + 0.78 * h * prof.topScale;
   return s < 0.35 ? lerpPose(POSES.P1, POSES.P2, s / 0.35)
                   : lerpPose(POSES.P2, POSES.P4, (s - 0.35) / 0.65);
 }
 
+function finishPose(prof) {
+  if (prof.putter) return PT_POSES.FIN;
+  return lerpPose(POSES.P8, POSES.P10, prof.finishScale);
+}
+
 function currentPose() {
   if (game.swingAnim) {
-    const t = game.swingAnim.t;
-    if (t < SWING.down) { // 다운스윙: 급가속
-      const u = t / SWING.down;
-      return lerpPose(backswingPose(game.heightPct), POSES.P7, u * u);
+    const a = game.swingAnim;
+    const prof = a.prof;
+    if (a.t < prof.down) { // 다운스윙: 급가속 (퍼터는 진자라 완만)
+      const u = a.t / prof.down;
+      const impact = prof.putter ? PT_POSES.IMP : POSES.P7;
+      return lerpPose(a.fromPose, impact, prof.putter ? smoothstep(u) : u * u);
     }
-    const t2 = t - SWING.down;
+    const t2 = a.t - prof.down;
+    if (prof.putter) { // 퍼터: 임팩트 → 짧은 팔로만
+      const v = Math.min(1, t2 / 0.25);
+      return lerpPose(PT_POSES.IMP, PT_POSES.FIN, 1 - (1 - v) * (1 - v));
+    }
     if (t2 < SWING.follow) return lerpPose(POSES.P7, POSES.P8, t2 / SWING.follow);
     const v = Math.min(1, (t2 - SWING.follow) / SWING.finish);
-    return lerpPose(POSES.P8, POSES.P10, 1 - (1 - v) * (1 - v)); // 감속하며 피니시
+    return lerpPose(POSES.P8, finishPose(prof), 1 - (1 - v) * (1 - v)); // 감속하며 피니시
   }
-  if (game.mode === 'aim') return backswingPose(game.heightPct);
-  return POSES.P10; // 볼 비행 중엔 피니시 자세 유지
+  if (game.mode === 'aim') {
+    const bp = backswingPose(game.heightPct);
+    if (game.aimBlend) { // 걷기 도착 직후: 직립 → 어드레스로 자연스럽게
+      const u = Math.min(1, game.aimBlend.t / game.aimBlend.dur);
+      if (u >= 1) { game.aimBlend = null; return bp; }
+      return lerpPose(UPRIGHT, bp, smoothstep(u));
+    }
+    return bp;
+  }
+  return game.lastFinishPose || POSES.P10; // 볼 비행 중엔 피니시 자세 유지
 }
 
 function newRound(seed) {
@@ -358,20 +403,22 @@ function startHole() {
 
 function enterAim() {
   game.mode = 'aim';
+  const walked = game.walkAnim !== null;
   game.walkAnim = null;
   game.stickX = game.ball.x;
   game.stickDir = hole().holeX >= game.ball.x ? 1 : -1;
+  if (walked) game.aimBlend = { t: 0, dur: 0.3 }; // 직립 → 어드레스 전환
   updateHud();
 }
 
-/* 샷 후 실제 골퍼처럼 공이 멈춘 자리까지 걸어간다 */
+/* 샷 후 실제 골퍼처럼 여유롭게 걸어간다: 피니시 풀기(relax) → 걷기 → 어드레스 */
 function startWalk() {
   const from = game.stickX, to = game.ball.x;
   const dist = Math.abs(to - from);
   if (dist < 1) { enterAim(); return; }
   game.mode = 'walking';
   game.stickDir = to >= from ? 1 : -1;
-  game.walkAnim = { from, to, t: 0, dur: Math.min(2.2, Math.max(0.5, dist / 140)) };
+  game.walkAnim = { from, to, t: 0, dur: Math.min(4.5, Math.max(1.0, dist / 55)), relax: 0.35 };
   updateHud();
 }
 
@@ -380,7 +427,7 @@ function hole() { return game.course[game.holeIdx]; }
 /* ══════════════ 샷 ══════════════ */
 function startSwing() {
   game.mode = 'swinging';           // 입력 잠금, 다운스윙 시작
-  game.swingAnim = { t: 0, launched: false };
+  game.swingAnim = { t: 0, launched: false, prof: clubProfile(), fromPose: backswingPose(game.heightPct) };
 }
 
 function launchBall() {
@@ -660,17 +707,29 @@ function limb(x0, y0, x1, y1, bendX, bendY) {
 }
 
 function drawStickman() {
-  if (game.mode === 'walking' && game.walkAnim) { drawWalking(); return; }
-  /* P-System 포즈 기반 렌더링: 척추 기울기·힙 이동(체중)·팔 접힘·뒷발꿈치까지
-     키프레임에서 보간된 값으로 몸 전체를 그린다 */
-  const p = currentPose();
+  if (game.mode === 'walking' && game.walkAnim) {
+    const w = game.walkAnim;
+    if (w.t < w.relax) { // 피니시 자세를 풀고 직립으로 — 모션이 끊기지 않게
+      const u = smoothstep(w.t / w.relax);
+      drawPoseRig(lerpPose(game.lastFinishPose || POSES.P10, UPRIGHT, u));
+    } else {
+      drawWalking();
+    }
+    return;
+  }
+  drawPoseRig(currentPose());
+}
+
+/* P-System 포즈 기반 렌더링: 척추 기울기·힙 이동(체중)·팔 접힘·뒷발꿈치까지
+   키프레임에서 보간된 값으로 몸 전체를 그린다 */
+function drawPoseRig(p) {
   const dir = game.stickDir;
   const ballPx = mx(game.stickX);
   const gy = groundY;
-  const px = ballPx - dir * 20;                    // 스탠스 중심 (공은 앞발 쪽)
+  const px = ballPx - dir * clubProfile().ballFwd; // 스탠스 중심 (클럽별 공 위치)
   const hip = { x: px + dir * (p.hipDx - 5), y: gy - 42 };
   const shoulder = { x: hip.x + dir * (6 + 0.5 * p.tilt), y: gy - 66 };
-  const head = { x: shoulder.x + dir * 7, y: shoulder.y - 12 };
+  const head = { x: shoulder.x + dir * p.headDx, y: shoulder.y - 12 };
   const aH = (p.handA * Math.PI) / 180;
   const aC = (p.clubA * Math.PI) / 180;
   const hands = { x: shoulder.x + Math.sin(aH) * p.handD * dir, y: shoulder.y + Math.cos(aH) * p.handD };
@@ -715,15 +774,18 @@ function drawStickman() {
   }
 }
 
-/* 걷기 자세: 몸을 세우고 클럽을 옆에 든 채 다리를 교차하며 이동 */
+/* 걷기 자세: 몸을 세우고 클럽을 옆에 든 채 여유로운 걸음으로 이동 */
 function drawWalking() {
   const w = game.walkAnim;
   const dir = game.stickDir;
   const px = mx(game.stickX);
   const gy = groundY;
-  const phase = w.t * 11;                 // 걸음 주기 (빠른 종종걸음)
-  const swing = Math.sin(phase);
-  const bob = Math.abs(Math.cos(phase)) * 2; // 걸을 때 몸 위아래 들썩임
+  const tw = Math.max(0, w.t - w.relax);
+  // 보폭 크기: 시작·도착 0.4초 동안 서서히 커졌다 줄어듦 → 멈춤이 자연스럽다
+  const amp = Math.max(0, Math.min(1, Math.min(tw / 0.4, (w.dur - tw) / 0.4)));
+  const phase = tw * 6;                   // 걸음 주기 (여유로운 페이스)
+  const swing = Math.sin(phase) * amp;
+  const bob = Math.abs(Math.cos(phase)) * 1.5 * amp; // 몸 들썩임
 
   const hip = { x: px, y: gy - 46 - bob };
   const shoulder = { x: px + dir * 2, y: gy - 70 - bob };
@@ -818,22 +880,27 @@ function frame(now) {
     if (held.has('ArrowDown')) { game.heightPct = Math.max(0, game.heightPct - rate * dtReal); }
   }
 
-  // 걷기: 공이 멈춘 자리까지 이동 후 조준 재개
+  // 걷기: 피니시 풀기(relax) 후 공이 멈춘 자리까지 이동, 도착하면 조준 재개
   if (game.mode === 'walking' && game.walkAnim) {
     const w = game.walkAnim;
     w.t += dtReal;
-    const u = Math.min(1, w.t / w.dur);
-    const smooth = u * u * (3 - 2 * u); // smoothstep — 출발·도착이 부드럽게
-    game.stickX = w.from + (w.to - w.from) * smooth;
-    if (u >= 1) enterAim();
+    const tw = w.t - w.relax;
+    if (tw >= 0) {
+      const u = Math.min(1, tw / w.dur);
+      game.stickX = w.from + (w.to - w.from) * smoothstep(u);
+      if (u >= 1) enterAim();
+    }
   }
+
+  // 어드레스 전환 블렌딩 시간 진행
+  if (game.aimBlend) game.aimBlend.t += dtReal;
 
   // 스윙 애니메이션: 임팩트 순간에 공 발사, 팔로스루는 발사 후에도 이어짐
   if (game.swingAnim) {
     const a = game.swingAnim;
     a.t += dtReal;
-    if (!a.launched && a.t >= SWING.down) { a.launched = true; launchBall(); }
-    if (a.t >= SWING.total) game.swingAnim = null;
+    if (!a.launched && a.t >= a.prof.down) { a.launched = true; launchBall(); }
+    if (a.t >= SWING.total) { game.lastFinishPose = finishPose(a.prof); game.swingAnim = null; }
   }
 
   if (game.mode === 'motion') {
