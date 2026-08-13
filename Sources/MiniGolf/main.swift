@@ -1,12 +1,12 @@
 import AppKit
-import Carbon.HIToolbox
 import GolfCore
 import SpriteKit
 
 // ═══════════════════════════════════════════════════════════════
 // MiniGolf — 데스크탑 오버레이 골프
 // 조작: ←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료
-// 활성화: ⌃⇧G (전역 단축키 — 어디서든 게임 재개/일시정지 토글)
+// 활성화: 메뉴바 ⛳️ 좌클릭 = 재개/일시정지 토글 · 우클릭 = 메뉴
+// (전역 단축키는 사용자 설정 기능으로 추후 도입 — IDEAS.md)
 // 다른 창을 클릭해 포커스를 잃으면 자동 일시정지된다
 // ═══════════════════════════════════════════════════════════════
 
@@ -20,8 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: OverlayPanel!
     private var scene: GameScene!
     private var statusItem: NSStatusItem!
+    private var statusMenu: NSMenu!
     private var soundMenuItem: NSMenuItem!
-    private var hotKeyRef: EventHotKeyRef?
+    private var lastAutoPause = Date.distantPast
 
     func applicationDidFinishLaunching(_: Notification) {
         guard let screen = NSScreen.main else { NSApp.terminate(nil); return }
@@ -56,51 +57,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         setupStatusItem()
-        registerGlobalHotKey()
     }
 
-    /// ⌃⇧G — 어느 앱에 있든 게임을 다시 잡는 전역 단축키 (접근성 권한 불필요한 Carbon 핫키)
-    private func registerGlobalHotKey() {
-        let hotKeyID = EventHotKeyID(signature: OSType(0x4D47_4C46), id: 1) // 'MGLF'
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        InstallEventHandler(
-            GetApplicationEventTarget(),
-            { _, _, userData -> OSStatus in
-                guard let userData else { return noErr }
-                let delegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
-                DispatchQueue.main.async { delegate.toggleGame() }
-                return noErr
-            },
-            1, &eventType,
-            Unmanaged.passUnretained(self).toOpaque(),
-            nil
-        )
-        RegisterEventHotKey(
-            UInt32(kVK_ANSI_G),
-            UInt32(controlKey | shiftKey),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
-    }
-
-    /// 메뉴바 ⛳️ — 단축키의 백업 통로
+    /// 메뉴바 ⛳️ = 활성화 버튼 — 좌클릭이 곧 재개/일시정지 토글, 메뉴는 우클릭으로
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "⛳️"
-        let menu = NSMenu()
-        menu.addItem(withTitle: "게임 재개 / 일시정지 (⌃⇧G)", action: #selector(toggleGame), keyEquivalent: "g").target = self
-        menu.addItem(withTitle: "새 라운드", action: #selector(newRound), keyEquivalent: "r").target = self
-        soundMenuItem = menu.addItem(withTitle: "사운드", action: #selector(toggleSound), keyEquivalent: "")
+        statusItem.button?.toolTip = "게임 재개 / 일시정지 — 우클릭: 메뉴"
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        statusMenu = NSMenu()
+        statusMenu.addItem(withTitle: "게임 재개 / 일시정지", action: #selector(toggleGame), keyEquivalent: "g").target = self
+        statusMenu.addItem(withTitle: "새 라운드", action: #selector(newRound), keyEquivalent: "r").target = self
+        soundMenuItem = statusMenu.addItem(withTitle: "사운드", action: #selector(toggleSound), keyEquivalent: "")
         soundMenuItem.target = self
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
-        statusItem.menu = menu
+        statusMenu.addItem(.separator())
+        statusMenu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
+        // statusItem.menu는 비워둔다 — 지정하면 좌클릭이 메뉴를 열어 버튼 동작을 삼킨다
+    }
+
+    @objc private func statusClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            statusItem.menu = statusMenu
+            statusItem.button?.performClick(nil) // 메뉴 추적은 이 안에서 동기 실행됨
+            statusItem.menu = nil
+        } else {
+            toggleGame()
+        }
     }
 
     @objc private func toggleSound() {
@@ -109,11 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func panelResignedKey() {
+        lastAutoPause = Date()
         scene.setGamePaused(true)
     }
 
     /// 재개 ↔ 일시정지 토글: 게임이 키보드를 안 갖고 있으면 잡아오고, 갖고 있으면 쉬게 한다
     @objc func toggleGame() {
+        // 버튼 클릭 자체가 포커스를 뺏어 방금 자동 일시정지됐다면, 클릭 의도는 '일시정지' — 그대로 둔다
+        if scene.isGamePaused, Date().timeIntervalSince(lastAutoPause) < 0.4 {
+            return
+        }
         if scene.isGamePaused || !panel.isKeyWindow {
             panel.makeKeyAndOrderFront(nil)
             panel.makeFirstResponder(scene)
