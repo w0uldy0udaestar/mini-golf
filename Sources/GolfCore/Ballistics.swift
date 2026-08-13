@@ -160,14 +160,18 @@ public enum Ballistics {
             }
         }
 
-        // 좌우 벽 반사
+        // 좌우 벽 반사 — speed는 반발 전 충돌 속도. 같은 스텝의 지면 bounce가 연출 우선
         if b.x < 0.5 {
+            if ev == .none {
+                ev = .wall(speed: abs(b.vx))
+            }
             b.x = 0.5; b.vx = -b.vx * Phys.wallRestitution
-            ev = .wall(speed: abs(b.vx))
         }
         if b.x > hole.worldW - 0.5 {
+            if ev == .none {
+                ev = .wall(speed: abs(b.vx))
+            }
             b.x = hole.worldW - 0.5; b.vx = -b.vx * Phys.wallRestitution
-            ev = .wall(speed: abs(b.vx))
         }
 
         // 컵 캡처 / 립아웃 — 임계값 절벽을 연속 구간으로:

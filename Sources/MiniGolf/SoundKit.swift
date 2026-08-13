@@ -32,6 +32,18 @@ final class SoundKit {
         } catch {
             ok = false // 사운드 없이 게임은 계속
         }
+        // 출력 장치 변경(헤드폰 연결 등)으로 엔진이 멈추면 재시작
+        NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            do {
+                try engine.start()
+                ok = true
+            } catch {
+                ok = false
+            }
+        }
     }
 
     // ── 이벤트 사운드 ──
@@ -167,7 +179,7 @@ final class SoundKit {
 
     // ── 합성 ──
 
-    private func play(duration: Double, _ sample: @escaping (Double) -> Double) {
+    private func play(duration: Double, _ sample: (Double) -> Double) {
         guard enabled, ok else { return }
         let n = Int(duration * sr)
         guard let fmt = AVAudioFormat(standardFormatWithSampleRate: sr, channels: 1),

@@ -386,6 +386,7 @@ final class GameScene: SKScene {
 
         // 깃발: 유일한 포인트 컬러
         flagNode.removeAllChildren()
+        flagNode.zRotation = 0 // flagWave가 중간에 끊겨도 잔여 회전이 남지 않게
         let pole = SKShapeNode(rect: CGRect(x: -0.6, y: 0, width: 1.2, height: 62))
         pole.fillColor = NSColor(white: 0.95, alpha: 0.85)
         pole.strokeColor = .clear
