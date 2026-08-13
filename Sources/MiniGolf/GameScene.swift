@@ -24,7 +24,10 @@ final class GameScene: SKScene {
 
     // 연출 상태
     private struct SwingAnim { var t = 0.0; var launched = false; let prof: SwingProfile; let fromPose: Pose }
-    private struct WalkAnim { let fromX, toX, dur: Double; var t = 0.0; let relax = 0.4; var phase = -0.6; var vPx = 0.0 }
+    private struct WalkAnim { let fromX, toX,
+                                  dur: Double; var t = 0.0; let relax = 0.4; var phase = -0.6; var vPx = 0.0
+    }
+
     private var swingAnim: SwingAnim?
     private var walkAnim: WalkAnim?
     private var lastFinishPose: Pose?
@@ -33,10 +36,22 @@ final class GameScene: SKScene {
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
 
-    private var hole: Hole { course[holeIdx] }
-    private var club: Club { ClubTable.all[clubIdx] }
-    private var profile: SwingProfile { SwingProfile.profile(for: club.cat) }
-    private var pxPerM: CGFloat { size.width / hole.worldW }
+    private var hole: Hole {
+        course[holeIdx]
+    }
+
+    private var club: Club {
+        ClubTable.all[clubIdx]
+    }
+
+    private var profile: SwingProfile {
+        SwingProfile.profile(for: club.cat)
+    }
+
+    private var pxPerM: CGFloat {
+        size.width / hole.worldW
+    }
+
     private let groundBase: CGFloat = 96
 
     // 노드
@@ -57,9 +72,17 @@ final class GameScene: SKScene {
     private let powerLabel = GlassLabel(font: HUDFont.medium, size: 11, alpha: 0.85)
     private let scorecard = ScorecardNode()
 
-    private func px(_ m: Double) -> CGFloat { CGFloat(m) * pxPerM }
-    private func py(_ elev: Double) -> CGFloat { groundBase + CGFloat(elev) * pxPerM }
-    private func groundY(_ xm: Double) -> CGFloat { py(hole.ground(at: xm)) }
+    private func px(_ m: Double) -> CGFloat {
+        CGFloat(m) * pxPerM
+    }
+
+    private func py(_ elev: Double) -> CGFloat {
+        groundBase + CGFloat(elev) * pxPerM
+    }
+
+    private func groundY(_ xm: Double) -> CGFloat {
+        py(hole.ground(at: xm))
+    }
 
     override func didMove(to _: SKView) {
         backgroundColor = .clear // ⚠️ skView.backgroundColor는 설정 금지
@@ -78,7 +101,7 @@ final class GameScene: SKScene {
         hintLabel.position = CGPoint(x: size.width - 24, y: size.height - 98)
         hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료")
         pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46)
-        pauseLabel.setText("일시정지 — 메뉴바 ⛳️에서 재개")
+        pauseLabel.setText("일시정지 — ⌥⌘G로 재개")
         pauseLabel.isHidden = true
         toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
         toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
@@ -90,7 +113,18 @@ final class GameScene: SKScene {
         for n in [terrainNode, trailNode, stickman, shadowNode, ballNode, flagNode] as [SKNode] {
             addChild(n)
         }
-        for n in [scoreTitle, scoreSub, clubTitle, clubSub, hintLabel, pauseLabel, toastTitle, toastSub, powerLabel, scorecard] as [SKNode] {
+        for n in [
+            scoreTitle,
+            scoreSub,
+            clubTitle,
+            clubSub,
+            hintLabel,
+            pauseLabel,
+            toastTitle,
+            toastSub,
+            powerLabel,
+            scorecard,
+        ] as [SKNode] {
             addChild(n)
         }
 
@@ -131,7 +165,9 @@ final class GameScene: SKScene {
     private func startWalk() {
         let from = stickX, to = ball.x
         let dist = abs(to - from)
-        if dist < 1 { enterAim(); return }
+        if dist < 1 {
+            enterAim(); return
+        }
         mode = .walking
         dir = to >= from ? 1 : -1
         walkAnim = WalkAnim(fromX: from, toX: to, dur: min(4.5, max(1.0, dist / 55)))
@@ -152,7 +188,7 @@ final class GameScene: SKScene {
         updateHUD()
     }
 
-    // ── 홀 이벤트 ──
+    /// ── 홀 이벤트 ──
     private func onHoled() {
         mode = .holed
         results.append((hole.par, strokes, false))
@@ -166,7 +202,11 @@ final class GameScene: SKScene {
         let dropX = dir > 0 ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
         ball = BallState(x: dropX, y: hole.ground(at: dropX))
         toast("워터 해저드", sub: "+1 벌타 · 드롭")
-        if strokes >= Phys.maxStrokes { giveUp() } else { startWalk() }
+        if strokes >= Phys.maxStrokes {
+            giveUp()
+        } else {
+            startWalk()
+        }
     }
 
     private func giveUp() {
@@ -200,14 +240,16 @@ final class GameScene: SKScene {
         }
     }
 
-    // ── 일시정지 ──
+    /// ── 일시정지 ──
     func setGamePaused(_ paused: Bool) {
         isGamePaused = paused
         pauseLabel.isHidden = !paused
-        if paused { heldKeys.removeAll() }
+        if paused {
+            heldKeys.removeAll()
+        }
     }
 
-    // ── 지형: 균일한 헤어라인 + 라이별 미세 질감 ──
+    /// ── 지형: 균일한 헤어라인 + 라이별 미세 질감 ──
     private func rebuildTerrain() {
         terrainNode.removeAllChildren()
         let cupHalfM = max(Phys.cupHalfWidth, 4.5 / Double(pxPerM))
@@ -326,7 +368,7 @@ final class GameScene: SKScene {
         clubSub.setText(club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터")
     }
 
-    // ── 입력 ──
+    /// ── 입력 ──
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 53: NSApp.terminate(nil) // Esc
@@ -347,7 +389,7 @@ final class GameScene: SKScene {
         heldKeys.remove(event.keyCode)
     }
 
-    // ── 메인 루프 ──
+    /// ── 메인 루프 ──
     override func update(_ currentTime: TimeInterval) {
         let dt = lastTime == 0 ? 0 : min(currentTime - lastTime, 0.1)
         lastTime = currentTime
@@ -355,8 +397,12 @@ final class GameScene: SKScene {
 
         if mode == .aim {
             let rate = club.isPutter ? 0.4 : 0.85
-            if heldKeys.contains(126) { heightPct = min(1, heightPct + rate * dt) }
-            if heldKeys.contains(125) { heightPct = max(0, heightPct - rate * dt) }
+            if heldKeys.contains(126) {
+                heightPct = min(1, heightPct + rate * dt)
+            }
+            if heldKeys.contains(125) {
+                heightPct = max(0, heightPct - rate * dt)
+            }
         }
 
         if var anim = swingAnim {
@@ -384,7 +430,9 @@ final class GameScene: SKScene {
                 w.vPx = vInst * Double(pxPerM)
                 w.phase += w.vPx / 16 * dt
                 walkAnim = w
-                if u >= 1 { enterAim() }
+                if u >= 1 {
+                    enterAim()
+                }
             } else {
                 walkAnim = w
             }
@@ -396,16 +444,24 @@ final class GameScene: SKScene {
             while acc >= Phys.dt {
                 acc -= Phys.dt
                 event = Ballistics.step(&ball, hole: hole)
-                if event != .none { break }
+                if event != .none {
+                    break
+                }
             }
             trailPoints.append(CGPoint(x: px(ball.x), y: py(ball.y) + 5.5))
-            if trailPoints.count > 400 { trailPoints.removeFirst() }
+            if trailPoints.count > 400 {
+                trailPoints.removeFirst()
+            }
             switch event {
             case .holed: onHoled()
             case .water: onWater()
             case .none:
                 if ball.phase == .rest {
-                    if strokes >= Phys.maxStrokes { giveUp() } else { startWalk() }
+                    if strokes >= Phys.maxStrokes {
+                        giveUp()
+                    } else {
+                        startWalk()
+                    }
                 }
             }
             updateHUD()
