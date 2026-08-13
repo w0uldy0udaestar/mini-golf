@@ -19,3 +19,4 @@ dist/
 *.key
 *.pem
 credentials*
+.gstack/

@@ -11,6 +11,7 @@
 - [x] 설계 확정: 사이드뷰 / 키보드 전용 / 풀 클럽 탄도·백스핀 물리 / Swift+SpriteKit / SPM 구조
 - [x] PLAN.md · IDEAS.md · README.md 작성
 - [x] git 커밋 + GitHub private 저장소 연결
+- [x] HTML 게임필 프로토타입 (`prototype/mini-golf-prototype.html`) — 탄도·클럽 밸런스·9홀 흐름 헤드리스 QA 통과. 물리 상수는 GolfCore로 이식 예정
 
 ## 다음 단계 (재개 지점)
 

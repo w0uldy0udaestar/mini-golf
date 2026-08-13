@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mini-golf 프로토타입</title>
+<style>
+  /* ── 기본 ─────────────────────────────────────── */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    background: linear-gradient(165deg, #24473a 0%, #16332a 45%, #0c1f19 100%);
+    color: #eaf2ee;
+    user-select: none;
+  }
+
+  /* ── 가짜 macOS 데스크탑 (오버레이 아래 깔리는 배경 시뮬레이션) ── */
+  #desktop { position: fixed; inset: 0; z-index: 0; }
+
+  .menubar {
+    position: absolute; top: 0; left: 0; right: 0; height: 26px;
+    display: flex; align-items: center; gap: 18px; padding: 0 14px;
+    background: rgba(20, 34, 28, 0.55); backdrop-filter: blur(18px);
+    font-size: 12.5px; color: rgba(234, 242, 238, 0.85);
+  }
+  .menubar .apple { font-size: 14px; }
+  .menubar .appname { font-weight: 700; }
+  .menubar .spacer { flex: 1; }
+
+  .fakewin {
+    position: absolute; border-radius: 10px; overflow: hidden;
+    background: rgba(28, 38, 34, 0.72); backdrop-filter: blur(14px);
+    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .fakewin .titlebar {
+    height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 11px;
+    background: rgba(255, 255, 255, 0.05); font-size: 12px; color: rgba(234,242,238,0.6);
+  }
+  .fakewin .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .fakewin .body { padding: 12px 14px; font-size: 12.5px; line-height: 1.9; color: rgba(234,242,238,0.55); }
+  .fakewin .body .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+  #win-notes { top: 70px; left: 6vw; width: 300px; height: 220px; }
+  #win-term  { top: 120px; right: 8vw; width: 380px; height: 190px; }
+
+  .dock {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center; padding: 9px 14px;
+    background: rgba(30, 44, 38, 0.5); backdrop-filter: blur(20px);
+    border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+  .dock .icon { width: 46px; height: 46px; border-radius: 12px; }
+  .dock .sep { width: 1px; height: 42px; background: rgba(255,255,255,0.15); margin: 0 3px; }
+
+  /* ── 게임 오버레이 ────────────────────────────── */
+  #game { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+  /* ── HUD ─────────────────────────────────────── */
+  #hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+  .chip {
+    position: absolute; background: rgba(12, 22, 18, 0.78); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
+    padding: 9px 14px; font-size: 13px; line-height: 1.5;
+  }
+  #scoreboard { top: 38px; right: 16px; text-align: right; }
+  #scoreboard .big { font-size: 15px; font-weight: 700; }
+  #scoreboard .sub { color: rgba(234, 242, 238, 0.65); font-size: 12px; }
+
+  #clubcard { left: 16px; top: 84px; min-width: 250px; }
+  #clubcard .row { display: flex; align-items: baseline; gap: 10px; }
+  #clubcard .arrow { color: rgba(234, 242, 238, 0.4); font-size: 12px; }
+  #clubcard .name { font-size: 17px; font-weight: 800; letter-spacing: 0.3px; }
+  #clubcard .spec { margin-top: 3px; font-size: 11.5px; color: rgba(234, 242, 238, 0.6); }
+
+  #hints { right: 16px; top: 104px; font-size: 11.5px; color: rgba(234, 242, 238, 0.72); text-align: right; }
+  #hints b { color: #eaf2ee; font-weight: 700; }
+
+  #protobadge {
+    top: 38px; left: 16px; font-size: 11px; color: rgba(234, 242, 238, 0.55);
+    border-style: dashed;
+  }
+
+  #toast {
+    position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+    background: rgba(12, 22, 18, 0.88); backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 18px;
+    padding: 22px 44px; text-align: center; opacity: 0; transition: all 0.25s ease;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #toast .title { font-size: 30px; font-weight: 800; }
+  #toast .sub { margin-top: 6px; font-size: 13px; color: rgba(234, 242, 238, 0.7); }
+
+  #scorecard {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(12, 22, 18, 0.92); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 18px;
+    padding: 26px 34px; display: none; text-align: center;
+  }
+  #scorecard.show { display: block; }
+  #scorecard h2 { font-size: 20px; margin-bottom: 14px; }
+  #scorecard table { border-collapse: collapse; font-size: 13px; }
+  #scorecard th, #scorecard td { padding: 5px 10px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  #scorecard th { color: rgba(234, 242, 238, 0.55); font-weight: 600; }
+  #scorecard .total { margin-top: 14px; font-size: 16px; font-weight: 800; }
+  #scorecard .restart { margin-top: 10px; font-size: 12px; color: rgba(234, 242, 238, 0.6); }
+</style>
+</head>
+<body>
+
+<!-- 가짜 데스크탑: 실제 앱에서는 진짜 데스크탑이 이 자리에 보인다 -->
+<div id="desktop">
+  <div class="menubar">
+    <span class="apple"></span><span class="appname">MiniGolf</span>
+    <span>파일</span><span>편집</span><span>보기</span><span>도움말</span>
+    <span class="spacer"></span><span>⌁</span><span>ᯤ</span><span id="clock">수 4:26</span>
+  </div>
+  <div class="fakewin" id="win-notes">
+    <div class="titlebar">
+      <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+      메모 — 오늘 할 일
+    </div>
+    <div class="body">□ 데스크탑에서 골프 연습<br>□ 드라이버 비거리 220m 넘기기<br>□ 백스핀으로 홀 앞에 세우기<br>□ 이글 한 번만…</div>
+  </div>
+  <div class="fakewin" id="win-term">
+    <div class="titlebar">
+      <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+      터미널 — zsh
+    </div>
+    <div class="body mono">$ swift build<br>Building for debugging...<br>Build complete! (1.2s)<br>$ █</div>
+  </div>
+  <div class="dock">
+    <div class="icon" style="background:linear-gradient(145deg,#5da8e8,#2f6fb2)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#f0b35c,#c97e2a)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#79c988,#3c8f52)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#e88a9c,#b34d63)"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#9aa7b5,#5c6773)"></div>
+    <div class="sep"></div>
+    <div class="icon" style="background:linear-gradient(145deg,#3d4a44,#242e29)"></div>
+  </div>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="chip" id="protobadge">HTML 프로토타입 · Swift 구현 전 게임필 검증용</div>
+  <div class="chip" id="scoreboard"></div>
+  <div class="chip" id="clubcard"></div>
+  <div class="chip" id="hints">
+    <b>←→</b> 클럽 &nbsp; <b>↑↓</b> 스윙 높이 &nbsp; <b>Space</b> 스윙 &nbsp; <b>R</b> 새 라운드
+  </div>
+  <div id="toast"><div class="title"></div><div class="sub"></div></div>
+  <div id="scorecard"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ══════════════ 클럽 데이터 (GolfCore.ClubTable로 이식 예정) ══════════════
+   loft: 발사각(도), spin: 백스핀(rpm), power: 최대 볼스피드(m/s)          */
+const CLUBS = [
+  { id: 'DR', name: '드라이버',   loft: 10.5, spin: 2700,  power: 75 },
+  { id: '3W', name: '3번 우드',   loft: 15,   spin: 3600,  power: 70 },
+  { id: '5W', name: '5번 우드',   loft: 18,   spin: 4300,  power: 66 },
+  { id: '3I', name: '3번 아이언', loft: 21,   spin: 4600,  power: 62 },
+  { id: '4I', name: '4번 아이언', loft: 24,   spin: 5000,  power: 59 },
+  { id: '5I', name: '5번 아이언', loft: 27,   spin: 5400,  power: 56 },
+  { id: '6I', name: '6번 아이언', loft: 30,   spin: 6100,  power: 53 },
+  { id: '7I', name: '7번 아이언', loft: 34,   spin: 7000,  power: 50 },
+  { id: '8I', name: '8번 아이언', loft: 38,   spin: 7900,  power: 47 },
+  { id: '9I', name: '9번 아이언', loft: 42,   spin: 8500,  power: 44 },
+  { id: 'PW', name: '피칭 웨지',  loft: 46,   spin: 9300,  power: 41 },
+  { id: 'SW', name: '샌드 웨지',  loft: 56,   spin: 10500, power: 35 },
+  { id: 'PT', name: '퍼터',       loft: 0,    spin: 0,     power: 12, putter: true },
+];
+
+/* ══════════════ 물리 상수 (GolfCore.BallisticsEngine으로 이식 예정) ══════ */
+const PHYS = {
+  g: 9.81,
+  q: 0.01869,            // 0.5·ρ·A/m  (ρ=1.2, A=0.00143㎡, m=0.0459kg)
+  cd: 0.25,              // 항력 계수
+  ballRadius: 0.0213,    // m
+  clBase: 0.04, clSlope: 1.8, clMax: 0.35, spinRatioMax: 0.30, // 양력 계수 모델
+  spinDecayFlight: 0.04, // 비행 중 스핀 감쇠 (비율/초)
+  restitution: 0.42,     // 지면 반발
+  bounceVxKeep: 0.72,    // 바운스 시 전진 속도 보존율
+  bounceSpinKick: 9.0,   // 백스핀 체크 최대 역방향 킥 (m/s @ 12000rpm)
+  bounceSpinKeep: 0.55,  // 바운스 후 스핀 보존율
+  bounceToRoll: 1.0,     // 이 반발 속도(m/s) 이하이면 롤 전환
+  rollFriction: 1.8,     // 지면 롤 감속 (m/s²)
+  stopSpeed: 0.15,
+  minPowerRatio: 0.25,   // 스윙 높이 0%에서의 파워 바닥값
+  cupHalfWidth: 0.7,     // 컵 캡처 반경 (m, 플레이 편의로 실제보다 큼)
+  captureRoll: 3.0,      // 롤 상태 캡처 최대 속도
+  captureFly: 10.0,      // 직접 낙하 캡처 최대 속도
+  wallRestitution: 0.5,
+  worldWidth: 300,       // 화면 가로 = 300m
+  maxStrokes: 10,
+  timeScale: 2.5,        // 재생 배속 (실측 비행 10~14s → 체감 4~6s)
+};
+
+const TEE_X = 12;
+const DT = 1 / 240; // 고정 물리 스텝
+
+/* ══════════════ 시드 랜덤 ══════════════ */
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function parFor(dist) {
+  if (dist < 20) return 2;
+  if (dist < 150) return 3;
+  if (dist < 230) return 4;
+  return 5;
+}
+
+function makeCourse(seed) {
+  const rand = mulberry32(seed);
+  const holes = [];
+  for (let i = 0; i < 9; i++) {
+    const dist = 18 + rand() * 247; // 18m ~ 265m
+    const holeX = Math.min(TEE_X + dist, PHYS.worldWidth - 12);
+    holes.push({ holeX, dist: holeX - TEE_X, par: parFor(holeX - TEE_X) });
+  }
+  return holes;
+}
+
+function scoreName(strokes, par) {
+  if (strokes === 1) return '홀인원!';
+  const d = strokes - par;
+  if (d <= -3) return '알바트로스';
+  if (d === -2) return '이글';
+  if (d === -1) return '버디';
+  if (d === 0) return '파';
+  if (d === 1) return '보기';
+  if (d === 2) return '더블 보기';
+  return `+${d}`;
+}
+
+/* ══════════════ 게임 상태 ══════════════ */
+const game = {
+  mode: 'aim',            // aim | motion | holed | end
+  course: [], holeIdx: 0, results: [],
+  strokes: 0, clubIdx: 0, heightPct: 0.6,
+  ball: { x: TEE_X, y: 0, vx: 0, vy: 0, spin: 0, spinSign: 1, phase: 'rest' },
+  trail: [], holedAnim: 0,
+};
+
+function newRound(seed) {
+  game.course = makeCourse(seed ?? (Date.now() & 0x7fffffff));
+  game.holeIdx = 0; game.results = [];
+  startHole();
+  hideScorecard();
+}
+
+function startHole() {
+  game.strokes = 0;
+  game.ball = { x: TEE_X, y: 0, vx: 0, vy: 0, spin: 0, spinSign: 1, phase: 'rest' };
+  game.trail = [];
+  game.mode = 'aim';
+  updateHud();
+}
+
+function hole() { return game.course[game.holeIdx]; }
+
+/* ══════════════ 샷 ══════════════ */
+function swing() {
+  const club = CLUBS[game.clubIdx];
+  const b = game.ball;
+  const dir = hole().holeX >= b.x ? 1 : -1;
+  const v0 = club.power * (PHYS.minPowerRatio + (1 - PHYS.minPowerRatio) * game.heightPct);
+  const loftRad = (club.loft * Math.PI) / 180;
+  b.vx = dir * v0 * Math.cos(loftRad);
+  b.vy = v0 * Math.sin(loftRad);
+  b.spin = club.spin * (0.6 + 0.4 * game.heightPct);
+  b.spinSign = dir;
+  b.phase = club.putter ? 'roll' : 'fly';
+  game.strokes++;
+  game.trail = [];
+  game.mode = 'motion';
+  updateHud();
+}
+
+/* ══════════════ 물리 (결정론적 스텝 — 단위 테스트 대상) ══════════════ */
+function physicsStep(b, dt) {
+  if (b.phase === 'fly') {
+    const v = Math.hypot(b.vx, b.vy) || 1e-9;
+    const omega = (b.spin * 2 * Math.PI) / 60;          // rad/s
+    const spinRatio = Math.min((PHYS.ballRadius * omega) / v, PHYS.spinRatioMax);
+    const cl = Math.min(PHYS.clMax, PHYS.clBase + PHYS.clSlope * spinRatio);
+    // 항력(속도 반대) + 마그누스 양력(속도 수직, 백스핀=위) + 중력
+    const ax = -PHYS.q * PHYS.cd * v * b.vx + PHYS.q * cl * v * -b.vy * b.spinSign;
+    const ay = -PHYS.g - PHYS.q * PHYS.cd * v * b.vy + PHYS.q * cl * v * b.vx * b.spinSign;
+    b.vx += ax * dt; b.vy += ay * dt;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.spin *= 1 - PHYS.spinDecayFlight * dt;
+
+    if (b.y <= 0 && b.vy < 0) {
+      b.y = 0;
+      const reboundVy = -b.vy * PHYS.restitution;
+      const kick = (Math.min(b.spin, 12000) / 12000) * PHYS.bounceSpinKick * b.spinSign;
+      b.vx = b.vx * PHYS.bounceVxKeep - kick;
+      b.spin *= PHYS.bounceSpinKeep;
+      if (reboundVy > PHYS.bounceToRoll) {
+        b.vy = reboundVy;
+      } else {
+        b.vy = 0; b.phase = 'roll';
+      }
+    }
+  } else if (b.phase === 'roll') {
+    b.x += b.vx * dt;
+    const dv = PHYS.rollFriction * dt;
+    if (Math.abs(b.vx) <= dv) b.vx = 0; else b.vx -= Math.sign(b.vx) * dv;
+    if (Math.abs(b.vx) < PHYS.stopSpeed) { b.vx = 0; b.phase = 'rest'; }
+  }
+
+  // 좌우 벽 반사
+  if (b.x < 0.5) { b.x = 0.5; b.vx = -b.vx * PHYS.wallRestitution; }
+  if (b.x > PHYS.worldWidth - 0.5) { b.x = PHYS.worldWidth - 0.5; b.vx = -b.vx * PHYS.wallRestitution; }
+
+  // 컵 캡처
+  const h = hole();
+  if (Math.abs(b.x - h.holeX) < PHYS.cupHalfWidth) {
+    const speed = Math.hypot(b.vx, b.vy);
+    if (b.phase === 'roll' && Math.abs(b.vx) <= PHYS.captureRoll) return 'holed';
+    if (b.phase === 'fly' && b.y < 0.3 && b.vy < 0 && speed <= PHYS.captureFly) return 'holed';
+  }
+  return b.phase;
+}
+
+function onHoled() {
+  game.mode = 'holed';
+  game.holedAnim = 0;
+  const h = hole();
+  game.results.push({ par: h.par, strokes: game.strokes });
+  const name = scoreName(game.strokes, h.par);
+  showToast(name, `${game.strokes}타 · 파 ${h.par} · ${Math.round(h.dist)}m`);
+  setTimeout(() => {
+    hideToast();
+    if (game.holeIdx < 8) { game.holeIdx++; startHole(); }
+    else { game.mode = 'end'; showScorecard(); }
+  }, 1700);
+}
+
+function onGiveUp() {
+  const h = hole();
+  game.results.push({ par: h.par, strokes: PHYS.maxStrokes, gaveUp: true });
+  showToast('기권', `${PHYS.maxStrokes}타 초과`);
+  setTimeout(() => {
+    hideToast();
+    if (game.holeIdx < 8) { game.holeIdx++; startHole(); }
+    else { game.mode = 'end'; showScorecard(); }
+  }, 1400);
+}
+
+/* ══════════════ 입력 ══════════════ */
+const held = new Set();
+window.addEventListener('keydown', (e) => {
+  const k = e.code;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(k)) e.preventDefault();
+
+  if (k === 'KeyR') { newRound(); return; }
+  if (game.mode !== 'aim') return;
+
+  if (k === 'ArrowUp' || k === 'ArrowDown') held.add(k);
+  if (k === 'ArrowLeft')  { game.clubIdx = Math.max(0, game.clubIdx - 1); updateHud(); }
+  if (k === 'ArrowRight') { game.clubIdx = Math.min(CLUBS.length - 1, game.clubIdx + 1); updateHud(); }
+  if (k === 'Space') swing();
+});
+window.addEventListener('keyup', (e) => held.delete(e.code));
+window.addEventListener('blur', () => held.clear()); // 포커스 잃으면 입력 해제 (실제 앱: 자동 일시정지)
+
+/* ══════════════ HUD ══════════════ */
+const $ = (id) => document.getElementById(id);
+function updateHud() {
+  const h = hole();
+  const total = game.results.reduce((s, r) => s + (r.strokes - r.par), 0);
+  const totalStr = total > 0 ? `+${total}` : total === 0 ? 'E' : `${total}`;
+  const remain = Math.abs(h.holeX - game.ball.x);
+  $('scoreboard').innerHTML =
+    `<div class="big">${game.holeIdx + 1}번 홀 · 파 ${h.par}</div>` +
+    `<div class="sub">타수 ${game.strokes} · 합계 ${totalStr} · 남은 거리 ${Math.round(remain)}m</div>`;
+  const c = CLUBS[game.clubIdx];
+  $('clubcard').innerHTML =
+    `<div class="row"><span class="arrow">◀</span><span class="name">${c.name} (${c.id})</span><span class="arrow">▶</span></div>` +
+    `<div class="spec">로프트 ${c.loft}° · 백스핀 ${c.spin.toLocaleString()}rpm · 파워 ${c.power}</div>`;
+}
+function showToast(title, sub) { $('toast').querySelector('.title').textContent = title; $('toast').querySelector('.sub').textContent = sub; $('toast').classList.add('show'); }
+function hideToast() { $('toast').classList.remove('show'); }
+function showScorecard() {
+  const rows = game.results.map((r, i) =>
+    `<tr><td>${i + 1}</td><td>${r.par}</td><td>${r.gaveUp ? '기권' : r.strokes}</td><td>${scoreName(r.strokes, r.par)}</td></tr>`).join('');
+  const total = game.results.reduce((s, r) => s + (r.strokes - r.par), 0);
+  const totalStr = total > 0 ? `+${total}` : total === 0 ? '이븐 파' : `${total}`;
+  $('scorecard').innerHTML =
+    `<h2>⛳️ 라운드 종료</h2><table><tr><th>홀</th><th>파</th><th>타수</th><th>결과</th></tr>${rows}</table>` +
+    `<div class="total">합계 ${totalStr}</div><div class="restart">R 키로 새 라운드</div>`;
+  $('scorecard').classList.add('show');
+}
+function hideScorecard() { $('scorecard').classList.remove('show'); }
+
+/* ══════════════ 렌더링 ══════════════ */
+const canvas = $('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, pxPerM = 1, groundY = 0;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pxPerM = W / PHYS.worldWidth;
+  groundY = H - 96;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const mx = (m) => m * pxPerM;            // world m → px (x)
+const my = (m) => groundY - m * pxPerM;  // world m → px (y, 높이)
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const h = hole();
+  const b = game.ball;
+  const cupPx = mx(h.holeX);
+  const cupHalf = Math.max(mx(PHYS.cupHalfWidth), 7);
+
+  // 지면선 (컵 부분은 끊김)
+  ctx.strokeStyle = 'rgba(234, 242, 238, 0.85)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY); ctx.lineTo(cupPx - cupHalf, groundY);
+  ctx.moveTo(cupPx + cupHalf, groundY); ctx.lineTo(W, groundY);
+  ctx.stroke();
+
+  // 컵
+  ctx.fillStyle = 'rgba(8, 14, 11, 0.9)';
+  ctx.fillRect(cupPx - cupHalf, groundY, cupHalf * 2, 13);
+  ctx.strokeStyle = 'rgba(234, 242, 238, 0.85)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cupPx - cupHalf, groundY, cupHalf * 2, 13);
+
+  // 깃발
+  ctx.strokeStyle = 'rgba(234, 242, 238, 0.9)';
+  ctx.beginPath(); ctx.moveTo(cupPx, groundY); ctx.lineTo(cupPx, groundY - 58); ctx.stroke();
+  ctx.fillStyle = '#e8604c';
+  ctx.beginPath();
+  ctx.moveTo(cupPx, groundY - 58); ctx.lineTo(cupPx + 26, groundY - 50); ctx.lineTo(cupPx, groundY - 42);
+  ctx.closePath(); ctx.fill();
+
+  // 티 마커
+  ctx.fillStyle = 'rgba(234, 242, 238, 0.45)';
+  ctx.fillRect(mx(TEE_X) - 1.5, groundY - 7, 3, 7);
+
+  // 궤적 트레일
+  if (game.trail.length > 1) {
+    ctx.lineWidth = 1.5;
+    for (let i = 1; i < game.trail.length; i++) {
+      const p0 = game.trail[i - 1], p1 = game.trail[i];
+      const a = Math.max(0, 1 - p1.age / 2.2) * 0.5;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${a})`;
+      ctx.beginPath(); ctx.moveTo(mx(p0.x), my(p0.y)); ctx.lineTo(mx(p1.x), my(p1.y)); ctx.stroke();
+    }
+  }
+
+  // 공 그림자 (높이 단서)
+  if (b.y > 0.2) {
+    const s = Math.max(2, 6 - b.y * 0.08);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.beginPath(); ctx.ellipse(mx(b.x), groundY - 1, s * 1.6, s * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 공 (홀인 시 컵으로 낙하 연출)
+  let ballY = my(b.y);
+  if (game.mode === 'holed') { game.holedAnim = Math.min(1, game.holedAnim + 0.06); ballY = groundY + 8 * game.holedAnim; }
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(mx(b.x), ballY - 6, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.lineWidth = 1; ctx.stroke();
+
+  // 조준 UI (스윙 높이 게이지 + 발사각 가이드)
+  if (game.mode === 'aim') {
+    const club = CLUBS[game.clubIdx];
+    const dir = h.holeX >= b.x ? 1 : -1;
+    const bx = mx(b.x), by = ballY - 6;
+
+    // 발사각 가이드 (길이 = 파워)
+    const loftRad = (club.loft * Math.PI) / 180;
+    const len = 30 + 70 * game.heightPct;
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(bx, by);
+    ctx.lineTo(bx + dir * Math.cos(loftRad) * len, by - Math.sin(loftRad) * len);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 스윙 높이 게이지 (공 뒤쪽 수직 바)
+    const gx = bx - dir * 26, gh = 110, gy0 = by - 8;
+    ctx.fillStyle = 'rgba(12, 22, 18, 0.65)';
+    ctx.beginPath(); ctx.roundRect(gx - 6, gy0 - gh, 12, gh, 6); ctx.fill();
+    const fill = gh * game.heightPct;
+    const grad = ctx.createLinearGradient(0, gy0, 0, gy0 - gh);
+    grad.addColorStop(0, '#7ac989'); grad.addColorStop(0.6, '#e8c95c'); grad.addColorStop(1, '#e8604c');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.roundRect(gx - 4, gy0 - fill, 8, Math.max(fill, 4), 4); ctx.fill();
+    ctx.fillStyle = '#eaf2ee';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(game.heightPct * 100)}%`, gx, gy0 - gh - 8);
+  }
+}
+
+/* ══════════════ 메인 루프 (고정 물리 스텝) ══════════════ */
+let last = performance.now(), acc = 0;
+function frame(now) {
+  const dtReal = Math.min((now - last) / 1000, 0.1);
+  last = now;
+
+  // 스윙 높이 홀드 조절
+  if (game.mode === 'aim') {
+    if (held.has('ArrowUp'))   { game.heightPct = Math.min(1, game.heightPct + 0.85 * dtReal); }
+    if (held.has('ArrowDown')) { game.heightPct = Math.max(0, game.heightPct - 0.85 * dtReal); }
+  }
+
+  if (game.mode === 'motion') {
+    acc += dtReal * PHYS.timeScale;
+    let result = game.ball.phase;
+    while (acc >= DT) {
+      acc -= DT;
+      result = physicsStep(game.ball, DT);
+      if (result === 'holed') break;
+    }
+    game.trail.push({ x: game.ball.x, y: game.ball.y, age: 0 });
+    if (game.trail.length > 400) game.trail.shift();
+
+    if (result === 'holed') onHoled();
+    else if (game.ball.phase === 'rest') {
+      if (game.strokes >= PHYS.maxStrokes) onGiveUp();
+      else { game.mode = 'aim'; }
+    }
+    updateHud();
+  }
+  game.trail.forEach((p) => (p.age += dtReal));
+
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* 디버그/QA 훅 */
+window.__proto = { game, CLUBS, PHYS, swing, physicsStep, newRound };
+
+newRound();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
