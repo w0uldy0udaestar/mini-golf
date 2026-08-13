@@ -51,6 +51,11 @@ Render  (SpriteKit)
 
 ## 마일스톤
 
+### 사전 단계 · HTML 게임필 프로토타입 ✅ (2026-08-13 사용자 요청으로 추가)
+- [x] `prototype/mini-golf-prototype.html` — 탄도 물리·클럽 13종 밸런스·9홀 스코어링을 브라우저에서 선검증
+- 확정된 튜닝: 재생 배속 `timeScale 2.5`, 클럽 비거리 DR 269m(캐리) ~ SW 69m, SW 롤아웃 ~1m(백스핀 체크 동작)
+- 물리 상수·클럽 테이블은 GolfCore로 그대로 이식
+
 ### M0 · 리스크 스파이크 — [게이트: 결과 보고 후 진행]
 - [ ] 투명 NSWindow/NSPanel + SpriteKit `.clear` 씬에 도형 렌더 확인 (`skView.backgroundColor` 설정 금지 함정 검증)
 - [ ] 창 전체 클릭 통과 + 라운드 중 키보드 이벤트 수신 — 아래 앱으로 키 유출이 없는지 확인
