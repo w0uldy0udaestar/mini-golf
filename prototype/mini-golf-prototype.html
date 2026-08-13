@@ -206,7 +206,9 @@ const PHYS = {
   minPowerRatio: 0.25,   // 백스윙 0%에서의 파워 바닥값
   cupHalfWidth: 0.7,     // 컵 캡처 반경 (m, 플레이 편의로 실제보다 큼)
   captureRoll: 3.0,      // 롤 상태 캡처 최대 속도
+  lipOutSpeed: 5.5,      // 이 속도까지는 립아웃(턱 맞고 근처 정지), 초과 시 그냥 통과
   captureFly: 10.0,      // 직접 낙하 캡처 최대 속도
+  putterMinRatio: 0.08,  // 퍼터 전용 파워 바닥값 (탭인 가능)
   wallRestitution: 0.5,
   maxStrokes: 12,
   timeScale: 2.5,        // 재생 배속
@@ -334,7 +336,11 @@ function launchBall() {
   const dir = game.stickDir;
   // 라이 페널티: 첫 타는 티샷(클린), 이후는 공이 놓인 지면 기준
   const lie = game.strokes === 0 ? SURFACES.tee : SURFACES[surfaceAt(hole(), b.x)];
-  const v0 = club.power * lie.power * (PHYS.minPowerRatio + (1 - PHYS.minPowerRatio) * game.heightPct);
+  // 퍼터 정밀 입력: 저파워 구간 미세 조절(제곱 곡선) + 낮은 바닥값(탭인)
+  const hEff = club.putter ? game.heightPct * game.heightPct : game.heightPct;
+  const minR = club.putter ? PHYS.putterMinRatio : PHYS.minPowerRatio;
+  const v0 = club.power * lie.power * (minR + (1 - minR) * hEff);
+  b.lipped = false;
   const loftRad = (club.loft * Math.PI) / 180;
   b.vx = dir * v0 * Math.cos(loftRad);
   b.vy = v0 * Math.sin(loftRad);
@@ -380,18 +386,38 @@ function physicsStep(b, dt) {
     const surf = SURFACES[surfaceAt(h, b.x)];
     const dv = surf.roll * dt;
     if (Math.abs(b.vx) <= dv) b.vx = 0; else b.vx -= Math.sign(b.vx) * dv;
-    if (Math.abs(b.vx) < PHYS.stopSpeed) { b.vx = 0; b.phase = 'rest'; }
+    if (Math.abs(b.vx) < PHYS.stopSpeed) {
+      b.vx = 0; b.phase = 'rest';
+      // 립아웃 직후 컵 위에서 멈추면 컵 가장자리에 걸친 것으로 처리
+      if (b.lipped && Math.abs(b.x - h.holeX) < PHYS.cupHalfWidth) {
+        b.x = h.holeX + (b.x >= h.holeX ? 1 : -1) * (PHYS.cupHalfWidth + 0.05);
+      }
+    }
   }
 
   // 좌우 벽 반사
   if (b.x < 0.5) { b.x = 0.5; b.vx = -b.vx * PHYS.wallRestitution; }
   if (b.x > h.worldW - 0.5) { b.x = h.worldW - 0.5; b.vx = -b.vx * PHYS.wallRestitution; }
 
-  // 컵 캡처
-  if (Math.abs(b.x - h.holeX) < PHYS.cupHalfWidth) {
+  // 컵 캡처 / 립아웃 — 임계값 절벽을 연속 구간으로:
+  // 롤 ≤3.0 m/s 홀인 · 3.0~5.5 립아웃(턱에 맞고 튀어 과속 비례로 근처 정지) · >5.5 통과
+  if (b.lipped) {
+    if (Math.abs(b.x - h.holeX) > PHYS.cupHalfWidth + 0.2) b.lipped = false;
+  } else if (Math.abs(b.x - h.holeX) < PHYS.cupHalfWidth) {
     const speed = Math.hypot(b.vx, b.vy);
-    if (b.phase === 'roll' && Math.abs(b.vx) <= PHYS.captureRoll) return 'holed';
-    if (b.phase === 'fly' && b.y < 0.3 && b.vy < 0 && speed <= PHYS.captureFly) return 'holed';
+    if (b.phase === 'roll') {
+      if (Math.abs(b.vx) <= PHYS.captureRoll) return 'holed';
+      if (Math.abs(b.vx) <= PHYS.lipOutSpeed) {
+        b.lipped = true;
+        const over = (Math.abs(b.vx) - PHYS.captureRoll) / (PHYS.lipOutSpeed - PHYS.captureRoll);
+        b.phase = 'fly';
+        b.vy = 0.8 + over * 0.7;                       // 톡 튀어오르는 연출
+        b.vx = Math.sign(b.vx) * (0.5 + over * 1.2);   // 컵 너머 0.3~1.5m에 멈추는 수준
+        b.spin = 0;
+      }
+    } else if (b.phase === 'fly' && b.y < 0.3 && b.vy < 0 && speed <= PHYS.captureFly) {
+      return 'holed';
+    }
   }
   return b.phase;
 }
@@ -688,10 +714,11 @@ function frame(now) {
   const dtReal = Math.min((now - last) / 1000, 0.1);
   last = now;
 
-  // 백스윙 높이 홀드 조절
+  // 백스윙 높이 홀드 조절 (퍼터는 절반 속도로 정밀 조절)
   if (game.mode === 'aim') {
-    if (held.has('ArrowUp'))   { game.heightPct = Math.min(1, game.heightPct + 0.85 * dtReal); }
-    if (held.has('ArrowDown')) { game.heightPct = Math.max(0, game.heightPct - 0.85 * dtReal); }
+    const rate = CLUBS[game.clubIdx].putter ? 0.4 : 0.85;
+    if (held.has('ArrowUp'))   { game.heightPct = Math.min(1, game.heightPct + rate * dtReal); }
+    if (held.has('ArrowDown')) { game.heightPct = Math.max(0, game.heightPct - rate * dtReal); }
   }
 
   // 스윙 애니메이션: 임팩트 순간에 공 발사, 팔로스루는 발사 후에도 이어짐
