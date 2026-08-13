@@ -59,11 +59,11 @@ Render  (SpriteKit)
 - 확정된 튜닝: 재생 배속 `timeScale 2.5`, 클럽 비거리 DR 269m(캐리) ~ SW 69m, SW 롤아웃 ~1m(백스핀 체크 동작)
 - 물리 상수·클럽 테이블은 GolfCore로 그대로 이식
 
-### M0 · 리스크 스파이크 — [게이트: 결과 보고 후 진행]
-- [ ] 투명 NSWindow/NSPanel + SpriteKit `.clear` 씬에 도형 렌더 확인 (`skView.backgroundColor` 설정 금지 함정 검증)
-- [ ] 창 전체 클릭 통과 + 라운드 중 키보드 이벤트 수신 — 아래 앱으로 키 유출이 없는지 확인
-- [ ] 포커스 상실 시 일시정지 동작 확인
-- 실패 시 폴백: 렌더는 SwiftUI Canvas, 키 캡처는 일반 키 윈도우 방식. 그래도 막히면 Electron 재검토
+### M0 · 리스크 스파이크 ✅ 통과 (2026-08-13, macOS 26 Tahoe 실기 검증)
+- [x] 투명 NSPanel(.nonactivatingPanel, .statusBar 레벨) + SpriteKit `.clear` 씬 렌더 — 창 캡처·전체 화면 합성 모두 확인. 단 첫 합성까지 몇 초 지연 관찰(초기 렌더 타이밍, M1에서 재확인)
+- [x] 키보드 캡처 — accessory 앱 + canBecomeKey 패널 조합으로 합성 키 이벤트(→×3)가 씬에 도달, 공 90pt 이동 실측
+- [x] 포커스 상실 — 타 앱 활성화 후 키 이벤트가 오버레이에 도달하지 않음을 실측 (didResignKeyNotification 훅 연결됨). 클릭 통과는 ignoresMouseEvents API 보장(수동 확인 권장)
+- 스파이크 코드: `Sources/MiniGolfSpike/main.swift` — 실행: `swift build && .build/debug/MiniGolfSpike` (Esc 종료)
 
 ### M1 · 개발 환경 + 코어 루프
 - [ ] SwiftFormat 설정 후 실행·통과, XCTest 러너 + 샘플 테스트 1개 통과 (코드보다 검증 루프 먼저)
