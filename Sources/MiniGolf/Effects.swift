@@ -8,7 +8,7 @@ enum FX {
         let color = switch surface {
         case .bunker: Palette.bunkerSand.withAlphaComponent(0.7)
         case .rough: Palette.roughGray.withAlphaComponent(0.5)
-        default: NSColor(white: 0.95, alpha: 0.55)
+        default: Palette.hairline.withAlphaComponent(0.55) // 지형에서 튀는 먼지 = 지형선 색
         }
         let count = 2 + Int(intensity * 3)
         for _ in 0 ..< count {
