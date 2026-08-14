@@ -270,18 +270,18 @@ final class StickmanNode: SKNode {
         let now = headParams(club: club, loft: visualLoft, tip: tip, phi: r.clubPhi, dir: dir)
         let prev = headParams(club: prevClub, loft: prevClub.loft, tip: tip, phi: r.clubPhi, dir: dir)
         let m = smoothstep(min(1, max(0, headMorph)))
-        let head = CGMutablePath()
-        head.move(to: mix(prev.a, now.a, m))
-        head.addLine(to: mix(prev.b, now.b, m))
+        let headPath = CGMutablePath()
+        headPath.move(to: mix(prev.a, now.a, m))
+        headPath.addLine(to: mix(prev.b, now.b, m))
         // 퍼터 얼라인먼트 점은 블렌드에 따라 자라거나 사라진다
         let dotBlend = (club.cat == .putter ? m : 0) + (prevClub.cat == .putter ? 1 - m : 0)
         if dotBlend > 0.05, let dot = club.cat == .putter ? now.dot : prev.dot {
             let rr = 0.9 * dotBlend
-            head.addEllipse(in: CGRect(x: dot.x - rr, y: dot.y - rr, width: rr * 2, height: rr * 2))
+            headPath.addEllipse(in: CGRect(x: dot.x - rr, y: dot.y - rr, width: rr * 2, height: rr * 2))
         }
-        clubHeadShape.path = head
+        clubHeadShape.path = headPath
         clubHeadShape.lineWidth = mix(prev.lw, now.lw, m)
-        clubHeadRim.path = head
+        clubHeadRim.path = headPath
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
 
