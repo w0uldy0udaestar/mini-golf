@@ -642,16 +642,20 @@ final class GameScene: SKScene {
                 w.duty = 0.68 - 0.08 * min(1, w.vPx / 30)
                 let dNow = abs(stickX - w.fromX) * Double(pxPerM)
                 if !w.gaitReady {
-                    w.gaitReady = true
-                    // 첫 접지점 = 지금 서 있는 발 위치 그대로 — 걷기 진입 순간 발이 점프하지 않는다
-                    w.feet[0].plant = dNow + Double(renderRig.foot1.x)
-                    w.feet[1].plant = dNow + Double(renderRig.foot2.x)
-                    // 위상을 duty에서 시작 = 뒷발이 첫 프레임에 리프트오프 (보행 개시·pose matching)
-                    // gaitPhase=0이면 뒷발이 위상 0.68까지 안 떨어져 다리가 늘어난다 (리서치 A2)
-                    w.gaitPhase = w.duty
+                    if w.vPx > 4 { // 몸이 실제로 움직이기 시작한 뒤에야 게이트 시동 (제자리 스텝 방지)
+                        w.gaitReady = true
+                        // 첫 접지점 = 지금 서 있는 발 위치 그대로 — 걷기 진입 순간 발이 점프하지 않는다
+                        w.feet[0].plant = dNow + Double(renderRig.foot1.x)
+                        w.feet[1].plant = dNow + Double(renderRig.foot2.x)
+                        // 위상을 duty에서 시작 = 뒷발이 첫 프레임에 리프트오프 (보행 개시·pose matching)
+                        // gaitPhase=0이면 뒷발이 위상 0.68까지 안 떨어져 다리가 늘어난다 (리서치 A2)
+                        w.gaitPhase = w.duty
+                    }
                 }
-                w.gaitPhase += w.vPx * dt / (2 * w.stepL)
-                for i in 0 ..< 2 {
+                if w.gaitReady {
+                    w.gaitPhase += w.vPx * dt / (2 * w.stepL)
+                }
+                for i in 0 ..< 2 where w.gaitReady {
                     let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
                     if !w.feet[i].inSwing {
                         // 과신장 강제 리프트오프 (Holden unlock) — 다리가 늘어나기 전에 발을 뗀다
@@ -769,6 +773,7 @@ final class GameScene: SKScene {
         let rigRate: Double
         var rigClubRate: Double? = nil // 팔로스루 오버랩 — 클럽만 느린 추적
         var branch = 4 // 타깃 브랜치 id: 0 스윙 · 1 걷기 · 2 조준 · 3 여운 · 4 홀드
+        var gaitFeet: (CGPoint, CGPoint, CGPoint, CGPoint)? // 걷기 발·무릎 — 블렌드에서 보호
         if let anim = swingAnim {
             targetRig = RigBuilder.fromPose(
                 swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
@@ -781,7 +786,7 @@ final class GameScene: SKScene {
             if anim.t >= anim.prof.down { // 팔로스루: 클럽만 늦게 멈추는 오버랩 (리서치 P6)
                 rigClubRate = 22
             }
-        } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
+        } else if mode == .walking, let w = walkAnim, w.t >= w.relax, w.gaitReady {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
                 let up = min(1, max(0, (w.t - r.lowerBound) / 0.6))
@@ -845,8 +850,9 @@ final class GameScene: SKScene {
                 let xm = self.stickX + dx / Double(self.pxPerM)
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
+            gaitFeet = (targetRig.foot1, targetRig.foot2, targetRig.knee1, targetRig.knee2)
             // 도착 위상: 진입(relax)의 원점 블렌드와 대칭 — 마지막 0.6s 동안 걷기 원점(0)에서
-            // 어드레스 스탠스(-ballFwd)로 흘려보내 24~51px 스케이팅 제거 (리서치 B5)
+            // 어드레스 스탠스(-ballFwd)로 흘려보내 24~51px 스케이팅 제거 (상체만 — 발은 접지 유지)
             let arriveU = smootherstep(min(1, max(0, (w.t - (w.relax + w.dur - 0.6)) / 0.6)))
             if arriveU > 0 {
                 let standRig = RigBuilder.fromPose(
@@ -902,9 +908,17 @@ final class GameScene: SKScene {
                 transFrom = nil
             }
         }
+        // 걷기 중 발·무릎은 어떤 블렌드에도 섞이지 않는다 — 접지점이 섞이면 그게 곧 미끄러짐
+        if let gf = gaitFeet {
+            targetRig.foot1 = gf.0
+            targetRig.foot2 = gf.1
+            targetRig.knee1 = gf.2
+            targetRig.knee2 = gf.3
+        }
         lastTargetSnapshot = targetRig
 
-        let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
+        let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax && $0.gaitReady } ?? false) ? 60 :
+            nil
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
         // 렌더 반영 — 경사 라이: 걷기 외에는 스탠스가 지면 경사를 따라 기운다 (물리와 동일 비율)
