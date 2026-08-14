@@ -199,6 +199,25 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertEqual(event, .water)
     }
 
+    // ── 경사 라이·미스샷 ──
+
+    func testUphillLieRaisesLaunchAngle() {
+        var flat = BallState(x: 0, y: 0)
+        Ballistics.launch(&flat, club: club("7I"), heightPct: 1, lie: .fairway, dir: 1)
+        var up = BallState(x: 0, y: 0)
+        Ballistics.launch(&up, club: club("7I"), heightPct: 1, lie: .fairway, dir: 1, slope: 0.1)
+        XCTAssertGreaterThan(up.vy / up.vx, flat.vy / flat.vx, "오르막 라이는 발사각이 높아야 함")
+    }
+
+    func testMishitReducesPowerAndSpin() {
+        var clean = BallState(x: 0, y: 0)
+        Ballistics.launch(&clean, club: club("DR"), heightPct: 1, lie: .fairway, dir: 1)
+        var miss = BallState(x: 0, y: 0)
+        Ballistics.launch(&miss, club: club("DR"), heightPct: 1, lie: .fairway, dir: 1, mishit: 1)
+        XCTAssertLessThan(hypot(miss.vx, miss.vy), hypot(clean.vx, clean.vy), "미스샷은 볼스피드가 줄어야 함")
+        XCTAssertLessThan(miss.spin, clean.spin, "미스샷은 스핀이 줄어야 함")
+    }
+
     // ── 연출 이벤트 (M3 사운드·이펙트용) ──
 
     func testBounceEventOnLanding() {

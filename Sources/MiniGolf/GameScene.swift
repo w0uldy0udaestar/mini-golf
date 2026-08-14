@@ -63,6 +63,7 @@ final class GameScene: SKScene {
     private var headMorph = 1.0
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
+    private var renderSlopeTilt = 0.0 // 경사 라이 스탠스 기울기 (스무딩)
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
 
@@ -222,6 +223,13 @@ final class GameScene: SKScene {
         updateHUD()
     }
 
+    /// 화면 끝 = 벽. 몸 뒤 공간이 부족하면 백스윙이 제한된다 — 실제 트러블샷처럼 펀치샷만 가능
+    private var wallSwingCap: Double {
+        guard !club.isPutter else { return 1 }
+        let behind = dir > 0 ? Double(px(stickX)) : Double(size.width - px(stickX))
+        return min(1, max(0.15, (behind - 28) / 45))
+    }
+
     /// 퍼터를 잡으면 남은 거리에 맞는 백스윙에서 시작한다 — 평지 기준 계산이라
     /// 그린 경사 읽기는 여전히 플레이어의 몫 (어시스트가 아니라 합리적 시작점)
     private func presetPutterHeight() {
@@ -275,7 +283,14 @@ final class GameScene: SKScene {
 
     private func launchBall() {
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
-        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir)
+        // 경사 라이(오르막=더 뜸) + 풀파워 리스크(80% 초과분의 제곱으로 미스샷 확률·크기 증가)
+        let slope = club.isPutter ? 0 : hole.slope(at: ball.x)
+        let overdrive = max(0, (heightPct - 0.8) / 0.2)
+        let mishit = club.isPutter ? 0 : overdrive * overdrive * Double.random(in: -1 ... 1)
+        Ballistics.launch(
+            &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
+            slope: slope, mishit: mishit
+        )
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -577,6 +592,7 @@ final class GameScene: SKScene {
             if heldKeys.contains(125) {
                 heightPct = max(0, heightPct - rate * dt)
             }
+            heightPct = min(heightPct, wallSwingCap) // 화면 끝 = 벽: 뒷공간만큼만 백스윙 (펀치샷)
         }
 
         if var anim = swingAnim {
@@ -609,8 +625,9 @@ final class GameScene: SKScene {
                 let dNow = abs(stickX - w.fromX) * Double(pxPerM)
                 if !w.gaitReady {
                     w.gaitReady = true
-                    w.feet[0].plant = dNow + 8 // 어드레스 발 위치 근처에서 시작
-                    w.feet[1].plant = dNow - 10
+                    // 첫 접지점 = 지금 서 있는 발 위치 그대로 — 걷기 진입 순간 발이 점프하지 않는다
+                    w.feet[0].plant = dNow + Double(renderRig.foot1.x)
+                    w.feet[1].plant = dNow + Double(renderRig.foot2.x)
                 }
                 w.gaitPhase += w.vPx * dt / (2 * w.stepL)
                 for i in 0 ..< 2 {
@@ -806,7 +823,9 @@ final class GameScene: SKScene {
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
-            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
+            // 스탠스 원점(-ballFwd)을 걷기 원점(0)으로 흘려보내 걷기 시작 순간의 스텝 밀림 제거
+            let ru = walkAnim.map { smoothstep(min(1, $0.t / $0.relax)) } ?? 1
+            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd * (1 - ru), clubLen: renderLen)
             rigRate = 5
         } else {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
@@ -825,7 +844,10 @@ final class GameScene: SKScene {
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
-        // 렌더 반영
+        // 렌더 반영 — 경사 라이: 걷기 외에는 스탠스가 지면 경사를 70% 따라 기운다
+        let tiltTarget = mode == .walking ? 0 : 0.7 * atan(hole.slope(at: stickX))
+        renderSlopeTilt += (tiltTarget - renderSlopeTilt) * (1 - exp(-6 * dt))
+        stickman.zRotation = CGFloat(renderSlopeTilt)
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
         stickman.render(
             rig: renderRig, club: club, prevClub: prevHeadClub,
