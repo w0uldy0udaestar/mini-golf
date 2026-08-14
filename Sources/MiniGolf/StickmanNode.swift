@@ -20,6 +20,16 @@ private extension Club {
     }
 }
 
+/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감 (twirl: 트월 진행 0→1, shoulder: 어깨 캐리 블렌드 0→1)
+struct WalkFlavor {
+    var twirl: Double?
+    var shoulder = 0.0
+}
+
+private func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {
+    CGPoint(x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u)
+}
+
 /// 스틱맨 렌더 리그 — 로컬 좌표 (0,0) = 공이 놓인 지면 지점, y는 위쪽
 /// 굵고 둥근 획의 회색 스틱맨 (포인트 컬러는 깃발 하나뿐이라는 디자인 원칙)
 final class StickmanNode: SKNode {
@@ -28,12 +38,14 @@ final class StickmanNode: SKNode {
     private let clubHeadColor = NSColor(white: 0.85, alpha: 0.95)
     private let rimColor = NSColor(white: 0, alpha: 0.32) // 밝은 배경 대비용 다크 림
     private let headShape = SKShapeNode(circleOfRadius: 10)
-    private let bodyShape = SKShapeNode() // 척추+다리+팔 통합 경로
+    private let bodyShape = SKShapeNode() // 척추+다리+앞팔 통합 경로
+    private let farArmShape = SKShapeNode() // 먼 쪽 팔 — 옅게 그려 원근을 만든다
     private let shaftShape = SKShapeNode()
     private let clubHeadShape = SKShapeNode()
     // 언더스트로크 트윈 — 같은 경로를 어둡고 굵게 한 겹 아래 (FINDING-001)
     private let headRim = SKShapeNode(circleOfRadius: 11.2)
     private let bodyRim = SKShapeNode()
+    private let farArmRim = SKShapeNode()
     private let shaftRim = SKShapeNode()
     private let clubHeadRim = SKShapeNode()
 
@@ -51,6 +63,12 @@ final class StickmanNode: SKNode {
         bodyRim.lineWidth = 8.4
         bodyRim.lineCap = .round
         bodyRim.lineJoin = .round
+        farArmShape.strokeColor = stickColor.withAlphaComponent(0.5)
+        farArmShape.lineWidth = 5
+        farArmShape.lineCap = .round
+        farArmRim.strokeColor = rimColor
+        farArmRim.lineWidth = 7.2
+        farArmRim.lineCap = .round
         shaftShape.strokeColor = shaftColor
         shaftShape.lineWidth = 3
         shaftShape.lineCap = .round
@@ -63,8 +81,8 @@ final class StickmanNode: SKNode {
         clubHeadRim.strokeColor = rimColor
         clubHeadRim.fillColor = rimColor
         clubHeadRim.lineCap = .round
-        for n in [bodyRim, shaftRim, clubHeadRim, headRim, bodyShape, shaftShape, clubHeadShape,
-                  headShape] as [SKNode] {
+        for n in [farArmRim, bodyRim, shaftRim, clubHeadRim, headRim, farArmShape, bodyShape,
+                  shaftShape, clubHeadShape, headShape] as [SKNode] {
             addChild(n)
         }
         applyContrast()
@@ -72,7 +90,7 @@ final class StickmanNode: SKNode {
 
     /// 고대비 모드에서만 다크 림을 켠다 (기본은 원래의 가벼운 획)
     func applyContrast() {
-        for r in [headRim, bodyRim, shaftRim, clubHeadRim] as [SKNode] {
+        for r in [headRim, bodyRim, farArmRim, shaftRim, clubHeadRim] as [SKNode] {
             r.isHidden = !Theme.highContrast
         }
     }
@@ -102,10 +120,11 @@ final class StickmanNode: SKNode {
         // 척추 (살짝 굽음)
         body.move(to: shoulder)
         body.addQuadCurve(to: hip, control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 3, y: (shoulder.y + hip.y) / 2))
-        // 다리: 발 위치 고정, 힙 이동으로 체중 표현, 뒷발꿈치 들림
+        // 다리: 발 위치 고정, 힙 이동으로 체중 표현
+        // 뒷발꿈치 들림은 발이 뜨는 게 아니라 발끝으로 서는 것 — 끝점이 지면 근처에 남는다
         body.move(to: hip)
         body.addQuadCurve(
-            to: CGPoint(x: px - dir * 16, y: p.heel),
+            to: CGPoint(x: px - dir * (16 - p.heel * 0.45), y: min(p.heel * 0.25, 3.5)),
             control: CGPoint(x: px - dir * 13 + dir * p.hipDx * 0.5, y: 22)
         )
         body.move(to: hip)
@@ -113,19 +132,26 @@ final class StickmanNode: SKNode {
             to: CGPoint(x: px + dir * 11, y: 0),
             control: CGPoint(x: px + dir * 6 + dir * p.hipDx * 0.5, y: 21)
         )
-        // 팔 두 개 (handD가 줄면 접힌 느낌)
+        // 앞팔 (리드 암)
         body.move(to: shoulder)
         body.addQuadCurve(
             to: hands,
             control: CGPoint(x: (shoulder.x + hands.x) / 2 + dir * 2, y: (shoulder.y + hands.y) / 2 + 2)
         )
-        body.move(to: CGPoint(x: shoulder.x, y: shoulder.y + 2.5))
-        body.addQuadCurve(
-            to: hands,
-            control: CGPoint(x: (shoulder.x + hands.x) / 2 + dir * 4, y: (shoulder.y + hands.y) / 2)
-        )
         bodyShape.path = body
         bodyRim.path = body
+
+        // 먼 팔: 살짝 뒤 어깨에서 그립 위쪽(샤프트 방향 3px)으로 — 옅은 색이 원근을 만든다
+        let farShoulder = CGPoint(x: shoulder.x - dir * 3, y: shoulder.y + 2)
+        let farHand = CGPoint(x: hands.x - sin(aC) * 3 * dir, y: hands.y + cos(aC) * 3)
+        let farArm = CGMutablePath()
+        farArm.move(to: farShoulder)
+        farArm.addQuadCurve(
+            to: farHand,
+            control: CGPoint(x: (farShoulder.x + farHand.x) / 2 + dir * 7, y: (farShoulder.y + farHand.y) / 2)
+        )
+        farArmShape.path = farArm
+        farArmRim.path = farArm
 
         let shaft = CGMutablePath()
         shaft.move(to: hands)
@@ -145,6 +171,7 @@ final class StickmanNode: SKNode {
         vPx: Double,
         dir: Double,
         club: Club,
+        flavor: WalkFlavor = WalkFlavor(),
         groundDelta: (CGFloat) -> CGFloat
     ) {
         let s1 = sin(phase)
@@ -181,25 +208,44 @@ final class StickmanNode: SKNode {
             to: f2,
             control: CGPoint(x: (hip.x + f2.x) / 2 + dir * 3, y: (hip.y + f2.y) / 2 + 3 + 6 * vAmp * max(0, -c1))
         )
-        // 클럽 든 팔 + 자유 팔 (다리 반대 위상) — 직립 포즈의 손 높이에 맞춰 전환 점프 최소화
-        let grip = CGPoint(x: -dir * 12, y: 47 + bob)
+        // 클럽 위치: 기본은 옆에 들고, 어깨 캐리 블렌드 시 어깨 위로 (길이는 클럽별)
+        let s = club.renderLength / 38
+        var grip = CGPoint(x: -dir * 12, y: 47 + bob)
+        var tip = CGPoint(x: grip.x - dir * 16 * s, y: grip.y - 38 * s)
+        if flavor.shoulder > 0 { // 어깨에 걸치고 걷기 — 그립은 어깨 앞, 헤드는 등 뒤 위로
+            let sGrip = CGPoint(x: shoulder.x + dir * 9, y: shoulder.y - 3)
+            let sTip = CGPoint(x: shoulder.x - dir * 26 * s, y: shoulder.y + 15 * s)
+            grip = mix(grip, sGrip, flavor.shoulder)
+            tip = mix(tip, sTip, flavor.shoulder)
+        }
+        if let tw = flavor.twirl { // 손목 트월 — 그립을 축으로 한 바퀴
+            let ang = tw * 2 * .pi * (dir > 0 ? 1 : -1)
+            let dx = tip.x - grip.x, dy = tip.y - grip.y
+            tip = CGPoint(
+                x: grip.x + dx * cos(ang) - dy * sin(ang),
+                y: grip.y + dx * sin(ang) + dy * cos(ang)
+            )
+        }
+
+        // 클럽 든 팔 (앞팔) + 자유 팔 (먼 팔, 옅게 — 다리 반대 위상)
         body.move(to: shoulder)
         body.addQuadCurve(
             to: grip,
             control: CGPoint(x: (shoulder.x + grip.x) / 2 - dir * 3, y: (shoulder.y + grip.y) / 2 - 2)
         )
-        let freeHand = CGPoint(x: dir * (5 - 8 * s1 * vAmp), y: 47 + bob)
-        body.move(to: shoulder)
-        body.addQuadCurve(
-            to: freeHand,
-            control: CGPoint(x: (shoulder.x + freeHand.x) / 2 + dir * 2, y: (shoulder.y + freeHand.y) / 2 - 3)
-        )
         bodyShape.path = body
         bodyRim.path = body
 
-        // 클럽: 뒤로 비스듬히 든 채 이동 (길이는 클럽별)
-        let s = club.renderLength / 38
-        let tip = CGPoint(x: grip.x - dir * 16 * s, y: grip.y - 38 * s)
+        let freeHand = CGPoint(x: dir * (5 - 8 * s1 * vAmp), y: 47 + bob)
+        let farArm = CGMutablePath()
+        farArm.move(to: CGPoint(x: shoulder.x - dir * 3, y: shoulder.y + 2))
+        farArm.addQuadCurve(
+            to: freeHand,
+            control: CGPoint(x: (shoulder.x + freeHand.x) / 2 + dir * 2, y: (shoulder.y + freeHand.y) / 2 - 3)
+        )
+        farArmShape.path = farArm
+        farArmRim.path = farArm
+
         let shaft = CGMutablePath()
         shaft.move(to: grip)
         shaft.addLine(to: tip)

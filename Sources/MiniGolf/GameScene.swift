@@ -24,8 +24,15 @@ final class GameScene: SKScene {
 
     // 연출 상태
     private struct SwingAnim { var t = 0.0; var launched = false; let prof: SwingProfile; let fromPose: Pose }
-    private struct WalkAnim { let fromX, toX,
-                                  dur: Double; var t = 0.0; let relax = 0.5; var phase = -0.6; var vPx = 0.0
+    private struct WalkAnim {
+        let fromX, toX, dur: Double
+        var t = 0.0
+        let relax = 0.8 // 피니시 여운 — 서두르지 않는다
+        var phase = -0.6
+        var vPx = 0.0
+        // 랜덤 잉여 동작 (생명감): 트월 시작 시각 / 어깨 캐리 구간 (walk 시작 기준 초)
+        var twirlAt: Double?
+        var shoulderRange: ClosedRange<Double>?
     }
 
     private var swingAnim: SwingAnim?
@@ -33,6 +40,7 @@ final class GameScene: SKScene {
     private var lastFinishPose: Pose?
     private var renderPose = Poses.p1
     private var renderBf = 24.0
+    private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
 
@@ -187,6 +195,7 @@ final class GameScene: SKScene {
             renderPose = Poses.upright
         }
         mode = .aim
+        aimTime = 0
         walkAnim = nil
         stickX = ball.x
         dir = hole.holeX >= ball.x ? 1 : -1
@@ -213,7 +222,14 @@ final class GameScene: SKScene {
         mode = .walking
         dir = to >= from ? 1 : -1
         // 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
-        walkAnim = WalkAnim(fromX: from, toX: to, dur: min(7.0, max(1.6, dist / 26)))
+        var anim = WalkAnim(fromX: from, toX: to, dur: min(9.0, max(2.0, dist / 16)))
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리, 아니면 가끔 클럽 트월 (동시엔 안 한다)
+        if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
+            anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
+        } else if anim.dur > 2.5, Double.random(in: 0 ..< 1) < 0.55 {
+            anim.twirlAt = anim.relax + Double.random(in: 0.6 ... max(0.7, anim.dur * 0.55))
+        }
+        walkAnim = anim
         updateHUD()
     }
 
@@ -625,14 +641,27 @@ final class GameScene: SKScene {
         } else {
             lastFinishPose ?? Poses.p10
         }
-        let rate: Double = swingAnim != nil ? 45 : mode == .aim ? 14 : 8
+        // 전환은 느긋하게(5~6), 스윙과 조준 입력만 기민하게(45/14)
+        if mode == .aim {
+            aimTime += dt
+        }
+        let rate: Double = swingAnim != nil ? 45 : mode == .aim ? (aimTime < 0.9 ? 6 : 14) : 5
         renderPose.chase(target, rate: rate, dt: dt)
         renderBf += (profile.ballFwd - renderBf) * (1 - exp(-rate * dt))
 
         // 렌더 반영
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
         if mode == .walking, let w = walkAnim, w.t >= w.relax {
-            stickman.updateWalking(phase: w.phase, vPx: w.vPx, dir: dir, club: club) { dxPx in
+            var flavor = WalkFlavor()
+            if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
+                let up = min(1, max(0, (w.t - r.lowerBound) / 0.6))
+                let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
+                flavor.shoulder = smoothstep(min(up, down))
+            }
+            if let ta = w.twirlAt, w.t >= ta, w.t < ta + 1.0 {
+                flavor.twirl = smoothstep((w.t - ta) / 1.0)
+            }
+            stickman.updateWalking(phase: w.phase, vPx: w.vPx, dir: dir, club: club, flavor: flavor) { dxPx in
                 let xm = self.stickX + Double(dxPx / self.pxPerM)
                 return self.groundY(xm) - self.groundY(self.stickX)
             }
