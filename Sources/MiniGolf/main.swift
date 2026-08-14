@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SoundKit.shared.enabled = false
         }
         scene.demoCardPreview = args.contains("--demo-card")
+        scene.demoNoClamp = args.contains("--no-wall-clamp") // 침범 재현·검증 전용
         panel.contentView = skView
         skView.presentScene(scene)
 

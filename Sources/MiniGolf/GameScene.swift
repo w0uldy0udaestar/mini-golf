@@ -24,6 +24,7 @@ final class GameScene: SKScene {
     var demoMode = false // --demo: 조준에서 자동 스윙 반복 — 모션 관찰용 (디버그 전용)
     var demoWallForce = false // --demo-wall: 매 홀을 벽 옆에서 시작 — 벽 스탠스 관찰용
     var demoCardPreview = false // --demo-card: 스코어카드 레이아웃 즉시 표시 (디버그 전용)
+    var demoNoClamp = false // --no-wall-clamp: 벽 경성 클램프 끄기 — 침범 재현·검증 전용
     private var demoWait = 0.0
 
     /// 연출 상태
@@ -272,6 +273,75 @@ final class GameScene: SKScene {
     private var wallBallFwd: Double {
         guard !club.isPutter else { return renderBallFwd }
         return mix(renderBallFwd, min(renderBallFwd, max(2, wallBehindPx - 10)), renderWallT)
+    }
+
+    /// ── 벽 경성 클램프: 리그의 어떤 점(클럽 팁·머리 반지름 포함)도 화면 밖에 그려질 수 없다.
+    /// 컴팩트 폼(wallTopScale)이 미적 1차 방어라면 이것은 기하학적 최종 보증 —
+    /// 렌더 사본에만 적용되어 추적 상태에는 영향이 없다 (2026-08-15 사용자 재현 신고 대응) ──
+    private func clampRigToWalls(_ rig: inout Rig) {
+        let sx = Double(px(stickX))
+        let margin = 8.0
+        let a = (margin - sx) / dir
+        let b = (Double(size.width) - margin - sx) / dir
+        let lo = min(a, b), hi = max(a, b)
+        func cl(_ p: inout CGPoint) {
+            p.x = CGFloat(min(hi, max(lo, Double(p.x))))
+        }
+        cl(&rig.hip)
+        cl(&rig.shoulder)
+        cl(&rig.foot1)
+        cl(&rig.foot2)
+        cl(&rig.knee1)
+        cl(&rig.knee2)
+        cl(&rig.grip)
+        cl(&rig.handTrail)
+        // 머리 (반지름 ~11)
+        let headX = Double(rig.shoulder.x) + rig.headDx
+        if headX < lo + 11 {
+            rig.headDx += lo + 11 - headX
+        } else if headX > hi - 11 {
+            rig.headDx -= headX - (hi - 11)
+        }
+        // 클럽 팁: 길이를 보존한 채 샤프트를 세워서 안으로 (위/아래 반구는 유지 —
+        // 벽에 클럽이 '기대어 서는' 자연스러운 제한 백스윙으로 읽힌다)
+        let tipX = Double(rig.grip.x) + rig.clubLen * sin(rig.clubPhi)
+        if tipX < lo || tipX > hi {
+            let s = (min(hi, max(lo, tipX)) - Double(rig.grip.x)) / rig.clubLen
+            let t = asin(min(1, max(-1, s)))
+            let phiN = rig.clubPhi.remainder(dividingBy: 2 * .pi)
+            rig.clubPhi = cos(phiN) >= 0 ? t : .pi - t
+        }
+    }
+
+    /// 데모 전용 경계 감시 — 렌더 리그가 화면을 벗어나면 즉시 stdout으로 보고 (검증 계기판)
+    private var boundsWorst = 0.0
+    private var boundsCount = 0
+    private var boundsLastLog: TimeInterval = 0
+    private func logRigBounds(_ rig: Rig, currentTime: TimeInterval) {
+        let sx = Double(px(stickX))
+        func scr(_ x: Double) -> Double {
+            sx + x * dir
+        }
+        var xs: [Double] = [scr(Double(rig.grip.x) + rig.clubLen * sin(rig.clubPhi))]
+        for p in [rig.hip, rig.shoulder, rig.foot1, rig.foot2, rig.knee1, rig.knee2, rig.grip, rig.handTrail] {
+            xs.append(scr(Double(p.x)))
+        }
+        let headX = scr(Double(rig.shoulder.x) + rig.headDx)
+        xs.append(headX - 11)
+        xs.append(headX + 11)
+        let over = max(0 - xs.min()!, xs.max()! - Double(size.width))
+        if over > 0.5 {
+            boundsCount += 1
+            boundsWorst = max(boundsWorst, over)
+            if currentTime - boundsLastLog > 0.5 {
+                boundsLastLog = currentTime
+                print(String(
+                    format: "OUTBOUND over %.1fpx (count %d, worst %.1f) mode %@",
+                    over, boundsCount, boundsWorst, String(describing: mode)
+                ))
+                fflush(stdout)
+            }
+        }
     }
 
     /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
@@ -642,10 +712,14 @@ final class GameScene: SKScene {
 
         if demoMode { // 자동 플레이: 조준 1.2s 후 스윙, 라운드 끝나면 새 라운드
             if mode == .aim {
+                if demoWallForce {
+                    heightPct = 0.95 // 벽 관찰: 조준 내내 풀 백스윙 프리뷰 유지 (최악 케이스 상시 노출)
+                }
                 demoWait += dt
                 if demoWait > 1.2 {
                     demoWait = 0
-                    heightPct = Double.random(in: 0.5 ... 0.85)
+                    // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
+                    heightPct = demoWallForce ? Double.random(in: 0.9 ... 1.0) : Double.random(in: 0.5 ... 0.85)
                     startSwing()
                 }
             } else if mode == .end {
@@ -934,10 +1008,17 @@ final class GameScene: SKScene {
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
-        // 렌더 반영
+        // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
+        var drawRig = renderRig
+        if !demoNoClamp {
+            clampRigToWalls(&drawRig)
+        }
+        if demoMode {
+            logRigBounds(drawRig, currentTime: currentTime)
+        }
         stickman.render(
-            rig: renderRig, club: club, prevClub: prevHeadClub,
+            rig: drawRig, club: club, prevClub: prevHeadClub,
             headMorph: headMorph, visualLoft: renderLoft, dir: dir
         )
 
