@@ -43,6 +43,7 @@ final class GameScene: SKScene {
     private var renderLen = 31.0
     private var renderBallFwd = 24.0
     private var renderTop = 1.0
+    private var renderLoft = 10.5 // 헤드 기하(크기·틸트·굵기)도 이 값으로 구동 — 모양 점프 방지
     private var clubSettle = 1.0 // 클럽 변경 후 경과 — 직후엔 추적을 늦춰 잔여 점프를 누른다
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var stickX = CourseGenerator.teeX
@@ -640,6 +641,7 @@ final class GameScene: SKScene {
         renderLen += (club.renderLength - renderLen) * clubK
         renderBallFwd += (profile.ballFwd - renderBallFwd) * clubK
         renderTop += (profile.topScale - renderTop) * clubK
+        renderLoft += (club.loft - renderLoft) * clubK
         clubSettle += dt
         if mode == .aim {
             aimTime += dt
@@ -685,7 +687,7 @@ final class GameScene: SKScene {
 
         // 렌더 반영
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
-        stickman.render(rig: renderRig, club: club, dir: dir)
+        stickman.render(rig: renderRig, club: club, visualLoft: renderLoft, dir: dir)
 
         if mode != .holed { // 홀인 드롭 연출 중에는 SKAction이 공 위치를 갖는다
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)

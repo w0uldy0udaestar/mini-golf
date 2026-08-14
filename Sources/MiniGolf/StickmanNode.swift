@@ -13,11 +13,6 @@ extension Club {
         default: 41 - (loft - 21) * 6 / 35 // 아이언·웨지: 로프트가 클수록 짧게 (3I 41 → SW 35)
         }
     }
-
-    /// 페이스 기울기(rad): 로프트만큼 블레이드가 젖혀져 보인다
-    var faceTilt: Double {
-        loft * 0.9 * .pi / 180
-    }
 }
 
 /// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감 (twirl: 트월 진행 0→1 후 1 유지, shoulder: 어깨 캐리 블렌드)
@@ -216,7 +211,9 @@ final class StickmanNode: SKNode {
         }
     }
 
-    func render(rig r: Rig, club: Club, dir: Double) {
+    private var headKind = "" // 헤드 모양 종류 — 바뀌는 순간 고스트 크로스페이드
+
+    func render(rig r: Rig, club: Club, visualLoft: Double, dir: Double) {
         func m(_ p: CGPoint) -> CGPoint {
             CGPoint(x: p.x * dir, y: p.y)
         } // facing → 화면 미러
@@ -270,22 +267,45 @@ final class StickmanNode: SKNode {
         shaft.addLine(to: tip)
         shaftShape.path = shaft
         shaftRim.path = shaft
-        clubHeadShape.path = clubHeadPath(club: club, tip: tip, phi: r.clubPhi, dir: dir)
-        clubHeadShape.lineWidth = club.cat == .putter ? 5 : (club.cat == .wedge ? 5 : 4)
+
+        // 헤드 모양 '종류'가 바뀌는 경계(우드↔아이언, 웨지↔퍼터)는 고스트 크로스페이드로
+        let kind = club.cat == .wood ? "wood" : club.cat == .putter ? "putter" : "blade"
+        if kind != headKind, !headKind.isEmpty {
+            if let old = clubHeadShape.path {
+                let ghost = SKShapeNode(path: old)
+                ghost.strokeColor = clubHeadShape.strokeColor
+                ghost.fillColor = clubHeadShape.fillColor
+                ghost.lineWidth = clubHeadShape.lineWidth
+                ghost.lineCap = .round
+                addChild(ghost)
+                ghost.run(.sequence([.fadeOut(withDuration: 0.28), .removeFromParent()]))
+            }
+            clubHeadShape.alpha = 0
+            clubHeadShape.run(.fadeIn(withDuration: 0.28))
+            clubHeadRim.alpha = 0
+            clubHeadRim.run(.fadeIn(withDuration: 0.28))
+        }
+        headKind = kind
+
+        clubHeadShape.path = clubHeadPath(club: club, visualLoft: visualLoft, tip: tip, phi: r.clubPhi, dir: dir)
+        // 블레이드 굵기도 로프트 연속 함수 (아이언 4 → SW 5)
+        clubHeadShape.lineWidth = club.cat == .putter
+            ? 5
+            : club.cat == .wood ? 4 : 4 + max(0, visualLoft - 42) * 0.0714
         clubHeadRim.path = clubHeadShape.path
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
 
     /// 클럽 헤드 디자인 — 숫자 대신 생김새로 클럽을 구분한다 (심플·둥근 획)
-    /// 우드: 로프트가 작을수록 큰 둥근 헤드 / 아이언·웨지: 로프트만큼 젖혀진 블레이드 / 퍼터: 블록+점
-    private func clubHeadPath(club: Club, tip: CGPoint, phi: Double, dir: Double) -> CGPath {
+    /// 기하는 전부 스무딩된 visualLoft로 구동 — 클럽 변경 시 모양이 미끄러지듯 변한다
+    private func clubHeadPath(club: Club, visualLoft: Double, tip: CGPoint, phi: Double, dir: Double) -> CGPath {
         // 샤프트 방향(along)·타격 방향(perp), SpriteKit y-up 기준
         let along = CGVector(dx: sin(phi) * dir, dy: -cos(phi))
         let perp = CGVector(dx: cos(phi) * dir, dy: sin(phi))
         let p = CGMutablePath()
         switch club.cat {
         case .wood: // 둥근 덩어리 헤드 — 드라이버가 가장 크다
-            let w = 16 - (club.loft - 10.5) * 0.45 // DR 16 · 3W 14 · 5W 12.6
+            let w = 16 - (visualLoft - 10.5) * 0.45 // DR 16 · 3W 14 · 5W 12.6
             let h = w * 0.68
             let c = CGPoint(x: tip.x + perp.dx * 4, y: tip.y + perp.dy * 4)
             var transform = CGAffineTransform(translationX: c.x, y: c.y)
@@ -296,9 +316,9 @@ final class StickmanNode: SKNode {
             ) as CGPath? {
                 p.addPath(ellipse)
             }
-        case .iron, .wedge: // 블레이드 — 로프트만큼 페이스가 젖혀진다 (9I가 7I보다 열려 보임)
-            let len = club.cat == .wedge ? 10.5 : 9.0
-            let lo = club.faceTilt
+        case .iron, .wedge: // 블레이드 — 로프트만큼 페이스가 젖혀지고(9I>7I), 웨지로 갈수록 길어진다
+            let len = 9 + max(0, visualLoft - 42) * 0.107 // 아이언 9 → SW 10.5
+            let lo = visualLoft * 0.9 * .pi / 180
             let bx = (perp.dx * cos(lo) - along.dx * sin(lo)) * len
             let by = (perp.dy * cos(lo) - along.dy * sin(lo)) * len
             p.move(to: tip)
