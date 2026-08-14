@@ -60,9 +60,9 @@ struct SwingProfile {
 
     static func profile(for cat: ClubCategory) -> SwingProfile {
         switch cat {
-        case .wood: SwingProfile(topScale: 1.0, ballFwd: 24, finishScale: 1.0, down: 0.13, isPutter: false)
-        case .iron: SwingProfile(topScale: 0.88, ballFwd: 20, finishScale: 0.9, down: 0.13, isPutter: false)
-        case .wedge: SwingProfile(topScale: 0.72, ballFwd: 17, finishScale: 0.72, down: 0.13, isPutter: false)
+        case .wood: SwingProfile(topScale: 1.0, ballFwd: 24, finishScale: 1.0, down: 0.17, isPutter: false)
+        case .iron: SwingProfile(topScale: 0.88, ballFwd: 20, finishScale: 0.9, down: 0.17, isPutter: false)
+        case .wedge: SwingProfile(topScale: 0.72, ballFwd: 17, finishScale: 0.72, down: 0.17, isPutter: false)
         case .putter: SwingProfile(
                 topScale: 1.0,
                 ballFwd: 18,
@@ -77,7 +77,7 @@ struct SwingProfile {
 enum SwingTiming {
     static let follow = 0.14
     static let finish = 0.22
-    static let total = 0.5
+    static let total = 0.58 // 퍼터(0.29+0.25)·풀스윙(0.17+0.14+0.22) 모두 커버
 }
 
 func smoothstep(_ u: Double) -> Double {

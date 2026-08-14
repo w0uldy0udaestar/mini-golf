@@ -103,9 +103,11 @@ struct Rig {
 
     /// 지수 감쇠 추적 — clubPhi는 최단 각도 경로로 (트월 한 바퀴 후 되감기 방지)
     /// footRate: 걷기 중 발·무릎만 고속 추적 — 접지점이 스무딩에 밀리면 미끄러져 보인다
-    mutating func chase(_ t: Rig, rate: Double, footRate: Double? = nil, dt: Double) {
+    /// clubRate: 팔로스루에서 클럽만 느리게 — 몸이 멈춘 뒤 클럽이 늦게 멈추는 오버랩
+    mutating func chase(_ t: Rig, rate: Double, footRate: Double? = nil, clubRate: Double? = nil, dt: Double) {
         let k = 1 - exp(-rate * dt)
         let kf = footRate.map { 1 - exp(-$0 * dt) } ?? k
+        let kc = clubRate.map { 1 - exp(-$0 * dt) } ?? k
         hip = mix(hip, t.hip, k)
         shoulder = mix(shoulder, t.shoulder, k)
         headDx = mix(headDx, t.headDx, k)
@@ -118,7 +120,7 @@ struct Rig {
         handTrail = mix(handTrail, t.handTrail, k)
         clubLen = mix(clubLen, t.clubLen, k)
         let dPhi = (t.clubPhi - clubPhi).remainder(dividingBy: 2 * .pi)
-        clubPhi += dPhi * k
+        clubPhi += dPhi * kc
     }
 }
 
@@ -268,6 +270,33 @@ final class StickmanNode: SKNode {
         }
     }
 
+    // 임팩트 스미어용 최근 클럽 상태 스냅샷
+    private var lastGrip = CGPoint.zero
+    private var lastPhi = 0.0
+    private var lastLen = 31.0
+    private var lastDir = 1.0
+
+    /// 임팩트 스미어 — 헤드 궤적을 따라가는 짧은 헤어라인 원호 잔상 (점·헤어라인 규칙 안, 리서치 P5)
+    func impactSmear() {
+        let path = CGMutablePath()
+        let steps = 10
+        for k in 0 ... steps {
+            let ph = lastPhi - 0.85 * (1 - Double(k) / Double(steps))
+            let pt = CGPoint(x: lastGrip.x + sin(ph) * lastLen * lastDir, y: lastGrip.y - cos(ph) * lastLen)
+            if k == 0 {
+                path.move(to: pt)
+            } else {
+                path.addLine(to: pt)
+            }
+        }
+        let arc = SKShapeNode(path: path)
+        arc.strokeColor = NSColor(white: 0.95, alpha: 0.38)
+        arc.lineWidth = 2.5
+        arc.lineCap = .round
+        addChild(arc)
+        arc.run(.sequence([.fadeOut(withDuration: 0.13), .removeFromParent()]))
+    }
+
     func render(rig r: Rig, club: Club, prevClub: Club, headMorph: Double, visualLoft: Double, dir: Double) {
         func m(_ p: CGPoint) -> CGPoint {
             CGPoint(x: p.x * dir, y: p.y)
@@ -339,6 +368,11 @@ final class StickmanNode: SKNode {
         clubHeadShape.lineWidth = mix(prev.lw, now.lw, m)
         clubHeadRim.path = headPath
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
+
+        lastGrip = grip
+        lastPhi = r.clubPhi
+        lastLen = r.clubLen
+        lastDir = dir
     }
 
     /// 헤드 캡슐 파라미터 — 시작점·끝점·굵기(·퍼터 점). 종류가 달라도 같은 표현이라 morph 가능

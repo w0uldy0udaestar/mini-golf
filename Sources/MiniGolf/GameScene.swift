@@ -62,6 +62,8 @@ final class GameScene: SKScene {
     private var lastClub = ClubTable.all[0]
     private var headMorph = 1.0
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
+    private var hitstopLeft = 0.0 // 임팩트 히트스톱 잔여 (33~67ms, 파워 비례 — 리서치 P4)
+    private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
 
@@ -276,6 +278,17 @@ final class GameScene: SKScene {
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
         Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir)
         strokes += 1
+        if !club.isPutter { // 임팩트 타격감: 미세 히트스톱 + 공 신장 + 헤드 스미어 (퍼터는 조용히)
+            hitstopLeft = 0.033 + 0.034 * heightPct
+            ballNode.zRotation = CGFloat(atan2(ball.vy, ball.vx))
+            ballNode.xScale = 1.4
+            ballNode.yScale = 0.72
+            ballNode.run(.sequence([
+                .group([.scaleX(to: 1, duration: 0.14), .scaleY(to: 1, duration: 0.14)]),
+                .run { [weak self] in self?.ballNode.zRotation = 0 },
+            ]))
+            stickman.impactSmear()
+        }
         trailPoints = []
         for t in [trailNode, trailUnderNode] {
             t.removeAllActions()
@@ -556,6 +569,13 @@ final class GameScene: SKScene {
         lastTime = currentTime
         guard !isGamePaused else { return }
 
+        if hitstopLeft > 0 { // 임팩트 히트스톱 — 전부 정지, 스틱맨만 1px 미세 진동 (Sakurai 관행)
+            hitstopLeft -= dt
+            let jitter: CGFloat = sin(currentTime * 180) > 0 ? 0.9 : -0.9
+            stickman.position = CGPoint(x: px(stickX) + jitter, y: groundY(stickX))
+            return
+        }
+
         if mode == .aim {
             let rate = club.isPutter ? 0.4 : 0.85
             if heldKeys.contains(126) {
@@ -575,6 +595,7 @@ final class GameScene: SKScene {
             }
             if anim.t >= SwingTiming.total {
                 lastFinishPose = finishPose(profile: anim.prof)
+                finishAt = currentTime
                 swingAnim = nil
             } else {
                 swingAnim = anim
@@ -704,8 +725,9 @@ final class GameScene: SKScene {
         if mode == .aim {
             aimTime += dt
         }
-        let targetRig: Rig
+        var targetRig: Rig
         let rigRate: Double
+        var rigClubRate: Double? = nil // 팔로스루 오버랩 — 클럽만 느린 추적
         if let anim = swingAnim {
             targetRig = RigBuilder.fromPose(
                 swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
@@ -714,6 +736,9 @@ final class GameScene: SKScene {
             // 다운스윙은 초고속 추적(220) — 스무딩 지연(≈31°)이 '클럽이 공에 닿는 프레임'을
             // 지우고 있었다 (리서치 P1). 임팩트 후는 45로 복귀 (그 시점 오차 ≈1°라 킥 없음)
             rigRate = anim.t < anim.prof.down ? 220 : 45
+            if anim.t >= anim.prof.down { // 팔로스루: 클럽만 늦게 멈추는 오버랩 (리서치 P6)
+                rigClubRate = 22
+            }
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
@@ -794,9 +819,18 @@ final class GameScene: SKScene {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
         }
+        // 피니시 무빙 홀드: 완전 정지 대신 클럽이 관성으로 미세하게 흔들리다 잦아든다 (리서치 P6)
+        if swingAnim == nil, mode == .motion || mode == .holed {
+            let ft = currentTime - finishAt
+            if ft > 0, ft < 3 {
+                let osc: Double = sin(2 * Double.pi * 1.8 * ft)
+                let decay: Double = exp(-ft * 2.2)
+                targetRig.clubPhi += 0.18 * osc * decay
+            }
+        }
         // 걷기 중 발·무릎은 고속 추적 — 접지점이 스무딩에 밀려 미끄러져 보이는 것을 방지
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
-        renderRig.chase(targetRig, rate: rigRate, footRate: footRate, dt: dt)
+        renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
         // 렌더 반영
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
