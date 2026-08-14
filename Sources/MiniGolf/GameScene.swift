@@ -48,7 +48,6 @@ final class GameScene: SKScene {
     private var prevHeadClub = ClubTable.all[0]
     private var lastClub = ClubTable.all[0]
     private var headMorph = 1.0
-    private var clubSettle = 1.0 // 클럽 변경 후 경과 — 직후엔 추적을 늦춰 잔여 점프를 누른다
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
@@ -513,11 +512,8 @@ final class GameScene: SKScene {
         guard mode == .aim, !isGamePaused else { return }
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
-        case 123: clubIdx = max(0, clubIdx - 1); clubSettle = 0; presetPutterHeight(); updateHUD() // ←
-        case 124: clubIdx = min(
-                ClubTable.all.count - 1,
-                clubIdx + 1
-            ); clubSettle = 0; presetPutterHeight(); updateHUD() // →
+        case 123: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // ←
+        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // →
         case 49: startSwing() // Space
         default: break
         }
@@ -645,7 +641,6 @@ final class GameScene: SKScene {
         renderLen += (club.renderLength - renderLen) * clubK
         renderBallFwd += (profile.ballFwd - renderBallFwd) * clubK
         renderTop += (profile.topScale - renderTop) * clubK
-        clubSettle += dt
         /// 헤드 '종류'가 바뀌면 morph 시작 (캡슐 기하 변형 — 몸 동작 없이 헤드만 변한다)
         func headKind(_ c: Club) -> Int {
             c.cat == .wood ? 0 : c.cat == .putter ? 2 : 1
@@ -688,8 +683,8 @@ final class GameScene: SKScene {
                 backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
                 ballFwd: renderBallFwd, clubLen: renderLen
             )
-            // 진입 직후·클럽 변경 직후엔 천천히 가라앉고, 이후 입력에 기민하게
-            rigRate = aimTime < 0.9 ? 6 : (clubSettle < 0.45 ? 7 : 14)
+            // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
+            rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
