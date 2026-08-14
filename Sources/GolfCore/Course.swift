@@ -83,7 +83,9 @@ public struct Hole: Sendable {
 public enum CourseGenerator {
     public static let teeX: Double = 25 // 백스윙 포즈가 화면 왼쪽에서 잘리지 않는 여유
     static let parComposition = [3, 3, 4, 4, 4, 4, 4, 5, 5] // 파 36
-    static let distRange: [Int: ClosedRange<Double>] = [3: 110 ... 170, 4: 250 ... 360, 5: 430 ... 500]
+    /// 백 티·화이트 티 중간 실거리 (2026-08-15 사용자 결정 — 드라이버 306m 원온 밸런스 보정:
+    /// 파4 대부분은 2온 게임, 짧은 파4만 원온 도전 여지)
+    static let distRange: [Int: ClosedRange<Double>] = [3: 130 ... 185, 4: 290 ... 400, 5: 460 ... 560]
 
     /// 세그먼트 배열에서 [from, to) 구간을 지정 타입으로 대체 (겹치는 밴드는 쪼갬)
     static func carve(_ segments: [Segment], from: Double, to: Double, type: Surface) -> [Segment] {
