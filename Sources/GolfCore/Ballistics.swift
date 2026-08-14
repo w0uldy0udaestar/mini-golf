@@ -7,10 +7,9 @@ public enum Phys {
     public static let cd = 0.25 // 항력 계수
     public static let ballRadius = 0.0213
     public static let clBase = 0.04, clSlope = 1.8, clMax = 0.35, spinRatioMax = 0.30 // 양력 계수 모델
-    public static let spinDecayFlight = 0.04 // 비행 중 스핀 감쇠 (비율/초)
-    public static let bounceVxKeep = 0.72
-    public static let bounceSpinKick = 9.0 // 백스핀 체크 최대 역방향 킥 (m/s @ 12000rpm)
-    public static let bounceSpinKeep = 0.55
+    // 스핀 감쇠율(/s) = 이 값 × 속도, [0.01, 0.06] 클램프 — dω/dt ∝ −v·ω (Smits & Smith 풍동)
+    public static let spinDecayPerSpeed = 0.00067
+    public static let bounceFriction = 1.0 // 잔디 μ (Biber 2023 실측 0.997~0.998)
     public static let bounceToRoll = 1.0
     public static let stopSpeed = 0.15
     public static let minPowerRatio = 0.25 // 백스윙 0%의 파워 바닥값
@@ -69,14 +68,25 @@ public enum StepEvent: Sendable, Equatable {
 
 public enum Ballistics {
     /// 샷 발사: 클럽·백스윙 높이·라이를 반영해 공 상태를 설정
-    public static func launch(_ b: inout BallState, club: Club, heightPct: Double, lie: Surface, dir: Double) {
+    /// mishit: 미스샷 정도 [-1, 1] — 발사각 ±4°, 파워 -12%, 스핀 -30%까지 (풀파워 리스크는 호출측)
+    public static func launch(
+        _ b: inout BallState,
+        club: Club,
+        heightPct: Double,
+        lie: Surface,
+        dir: Double,
+        mishit: Double = 0
+    ) {
         // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
-        let v0 = club.power * lie.powerFactor * (minR + (1 - minR) * heightPct)
-        let loft = club.loft * .pi / 180
+        let v0 = club.power * lie.powerFactor * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
+        let loft = max(0.02, club.loft * .pi / 180 + mishit * 4 * .pi / 180)
         b.vx = dir * v0 * cos(loft)
-        b.vy = v0 * sin(loft)
-        b.spin = club.spin * lie.spinFactor * (0.6 + 0.4 * heightPct)
+        b.vy = club.isPutter ? 0 : v0 * sin(loft)
+        // 스핀 = 클럽 스피드 비례 × 압축 효율(저속에서 sublinear) — 부분 스윙의 상대 스핀 인플레 제거.
+        // 구식 (0.6+0.4h)는 살살 칠수록 상대 스핀이 최대 2.4배로 부풀었다 (리서치 §3-3). 풀스윙은 불변
+        let spinPower = (Phys.minPowerRatio + (1 - Phys.minPowerRatio) * heightPct) * (0.75 + 0.25 * heightPct)
+        b.spin = club.spin * lie.spinFactor * spinPower * (1 - abs(mishit) * 0.3)
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly
         b.lipped = false
@@ -101,7 +111,7 @@ public enum Ballistics {
             b.vy += ay * dt
             b.x += b.vx * dt
             b.y += b.vy * dt
-            b.spin *= 1 - Phys.spinDecayFlight * dt
+            b.spin *= 1 - min(0.06, max(0.01, Phys.spinDecayPerSpeed * v)) * dt // 느린 웨지가 스핀을 안고 착지
 
             let ground = hole.ground(at: b.x)
             if b.y <= ground {
@@ -110,18 +120,32 @@ public enum Ballistics {
                     return .water
                 }
                 b.y = ground
-                // 경사면 법선/접선 분해 반사
+                // 접촉 프레임: 지형 경사 + Penner 유효 경사(β) — 잔디 변형을 '진행 방향을 마주보는
+                // 가상 오르막'으로 등가 처리 (Penner 2002, Biber 2023 — 실측 1000+회 검증 모델)
                 let s = hole.slope(at: b.x)
-                let len = hypot(1, s)
-                let nx = -s / len, ny = 1 / len, tx = 1 / len, ty = s / len
+                let ang = atan(s) + surfType.bounceBeta * (b.vx >= 0 ? 1 : -1)
+                let nx = -sin(ang), ny = cos(ang), tx = cos(ang), ty = sin(ang)
                 let vn = b.vx * nx + b.vy * ny
                 if vn < 0 {
                     ev = .bounce(speed: -vn, surface: surfType)
                     var vt = b.vx * tx + b.vy * ty
-                    let kick = min(b.spin, 12000) / 12000 * Phys.bounceSpinKick * b.spinSign
-                    vt = vt * Phys.bounceVxKeep - kick
-                    let vnNew = -vn * surfType.restitution
-                    b.spin *= Phys.bounceSpinKeep
+                    // 속도 의존 반발 — 강한 낙하일수록 잔디에 파묻힌다
+                    let e = surfType.restitution * (1 - min(0.55, -vn / 60))
+                    // 접지점 상대속도로 구름/미끄러짐 판정. 구름이면 (5/7, 2/7) 각운동량 보존 해 —
+                    // 릴리스·체크·백업 세 상태가 추가 튜닝 없이 이 식에서 저절로 나온다 (Biber 2023)
+                    var w = Phys.ballRadius * b.spin * .pi / 30 * b.spinSign // 스핀 표면속도 (백스핀 +)
+                    if abs(vt + w) < 3.5 * Phys.bounceFriction * (1 + e) * -vn {
+                        let vtNew = (5.0 / 7.0) * vt - (2.0 / 7.0) * w
+                        vt = vtNew
+                        w = -vtNew
+                    } else { // 미끄러짐 (얕고 빠른 저스핀 낙하) — 마찰 충격량, 위 판정이 과보정을 막는다
+                        let dv = Phys.bounceFriction * (1 + e) * vn * (vt + w >= 0 ? 1 : -1)
+                        vt += dv
+                        w += 2.5 * dv
+                    }
+                    b.spin = abs(w) * 30 / (.pi * Phys.ballRadius)
+                    b.spinSign = w >= 0 ? 1 : -1
+                    let vnNew = -vn * e
                     if vnNew > Phys.bounceToRoll {
                         b.vx = vt * tx + vnNew * nx
                         b.vy = vt * ty + vnNew * ny

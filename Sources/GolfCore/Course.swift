@@ -18,6 +18,7 @@ public struct Hole: Sendable {
     public let par: Int
     public let dist: Double
     public let holeX: Double
+    public let teeX: Double // 티 위치 — 미러 홀은 오른쪽 끝에서 시작한다
     public let worldW: Double
     public let greenStart: Double
     public let greenEnd: Double
@@ -31,11 +32,13 @@ public struct Hole: Sendable {
         par: Int, dist: Double, holeX: Double, worldW: Double,
         greenStart: Double, greenEnd: Double, apronStart: Double,
         segments: [Segment], elevation: [Double],
-        waterRange: ClosedRange<Double>?, greenSlope: Double
+        waterRange: ClosedRange<Double>?, greenSlope: Double,
+        teeX: Double = CourseGenerator.teeX
     ) {
         self.par = par
         self.dist = dist
         self.holeX = holeX
+        self.teeX = teeX
         self.worldW = worldW
         self.greenStart = greenStart
         self.greenEnd = greenEnd
@@ -225,11 +228,35 @@ public enum CourseGenerator {
             }
         }
 
-        return Hole(
+        let hole = Hole(
             par: par, dist: dist, holeX: holeX, worldW: worldW,
             greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
             segments: segments, elevation: elev,
             waterRange: waterRange, greenSlope: gSlope
+        )
+        // 진행 방향 좌우 랜덤: 절반은 미러 — 오른쪽 티에서 왼쪽 홀로 (2026-08-14 사용자 요청)
+        return rand.next() < 0.5 ? mirrored(hole) : hole
+    }
+
+    /// 홀 좌우 미러 — 모든 x를 worldW 기준으로 뒤집는다. 물리·렌더는 방향 무관하게 작성돼 있어
+    /// 지형 데이터만 뒤집으면 오른쪽→왼쪽 진행 홀이 된다
+    static func mirrored(_ h: Hole) -> Hole {
+        let w = h.worldW
+        var elev = [Double](repeating: 0, count: h.elevation.count)
+        for i in 0 ..< elev.count {
+            elev[i] = h.ground(at: w - Double(i)) // 보간 샘플링 — worldW가 정수가 아니어도 안전
+        }
+        let segments = h.segments
+            .map { Segment(from: w - $0.to, to: w - $0.from, type: $0.type) }
+            .sorted { $0.from < $1.from }
+        return Hole(
+            par: h.par, dist: h.dist, holeX: w - h.holeX, worldW: w,
+            // 그린 경계는 공간 순서 유지, 에이프런은 미러 후 그린 오른쪽의 바깥 경계
+            greenStart: w - h.greenEnd, greenEnd: w - h.greenStart, apronStart: w - h.apronStart,
+            segments: segments, elevation: elev,
+            waterRange: h.waterRange.map { (w - $0.upperBound) ... (w - $0.lowerBound) },
+            greenSlope: -h.greenSlope,
+            teeX: w - teeX
         )
     }
 }

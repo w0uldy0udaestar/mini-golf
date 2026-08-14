@@ -232,6 +232,95 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertTrue(saw, "립아웃 시 lipOut 이벤트가 나와야 함")
     }
 
+    // ── 좌우 미러 홀 ──
+
+    func testMirroredHolesAppearAndKeepIntegrity() {
+        var sawLeftToRight = false, sawRightToLeft = false
+        for seed in 1 ... 10 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
+                if h.holeX > h.teeX {
+                    sawLeftToRight = true
+                } else {
+                    sawRightToLeft = true
+                }
+                XCTAssertEqual(h.surface(at: h.teeX), .tee, "티 지점 라이가 티가 아님")
+                XCTAssertEqual(abs(h.holeX - h.teeX), h.dist, accuracy: 0.001, "티-홀 거리 보존 실패")
+                XCTAssertEqual(h.ground(at: h.teeX), 0, accuracy: 0.6, "티 주변은 평지여야 함")
+            }
+        }
+        XCTAssertTrue(sawLeftToRight, "왼→오 홀이 하나도 없음")
+        XCTAssertTrue(sawRightToLeft, "오→왼(미러) 홀이 하나도 없음")
+    }
+
+    // ── 스핀 물리 (2026-08-14 리서치 반영) ──
+
+    func testPartialSwingSpinNotInflated() {
+        // 상대 스핀(spin/v0)이 부분 스윙에서 풀스윙보다 커지지 않는다 — 구식 (0.6+0.4h)의
+        // '살살 칠수록 스핀이 더 먹는' 역전 제거. 풀샷 절대 스핀은 리서치 이전과 동일 (밸런스 보존)
+        let c = club("7I")
+        func launched(_ h: Double) -> BallState {
+            var b = BallState(x: 0, y: 0)
+            Ballistics.launch(&b, club: c, heightPct: h, lie: .fairway, dir: 1)
+            return b
+        }
+        let full = launched(1.0)
+        let fullRatio = full.spin / hypot(full.vx, full.vy)
+        for h in [0.1, 0.3, 0.5, 0.8] {
+            let b = launched(h)
+            XCTAssertLessThanOrEqual(b.spin / hypot(b.vx, b.vy), fullRatio * 1.001, "h=\(h)에서 상대 스핀 역전")
+        }
+        XCTAssertEqual(full.spin, c.spin, accuracy: 0.001, "풀샷 스핀이 클럽 기본값과 달라짐")
+    }
+
+    func testBounceBackupAndRelease() {
+        // 그린 바운스: 고스핀 웨지는 뒤로 감기고(백업), 저스핀 드라이브는 전진(릴리스) —
+        // (5/7, 2/7) 접지 해에서 두 상태가 같은 식으로 나온다 (리서치 §5-4 검산 케이스)
+        let green = Hole(
+            par: 3, dist: 100, holeX: 250, worldW: 300,
+            greenStart: 0, greenEnd: 300, apronStart: 0,
+            segments: [Segment(from: 0, to: 300, type: .green)],
+            elevation: [Double](repeating: 0, count: 302),
+            waterRange: nil, greenSlope: 0
+        )
+        var wedge = BallState(
+            x: 100, y: 0.05, vx: 26 * cos(58 * .pi / 180), vy: -26 * sin(58 * .pi / 180),
+            spin: 11000, spinSign: 1, phase: .fly
+        )
+        _ = Ballistics.step(&wedge, hole: green)
+        XCTAssertLessThan(wedge.vx, 0, "고스핀 웨지가 첫 바운스에서 뒤로 감기지 않음")
+        var drive = BallState(
+            x: 100, y: 0.05, vx: 45 * cos(38 * .pi / 180), vy: -45 * sin(38 * .pi / 180),
+            spin: 2200, spinSign: 1, phase: .fly
+        )
+        _ = Ballistics.step(&drive, hole: green)
+        XCTAssertGreaterThan(drive.vx, 5, "저스핀 드라이브가 전진하지 않음")
+    }
+
+    // ── 미스샷 (풀파워 리스크) ──
+
+    func testMishitReducesPowerSpinAndLiftsLaunchAngle() {
+        let c = club("7I")
+        var clean = BallState(x: 0, y: 0)
+        var miss = BallState(x: 0, y: 0)
+        Ballistics.launch(&clean, club: c, heightPct: 1, lie: .fairway, dir: 1)
+        Ballistics.launch(&miss, club: c, heightPct: 1, lie: .fairway, dir: 1, mishit: 1)
+        XCTAssertEqual(hypot(miss.vx, miss.vy) / hypot(clean.vx, clean.vy), 0.88, accuracy: 0.001) // 파워 -12%
+        XCTAssertEqual(miss.spin / clean.spin, 0.7, accuracy: 0.001) // 스핀 -30%
+        let dAngle = (atan2(miss.vy, miss.vx) - atan2(clean.vy, clean.vx)) * 180 / .pi
+        XCTAssertEqual(dAngle, 4, accuracy: 0.05) // 발사각 +4°
+    }
+
+    func testMishitZeroIsIdentity() {
+        let c = club("DR")
+        var a = BallState(x: 0, y: 0)
+        var b = BallState(x: 0, y: 0)
+        Ballistics.launch(&a, club: c, heightPct: 0.7, lie: .tee, dir: 1)
+        Ballistics.launch(&b, club: c, heightPct: 0.7, lie: .tee, dir: 1, mishit: 0)
+        XCTAssertEqual(a.vx, b.vx)
+        XCTAssertEqual(a.vy, b.vy)
+        XCTAssertEqual(a.spin, b.spin)
+    }
+
     // ── 결정론 ──
 
     func testCourseGenerationIsDeterministic() {

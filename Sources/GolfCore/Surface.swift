@@ -27,13 +27,28 @@ public enum Surface: String, CaseIterable, Sendable {
         }
     }
 
+    /// 반발계수 기저값 — 실제 반발은 낙하 속도에 따라 추가로 줄어든다 (Ballistics.step)
+    /// 값은 Biber 2023 실측 피팅(잔디 0.147~0.26) 기반 + 게임 스케일 보정 (2026-08-14 리서치)
     public var restitution: Double {
         switch self {
-        case .tee, .fairway: 0.42
-        case .rough: 0.25
-        case .apron: 0.38
-        case .green: 0.35
+        case .tee, .fairway: 0.30
+        case .rough: 0.14
+        case .apron: 0.34
+        case .green: 0.30
         case .bunker: 0.05 // 공이 박힘
+        case .water: 0
+        }
+    }
+
+    /// Penner 유효 경사(rad) — 잔디가 변형되며 공을 받아내는 정도. 부드러울수록 크고,
+    /// 클수록 같은 스핀에서도 체크·백업이 잘 나온다 (그린 굳기의 단일 튜닝 레버)
+    public var bounceBeta: Double {
+        switch self {
+        case .tee, .fairway: 10 * .pi / 180
+        case .apron: 11 * .pi / 180
+        case .green: 18 * .pi / 180
+        case .rough: 25 * .pi / 180 // 모든 것을 죽인다
+        case .bunker: 30 * .pi / 180
         case .water: 0
         }
     }

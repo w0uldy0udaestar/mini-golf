@@ -96,7 +96,7 @@ final class GameScene: SKScene {
     private let scoreSub = GlassLabel(font: HUDFont.regular, size: 12, alpha: 0.8, align: .right)
     private let clubTitle = GlassLabel(font: HUDFont.medium, size: 17, align: .left, kern: 1.0)
     private let clubSub = GlassLabel(font: HUDFont.regular, size: 11.5, alpha: 0.7, align: .left, kern: 1.4)
-    private let hintLabel = GlassLabel(font: HUDFont.regular, size: 11.5, alpha: 0.66, align: .right)
+    private let hintLabel = GlassLabel(font: HUDFont.regular, size: 11.5, alpha: 0.66)
     private let pauseLabel = GlassLabel(font: HUDFont.medium, size: 14)
     private let toastTitle = GlassLabel(font: HUDFont.light, size: 34, kern: 2.0)
     private let toastSub = GlassLabel(font: HUDFont.regular, size: 13, alpha: 0.8)
@@ -128,13 +128,14 @@ final class GameScene: SKScene {
         trailUnderNode.lineWidth = 2.8
         trailUnderNode.lineCap = .round
 
-        scoreTitle.position = CGPoint(x: size.width - 24, y: size.height - 46)
-        scoreSub.position = CGPoint(x: size.width - 24, y: size.height - 72)
-        clubTitle.position = CGPoint(x: 24, y: size.height - 46)
-        clubSub.position = CGPoint(x: 24, y: size.height - 72)
-        hintLabel.position = CGPoint(x: size.width - 24, y: size.height - 98)
+        // HUD는 지면 아래 스트립(0~96px 빈 띠) — 시선이 플레이 지점을 떠나지 않는다 (2026-08-14 사용자 결정)
+        scoreTitle.position = CGPoint(x: size.width - 24, y: 66)
+        scoreSub.position = CGPoint(x: size.width - 24, y: 40)
+        clubTitle.position = CGPoint(x: 24, y: 66)
+        clubSub.position = CGPoint(x: 24, y: 40)
+        hintLabel.position = CGPoint(x: size.width / 2, y: 60)
         hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료")
-        pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46)
+        pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46) // 일시정지 배너만 상단(⛳️ 버튼 곁)
         pauseLabel.setText("일시정지 — 메뉴바 ⛳️ 클릭으로 재개")
         pauseLabel.isHidden = true
         toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
@@ -201,7 +202,7 @@ final class GameScene: SKScene {
 
     private func startHole() {
         strokes = 0
-        ball = BallState(x: CourseGenerator.teeX, y: hole.ground(at: CourseGenerator.teeX))
+        ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
         trailPoints = []
         swingAnim = nil
         walkAnim = nil
@@ -275,7 +276,13 @@ final class GameScene: SKScene {
 
     private func launchBall() {
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
-        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir)
+        // 풀파워 리스크: 모든 샷에 베이스 분산(±1°) + 80% 초과분^1.6의 리스크, 정규분포 근사
+        // (uniform 3개 평균 ≈ 가우시안 — 큰 미스는 드물고 작은 흔들림이 대부분, 리서치 E)
+        let overdrive = max(0, (heightPct - 0.8) / 0.2)
+        let risk = 0.25 + 0.75 * pow(overdrive, 1.6)
+        let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
+        let mishit = club.isPutter ? 0 : risk * gauss
+        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir, mishit: mishit)
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -388,10 +395,10 @@ final class GameScene: SKScene {
             mode = .end
             let total = results.reduce(0) { $0 + ($1.strokes - $1.par) }
             let totalStr = total > 0 ? "+\(total)" : total == 0 ? "이븐 파" : "\(total)"
-            let rows = results.enumerated().map { i, r in
-                "\(i + 1)  ·  파 \(r.par)  ·  \(r.gaveUp ? "기권" : "\(r.strokes)타")  ·  \(scoreName(strokes: r.strokes, par: r.par))"
-            }
-            scorecard.show(rows: rows, title: "라운드 종료", footer: "합계 \(totalStr)  —  R로 새 라운드")
+            let footer = results.contains(where: \.gaveUp)
+                ? "합계 \(totalStr) · 흐린 숫자 = 기권  —  R로 새 라운드"
+                : "합계 \(totalStr)  —  R로 새 라운드"
+            scorecard.show(results: results, title: "라운드 종료", footer: footer)
             SoundKit.shared.chime()
         }
     }
@@ -524,7 +531,7 @@ final class GameScene: SKScene {
             p.closeSubpath()
             return p
         }())
-        flag.fillColor = NSColor(red: 0.85, green: 0.3, blue: 0.24, alpha: 1)
+        flag.fillColor = Palette.flagRed
         flag.strokeColor = .clear
         flagNode.addChild(pole)
         flagNode.addChild(flag)
@@ -852,7 +859,8 @@ final class GameScene: SKScene {
             trailUnderNode.path = nil
         }
 
-        powerLabel.setText("\(Int(heightPct * 100))")
+        // 조준 중 캐릭터 위: 클럽 약어 + 파워 (좌상단까지 시선 왕복 제거 — 2026-08-14 사용자 요청)
+        powerLabel.setText("\(club.id) · \(Int(heightPct * 100))")
         powerLabel.isHidden = mode != .aim
         powerLabel.position = CGPoint(x: px(stickX) - CGFloat(dir) * 20, y: groundY(stickX) + 112)
     }
