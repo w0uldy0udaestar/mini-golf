@@ -21,6 +21,10 @@ final class GameScene: SKScene {
     private var acc = 0.0
     private let timeScale = 2.5
     var isGamePaused = false
+    var demoMode = false // --demo: 조준에서 자동 스윙 반복 — 모션 관찰용 (디버그 전용)
+    var demoWallForce = false // --demo-wall: 매 홀을 벽 옆에서 시작 — 벽 스탠스 관찰용
+    var demoCardPreview = false // --demo-card: 스코어카드 레이아웃 즉시 표시 (디버그 전용)
+    private var demoWait = 0.0
 
     /// 연출 상태
     private struct SwingAnim { var t = 0.0; var launched = false; let prof: SwingProfile; let fromPose: Pose }
@@ -62,6 +66,7 @@ final class GameScene: SKScene {
     private var lastClub = ClubTable.all[0]
     private var headMorph = 1.0
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
+    private var renderWallT = 0.0 // 벽 스탠스 근접도 (스무딩) — 뒷발 벽 딛기 자세 블렌드
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
@@ -168,6 +173,13 @@ final class GameScene: SKScene {
 
         applyContrastMode()
         newRound()
+        if demoCardPreview { // 스코어카드 레이아웃 검증용 고정 샘플 (이글·버디·파·보기·더블·기권 포함)
+            let sample: [(par: Int, strokes: Int, gaveUp: Bool)] = [
+                (4, 4, false), (3, 2, false), (4, 5, false), (5, 3, false), (4, 4, false),
+                (3, 6, false), (4, 12, true), (5, 5, false), (4, 3, false),
+            ]
+            scorecard.show(results: sample, title: "라운드 종료", footer: "합계 +7 · 흐린 숫자 = 기권  —  R로 새 라운드")
+        }
     }
 
     /// ── 고대비 모드 (밝은 배경 opt-in) ──
@@ -203,6 +215,11 @@ final class GameScene: SKScene {
     private func startHole() {
         strokes = 0
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
+        if demoWallForce { // 벽 스탠스 관찰: 몸 뒤 공간이 ~45px 남는 대표 케이스로 시작
+            let m = 45 / Double(pxPerM)
+            let x = hole.holeX > hole.teeX ? m : hole.worldW - m
+            ball = BallState(x: x, y: hole.ground(at: x))
+        }
         trailPoints = []
         swingAnim = nil
         walkAnim = nil
@@ -230,6 +247,42 @@ final class GameScene: SKScene {
         let d = abs(hole.holeX - ball.x)
         let v0 = min(13.0, (2 * 1.1 * d + 4).squareRoot()) // 도착 속도 ~2m/s 목표
         heightPct = min(0.92, max(0.03, (v0 / 13.0 - Phys.putterMinRatio) / (1 - Phys.putterMinRatio)))
+    }
+
+    /// ── 벽 스탠스: 화면 끝 = 벽. 몸 뒤 공간이 좁으면 백스윙이 제한되고(펀치샷),
+    /// 실제 골퍼처럼 뒷발을 벽에 딛는 자세로 선다 (2026-08-14 사용자 요청 + 리서치 Q5) ──
+    private var wallBehindPx: Double {
+        dir > 0 ? Double(px(stickX)) : Double(size.width - px(stickX))
+    }
+
+    /// 백스윙 상한 — 하한 0.55: 실측(Bulbulian 2001)상 제한 백스윙도 스피드 손실이 크지 않다
+    private var wallSwingCap: Double {
+        guard !club.isPutter else { return 1 }
+        return min(1, max(0.55, (wallBehindPx - 28) / 45))
+    }
+
+    /// 벽이 스탠스 폭보다 가까우면 몸을 벽 안쪽으로 압축 — 공이 스탠스 뒤쪽(극단에선 뒷발 밑)에
+    /// 놓인다 (실제 펀치샷 기술: 볼을 스탠스 뒤에. 몸이 화면 밖으로 나가는 것도 이것으로 방지)
+    private var wallBallFwd: Double {
+        club.isPutter ? renderBallFwd : min(renderBallFwd, max(2, wallBehindPx - 10))
+    }
+
+    /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
+    /// 그립은 초크다운. t: 벽 근접도 0~1 (renderWallT로 스무딩되어 들어온다)
+    private func applyWallStance(_ rig: inout Rig, t: Double) {
+        guard t > 0.001 else { return }
+        let wallX = -wallBehindPx // 로컬(공 원점, facing 기준) 벽 위치
+        rig.foot1 = CGPoint(
+            x: mix(rig.foot1.x, wallX + 1.5, t),
+            y: mix(rig.foot1.y, 7 + 9 * t, t)
+        )
+        rig.knee1 = CGPoint(
+            x: (rig.hip.x + rig.foot1.x) / 2 + 2,
+            y: (rig.hip.y + rig.foot1.y) / 2 + 4
+        )
+        rig.hip.x += 4 * t // 체중 앞발 (펀치 자세 — 리서치: 체중 65% 앞발)
+        rig.shoulder.x += 3 * t
+        rig.clubLen *= 1 - 0.10 * t // 초크다운
     }
 
     private func startWalk() {
@@ -282,7 +335,9 @@ final class GameScene: SKScene {
         let risk = 0.25 + 0.75 * pow(overdrive, 1.6)
         let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
         let mishit = club.isPutter ? 0 : risk * gauss
-        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir, mishit: mishit)
+        // 벽 제한 = 펀치샷: 파워는 남기고 낮은 탄도·적은 스핀으로 (장르 관행)
+        let punch = club.isPutter ? 0 : max(0, 1 - wallSwingCap)
+        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir, mishit: mishit, punch: punch)
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -576,6 +631,25 @@ final class GameScene: SKScene {
         lastTime = currentTime
         guard !isGamePaused else { return }
 
+        if demoMode { // 자동 플레이: 조준 1.2s 후 스윙, 라운드 끝나면 새 라운드
+            if mode == .aim {
+                demoWait += dt
+                if demoWait > 1.2 {
+                    demoWait = 0
+                    heightPct = min(Double.random(in: 0.5 ... 0.85), wallSwingCap)
+                    startSwing()
+                }
+            } else if mode == .end {
+                demoWait += dt
+                if demoWait > 3 {
+                    demoWait = 0
+                    newRound()
+                }
+            } else {
+                demoWait = 0
+            }
+        }
+
         if mode == .aim {
             let rate = club.isPutter ? 0.4 : 0.85
             if heldKeys.contains(126) {
@@ -584,6 +658,7 @@ final class GameScene: SKScene {
             if heldKeys.contains(125) {
                 heightPct = max(0, heightPct - rate * dt)
             }
+            heightPct = min(heightPct, wallSwingCap) // 벽 뒤 공간만큼만 백스윙 (펀치샷)
         }
 
         if var anim = swingAnim {
@@ -725,13 +800,18 @@ final class GameScene: SKScene {
         if mode == .aim {
             aimTime += dt
         }
+        // 벽 근접도 (0~1) — 조준·스윙 중에만 켜지고, 스무딩으로 자세가 툭 바뀌지 않는다
+        let wallTarget = (mode == .aim || swingAnim != nil) && !club.isPutter
+            ? smoothstep(min(1, max(0, (80 - wallBehindPx) / 36)))
+            : 0
+        renderWallT += (wallTarget - renderWallT) * (1 - exp(-6 * dt))
         var targetRig: Rig
         let rigRate: Double
         var rigClubRate: Double? = nil // 팔로스루 오버랩 — 클럽만 느린 추적
         if let anim = swingAnim {
             targetRig = RigBuilder.fromPose(
                 swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
-                ballFwd: renderBallFwd, clubLen: renderLen
+                ballFwd: wallBallFwd, clubLen: renderLen
             )
             // 다운스윙은 초고속 추적(220) — 스무딩 지연(≈31°)이 '클럽이 공에 닿는 프레임'을
             // 지우고 있었다 (리서치 P1). 임팩트 후는 45로 복귀 (그 시점 오차 ≈1°라 킥 없음)
@@ -739,6 +819,11 @@ final class GameScene: SKScene {
             if anim.t >= anim.prof.down { // 팔로스루: 클럽만 늦게 멈추는 오버랩 (리서치 P6)
                 rigClubRate = 22
             }
+            // 임팩트까지는 벽 스탠스 유지, 팔로스루에서 0.25s에 걸쳐 발을 내린다
+            let wallSwingT = anim.t < anim.prof.down
+                ? renderWallT
+                : renderWallT * max(0, 1 - (anim.t - anim.prof.down) / 0.25)
+            applyWallStance(&targetRig, t: wallSwingT)
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
@@ -808,8 +893,9 @@ final class GameScene: SKScene {
         } else if mode == .aim {
             targetRig = RigBuilder.fromPose(
                 backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
-                ballFwd: renderBallFwd, clubLen: renderLen
+                ballFwd: wallBallFwd, clubLen: renderLen
             )
+            applyWallStance(&targetRig, t: renderWallT)
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
@@ -862,6 +948,9 @@ final class GameScene: SKScene {
         // 조준 중 캐릭터 위: 클럽 약어 + 파워 (좌상단까지 시선 왕복 제거 — 2026-08-14 사용자 요청)
         powerLabel.setText("\(club.id) · \(Int(heightPct * 100))")
         powerLabel.isHidden = mode != .aim
-        powerLabel.position = CGPoint(x: px(stickX) - CGFloat(dir) * 20, y: groundY(stickX) + 112)
+        powerLabel.position = CGPoint(
+            x: min(size.width - 54, max(54, px(stickX) - CGFloat(dir) * 20)), // 벽 옆에서도 잘리지 않게
+            y: groundY(stickX) + 112
+        )
     }
 }

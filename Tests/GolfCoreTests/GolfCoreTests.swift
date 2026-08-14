@@ -296,6 +296,25 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(drive.vx, 5, "저스핀 드라이브가 전진하지 않음")
     }
 
+    // ── 펀치샷 (벽 백스윙 제한) ──
+
+    func testPunchLowersTrajectoryAndSpin() {
+        let c = club("7I")
+        var normal = BallState(x: 0, y: 0)
+        var punch = BallState(x: 0, y: 0)
+        Ballistics.launch(&normal, club: c, heightPct: 0.55, lie: .fairway, dir: 1)
+        Ballistics.launch(&punch, club: c, heightPct: 0.55, lie: .fairway, dir: 1, punch: 1)
+        XCTAssertLessThan(
+            atan2(punch.vy, punch.vx), atan2(normal.vy, normal.vx) - 0.1,
+            "펀치샷 탄도가 낮아지지 않음"
+        )
+        XCTAssertEqual(punch.spin / normal.spin, 0.6, accuracy: 0.001, "펀치샷 스핀 -40% 불일치")
+        XCTAssertEqual(
+            hypot(punch.vx, punch.vy), hypot(normal.vx, normal.vy), accuracy: 0.001,
+            "펀치샷은 파워를 잃지 않아야 함"
+        )
+    }
+
     // ── 미스샷 (풀파워 리스크) ──
 
     func testMishitReducesPowerSpinAndLiftsLaunchAngle() {

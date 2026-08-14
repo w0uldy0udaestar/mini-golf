@@ -87,7 +87,8 @@ final class ScorecardNode: SKNode {
 
     override init() {
         super.init()
-        scrim.fillColor = NSColor(white: 0, alpha: 0.32)
+        // 0.45: 표 형식은 텍스트 밀도가 높아 배경 비침에 취약 — 구 텍스트 컬럼(0.32)보다 진하게
+        scrim.fillColor = NSColor(white: 0, alpha: 0.45)
         scrim.strokeColor = .clear
         addChild(scrim)
     }
