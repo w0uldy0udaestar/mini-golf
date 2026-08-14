@@ -28,11 +28,10 @@ final class GameScene: SKScene {
         let fromX, toX, dur: Double
         var t = 0.0
         let relax = 0.8 // 피니시 여운 — 서두르지 않는다
-        var phase = -0.6
         var vPx = 0.0
-        // 랜덤 잉여 동작 (생명감): 트월 시작 시각 / 어깨 캐리 구간 (walk 시작 기준 초)
-        var twirlAt: Double?
+        // 랜덤 잉여 동작 (생명감): 어깨 캐리 구간 + 짧은 모션 이벤트들 (walk 시작 기준 초)
         var shoulderRange: ClosedRange<Double>?
+        var flavorEvents: [WalkFlavorEvent] = []
     }
 
     private var swingAnim: SwingAnim?
@@ -227,11 +226,33 @@ final class GameScene: SKScene {
         }
         // 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
         var anim = WalkAnim(fromX: from, toX: to, dur: min(9.0, max(0.9, dist / 16)))
-        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리, 아니면 가끔 클럽 트월 (동시엔 안 한다)
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 짧은 모션들을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
-        } else if anim.dur > 2.5, Double.random(in: 0 ..< 1) < 0.55 {
-            anim.twirlAt = anim.relax + Double.random(in: 0.6 ... max(0.7, anim.dur * 0.55))
+        }
+        var t = anim.relax + 0.7
+        while t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 3 {
+            guard Double.random(in: 0 ..< 1) < 0.45 else {
+                t += 1.2
+                continue
+            }
+            let kind: WalkFlavorKind = [.twirl, .twirl, .lookBack, .hatTouch, .skip, .twirlDouble]
+                .randomElement()!
+            let dur = switch kind {
+            case .twirl: 1.0
+            case .twirlDouble: 1.5
+            case .lookBack: 1.3
+            case .hatTouch: 1.1
+            case .skip: 0.7
+            }
+            // 어깨에 클럽을 걸친 동안엔 트월 불가 (클럽이 손에 없다)
+            let isTwirl = kind == .twirl || kind == .twirlDouble
+            if isTwirl, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
+                t += 1.0
+                continue
+            }
+            anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
+            t += dur + Double.random(in: 0.8 ... 2.0)
         }
         walkAnim = anim
         updateHUD()
@@ -562,7 +583,6 @@ final class GameScene: SKScene {
                 stickX = w.fromX + (w.toX - w.fromX) * smoothstep(u)
                 let vInst = abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
                 w.vPx = vInst * Double(pxPerM)
-                w.phase += w.vPx / 16 * dt
                 walkAnim = w
                 if u >= 1 {
                     enterAim()
@@ -670,14 +690,39 @@ final class GameScene: SKScene {
                 let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
                 flavor.shoulder = smoothstep(min(up, down))
             }
-            if let ta = w.twirlAt, w.t >= ta { // 완료 후에도 1 유지 (+2π 고정 — 되감기 없음)
-                flavor.twirl = smoothstep(min(1, (w.t - ta) / 1.0))
+            for e in w.flavorEvents {
+                let u = (w.t - e.t0) / e.dur
+                guard u > 0 else { continue }
+                switch e.kind {
+                case .twirl: // 완료 후에도 누적각 유지 — 되감기 없음
+                    flavor.twirlAngle += 2 * .pi * smoothstep(min(1, u))
+                case .twirlDouble:
+                    flavor.twirlAngle += 4 * .pi * smoothstep(min(1, u))
+                case .lookBack, .hatTouch, .skip:
+                    guard u < 1 else { continue }
+                    let bell = smoothstep(min(1, min(u, 1 - u) / 0.3))
+                    if e.kind == .lookBack {
+                        flavor.lookBack = max(flavor.lookBack, bell)
+                    }
+                    if e.kind == .hatTouch {
+                        flavor.hatTouch = max(flavor.hatTouch, bell)
+                    }
+                    if e.kind == .skip {
+                        flavor.skip = max(flavor.skip, bell)
+                    }
+                }
             }
-            targetRig = RigBuilder.walking(phase: w.phase, vPx: w.vPx, clubLen: renderLen, flavor: flavor) { dx in
+            // 발 디딤은 걸은 거리에서 유도 — 출발·도착에선 발이 모인다
+            let dPx = abs(stickX - w.fromX) * Double(pxPerM)
+            let totalPx = abs(w.toX - w.fromX) * Double(pxPerM)
+            let gather = max(0, min(1, min(dPx / 40, (totalPx - dPx) / 40)))
+            targetRig = RigBuilder.walking(
+                traveled: dPx, gather: gather, vPx: w.vPx, clubLen: renderLen, flavor: flavor
+            ) { dx in
                 let xm = self.stickX + dx / Double(self.pxPerM)
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
-            rigRate = 14 // 걸음은 또렷하게 — 진입·이탈은 보폭 램프가 받쳐준다
+            rigRate = 20 // 발 디딤이 뭉개지지 않게 또렷이 추적 — 진입·이탈은 gather가 받쳐준다
         } else if mode == .aim {
             targetRig = RigBuilder.fromPose(
                 backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),

@@ -15,10 +15,23 @@ extension Club {
     }
 }
 
-/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감 (twirl: 트월 진행 0→1 후 1 유지, shoulder: 어깨 캐리 블렌드)
+/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감. 전부 0~1 블렌드(또는 누적 각)라 겹쳐도 안전
 struct WalkFlavor {
-    var twirl: Double?
-    var shoulder = 0.0
+    var twirlAngle = 0.0 // 클럽 트월 누적 회전(rad) — 완료 후에도 유지 (되감기 없음)
+    var shoulder = 0.0 // 어깨 캐리
+    var lookBack = 0.0 // 뒤돌아보기 (머리만)
+    var hatTouch = 0.0 // 모자 만지기 (자유 팔이 머리로)
+    var skip = 0.0 // 폴짝 스킵 (발 들기·바운스 부스트)
+}
+
+enum WalkFlavorKind {
+    case twirl, twirlDouble, lookBack, hatTouch, skip
+}
+
+struct WalkFlavorEvent {
+    let kind: WalkFlavorKind
+    let t0: Double
+    let dur: Double
 }
 
 private func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {
@@ -90,35 +103,54 @@ enum RigBuilder {
         return r
     }
 
-    /// 걷기 — 같은 Rig 공간. groundDelta: 로컬 x(px) → 그 지점 지면의 로컬 y(px)
+    /// 걷기 — 같은 Rig 공간, 거리 기반 발 디딤.
+    /// 발은 지면 위 한 점을 밟고(traveled에서 유도 — 미끄러짐이 구조적으로 0), 몸이 그 위를 지나간다.
+    /// traveled: 걸은 거리(px, 진행 방향 누적) · gather: 출발·도착에서 발이 모이는 계수(0~1)
     static func walking(
-        phase: Double,
+        traveled: Double,
+        gather: Double,
         vPx: Double,
         clubLen: Double,
         flavor: WalkFlavor,
         groundDelta: (Double) -> Double
     ) -> Rig {
-        let s1 = sin(phase)
-        let c1 = cos(phase)
         let vAmp = min(1, vPx / 30)
-        let bob = 1.6 * vAmp * abs(c1)
-        let stride = 16.0 * (0.2 + 0.8 * vAmp) // 보폭 ∝ 속도 — 출발·도착 때 발이 모인다
+        let stepL = 22.0 // 한 걸음(px) — 발이 이 간격으로 지면을 짚는다
+        let duty = 0.62 // 접지 구간 비율 (나머지는 스윙)
+        let centerOff = duty * stepL // 발 궤적을 힙 아래 중심으로
+
+        /// 발 i(0/1)의 로컬 x·들림 — traveled만의 함수라 속도 프로파일과 무관하게 노슬립
+        func foot(_ i: Double) -> (x: Double, lift: Double) {
+            let s = (traveled - i * stepL) / (2 * stepL)
+            let k = s.rounded(.down)
+            let f = s - k
+            let plant = k * 2 * stepL + i * stepL // 이 사이클의 접지점 (지면 고정)
+            if f < duty {
+                return ((plant - traveled + centerOff) * gather, 0)
+            }
+            let sw = (f - duty) / (1 - duty)
+            let x = (plant + smoothstep(sw) * 2 * stepL - traveled + centerOff) * gather
+            return (x, sin(.pi * sw) * (3 + 5 * vAmp + 6 * flavor.skip) * gather)
+        }
+        let f1 = foot(0)
+        let f2 = foot(1)
+
+        let bodyPhase = .pi * traveled / stepL
+        let bob = (1.6 * vAmp + 2.5 * flavor.skip) * abs(sin(bodyPhase)) * gather
 
         var r = Rig()
         r.hip = CGPoint(x: 0, y: 43.5 + bob)
         r.shoulder = CGPoint(x: 2 + 2.5 * vAmp, y: 67 + bob)
-        r.headDx = 4
-        let f1x = stride * s1
-        let f2x = -stride * s1
-        r.foot1 = CGPoint(x: f1x, y: groundDelta(f1x) + 7 * vAmp * max(0, c1))
-        r.foot2 = CGPoint(x: f2x, y: groundDelta(f2x) + 7 * vAmp * max(0, -c1))
+        r.headDx = mix(4, -7, flavor.lookBack) // 뒤돌아보기
+        r.foot1 = CGPoint(x: f1.x, y: groundDelta(f1.x) + f1.lift)
+        r.foot2 = CGPoint(x: f2.x, y: groundDelta(f2.x) + f2.lift)
         r.knee1 = CGPoint(
-            x: (r.hip.x + f1x) / 2 + 3,
-            y: (r.hip.y + r.foot1.y) / 2 + 3 + 6 * vAmp * max(0, c1)
+            x: (r.hip.x + f1.x) / 2 + 3,
+            y: (r.hip.y + r.foot1.y) / 2 + 3 + f1.lift * 0.5
         )
         r.knee2 = CGPoint(
-            x: (r.hip.x + f2x) / 2 + 3,
-            y: (r.hip.y + r.foot2.y) / 2 + 3 + 6 * vAmp * max(0, -c1)
+            x: (r.hip.x + f2.x) / 2 + 3,
+            y: (r.hip.y + r.foot2.y) / 2 + 3 + f2.lift * 0.5
         )
 
         // 클럽 캐리: 기본은 옆에, 어깨 캐리 블렌드 시 어깨 위로
@@ -131,14 +163,14 @@ enum RigBuilder {
             grip = mix(grip, sGrip, flavor.shoulder)
             tip = mix(tip, sTip, flavor.shoulder)
         }
-        var phi = atan2(tip.x - grip.x, grip.y - tip.y)
-        if let tw = flavor.twirl { // 손목 트월 — 완료 후에도 +2π를 유지해 되감기 없음
-            phi += tw * 2 * .pi
-        }
         r.grip = grip
-        r.clubPhi = phi
+        r.clubPhi = atan2(tip.x - grip.x, grip.y - tip.y) + flavor.twirlAngle
         r.clubLen = clubLen
-        r.handTrail = CGPoint(x: 5 - 8 * s1 * vAmp, y: 47 + bob) // 자유 팔 (다리 반대 위상)
+
+        // 자유 팔: 다리 반대 위상 스윙, 모자 만지기 블렌드 시 머리로
+        let free = CGPoint(x: 5 - 8 * sin(bodyPhase) * vAmp * gather, y: 47 + bob)
+        let hat = CGPoint(x: r.shoulder.x + r.headDx + 3, y: r.shoulder.y + 9)
+        r.handTrail = mix(free, hat, flavor.hatTouch)
         return r
     }
 }
@@ -246,14 +278,13 @@ final class StickmanNode: SKNode {
         bodyShape.path = body
         bodyRim.path = body
 
-        // 트레일 암 — 살짝 뒤 어깨에서, 팔꿈치는 몸쪽으로 굽는다
+        // 트레일 암 — 같은 어깨 관절에서 시작 (옅은 톤과 팔꿈치 굽음으로만 구분)
         let hTrail = m(r.handTrail)
-        let tShoulder = CGPoint(x: shoulder.x - dir * 3, y: shoulder.y + 2)
         let trail = CGMutablePath()
-        trail.move(to: tShoulder)
+        trail.move(to: shoulder)
         trail.addQuadCurve(
             to: hTrail,
-            control: CGPoint(x: (tShoulder.x + hTrail.x) / 2 + dir * 1.5, y: (tShoulder.y + hTrail.y) / 2 - 1.5)
+            control: CGPoint(x: (shoulder.x + hTrail.x) / 2 + dir * 1.0, y: (shoulder.y + hTrail.y) / 2 - 2)
         )
         trailArmShape.path = trail
         trailArmRim.path = trail
