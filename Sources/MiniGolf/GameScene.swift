@@ -62,7 +62,6 @@ final class GameScene: SKScene {
     private var lastClub = ClubTable.all[0]
     private var headMorph = 1.0
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
-    private var hitstopLeft = 0.0 // 임팩트 히트스톱 잔여 (33~67ms, 파워 비례 — 리서치 P4)
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
@@ -278,8 +277,9 @@ final class GameScene: SKScene {
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
         Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir)
         strokes += 1
-        if !club.isPutter { // 임팩트 타격감: 미세 히트스톱 + 공 신장 + 헤드 스미어 (퍼터는 조용히)
-            hitstopLeft = 0.033 + 0.034 * heightPct
+        if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
+            // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
+            // 골프처럼 한 번의 연속 동작에선 정지가 타격감이 아니라 프레임 드랍으로 보인다)
             ballNode.zRotation = CGFloat(atan2(ball.vy, ball.vx))
             ballNode.xScale = 1.4
             ballNode.yScale = 0.72
@@ -568,13 +568,6 @@ final class GameScene: SKScene {
         let dt = lastTime == 0 ? 0 : min(currentTime - lastTime, 0.1)
         lastTime = currentTime
         guard !isGamePaused else { return }
-
-        if hitstopLeft > 0 { // 임팩트 히트스톱 — 전부 정지, 스틱맨만 1px 미세 진동 (Sakurai 관행)
-            hitstopLeft -= dt
-            let jitter: CGFloat = sin(currentTime * 180) > 0 ? 0.9 : -0.9
-            stickman.position = CGPoint(x: px(stickX) + jitter, y: groundY(stickX))
-            return
-        }
 
         if mode == .aim {
             let rate = club.isPutter ? 0.4 : 0.85
