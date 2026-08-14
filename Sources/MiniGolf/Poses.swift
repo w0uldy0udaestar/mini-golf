@@ -25,6 +25,12 @@ struct Pose {
             headDx: a.headDx + (b.headDx - a.headDx) * u
         )
     }
+
+    /// 지수 감쇠 추적 — 포즈 스무딩 레이어 (모든 상태 전환이 자동으로 부드러워짐)
+    mutating func chase(_ target: Pose, rate: Double, dt: Double) {
+        let k = 1 - exp(-rate * dt)
+        self = Pose.lerp(self, target, k)
+    }
 }
 
 /// P-System 키프레임 (docs/research-swing-pose.md)
@@ -76,11 +82,6 @@ enum SwingTiming {
 
 func smoothstep(_ u: Double) -> Double {
     u * u * (3 - 2 * u)
-}
-
-/// 최소 저크 궤적 (Flash & Hogan 1985) — 양 끝에서 속도·가속도 모두 0
-func smootherstep(_ u: Double) -> Double {
-    u * u * u * (u * (u * 6 - 15) + 10)
 }
 
 /// 백스윙 궤적: ↑↓ 입력이 어드레스→테이크어웨이→톱 경로 위의 몸 전체 포즈를 움직인다

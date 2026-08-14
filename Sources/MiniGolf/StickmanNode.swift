@@ -101,24 +101,6 @@ struct Rig {
     var clubPhi = 0.2 // 샤프트 절대각 (0 = 수직 아래, + = 타겟 쪽)
     var clubLen = 31.0
 
-    /// 리그 보간 — 모드 전환 크로스페이드용 (clubPhi는 최단 각도 경로)
-    static func lerp(_ a: Rig, _ b: Rig, _ u: Double) -> Rig {
-        var r = a
-        r.hip = mix(a.hip, b.hip, u)
-        r.shoulder = mix(a.shoulder, b.shoulder, u)
-        r.headDx = mix(a.headDx, b.headDx, u)
-        r.headDy = mix(a.headDy, b.headDy, u)
-        r.foot1 = mix(a.foot1, b.foot1, u)
-        r.foot2 = mix(a.foot2, b.foot2, u)
-        r.knee1 = mix(a.knee1, b.knee1, u)
-        r.knee2 = mix(a.knee2, b.knee2, u)
-        r.grip = mix(a.grip, b.grip, u)
-        r.handTrail = mix(a.handTrail, b.handTrail, u)
-        r.clubLen = mix(a.clubLen, b.clubLen, u)
-        r.clubPhi = a.clubPhi + (b.clubPhi - a.clubPhi).remainder(dividingBy: 2 * .pi) * u
-        return r
-    }
-
     /// 지수 감쇠 추적 — clubPhi는 최단 각도 경로로 (트월 한 바퀴 후 되감기 방지)
     /// footRate: 걷기 중 발·무릎만 고속 추적 — 접지점이 스무딩에 밀리면 미끄러져 보인다
     /// clubRate: 팔로스루에서 클럽만 느리게 — 몸이 멈춘 뒤 클럽이 늦게 멈추는 오버랩
