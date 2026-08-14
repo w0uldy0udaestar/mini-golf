@@ -175,6 +175,9 @@ final class GameScene: SKScene {
         trailPoints = []
         swingAnim = nil
         walkAnim = nil
+        ballNode.removeAllActions() // 홀인 드롭 연출 복구
+        ballNode.alpha = 1
+        ballNode.setScale(1)
         rebuildTerrain()
         enterAim()
     }
@@ -263,10 +266,30 @@ final class GameScene: SKScene {
         results.append((hole.par, strokes, false))
         endShotTrail()
         SoundKit.shared.holeIn()
-        FX.holePop(on: self, at: CGPoint(x: px(hole.holeX), y: groundY(hole.holeX)))
-        FX.flagWave(flagNode)
+        dropBallIntoCup()
         toast(scoreName(strokes: strokes, par: hole.par), sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m")
         run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
+    }
+
+    /// 공이 컵 속으로 굴러떨어지는 연출 — 렌더 루프는 .holed 동안 공 위치를 덮지 않는다
+    private func dropBallIntoCup() {
+        let cup = CGPoint(x: px(hole.holeX), y: groundY(hole.holeX))
+        shadowNode.isHidden = true
+        ballNode.removeAllActions()
+        let slide = SKAction.move(to: CGPoint(x: cup.x, y: cup.y + 4), duration: 0.1)
+        let sink = SKAction.move(to: CGPoint(x: cup.x, y: cup.y - 6), duration: 0.14)
+        sink.timingMode = .easeIn
+        ballNode.run(.sequence([
+            slide,
+            .group([sink, .scale(to: 0.72, duration: 0.14)]),
+            .fadeOut(withDuration: 0.1), // 컵 안 어둠 속으로
+        ]))
+        // 공이 바닥에 닿은 뒤에야 점이 튀고 깃발이 흔들린다
+        run(.sequence([.wait(forDuration: 0.24), .run { [weak self] in
+            guard let self else { return }
+            FX.holePop(on: self, at: cup)
+            FX.flagWave(flagNode)
+        }]))
     }
 
     private func onWater() {
@@ -605,18 +628,20 @@ final class GameScene: SKScene {
         // 렌더 반영
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
         if mode == .walking, let w = walkAnim, w.t >= w.relax {
-            stickman.updateWalking(phase: w.phase, vPx: w.vPx, dir: dir, clubCat: club.cat) { dxPx in
+            stickman.updateWalking(phase: w.phase, vPx: w.vPx, dir: dir, club: club) { dxPx in
                 let xm = self.stickX + Double(dxPx / self.pxPerM)
                 return self.groundY(xm) - self.groundY(self.stickX)
             }
         } else {
-            stickman.update(pose: renderPose, dir: dir, ballFwd: renderBf, clubCat: club.cat)
+            stickman.update(pose: renderPose, dir: dir, ballFwd: renderBf, club: club)
         }
 
-        ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
-        let heightAbove = ball.y - hole.ground(at: ball.x)
-        shadowNode.isHidden = heightAbove <= 0.2
-        shadowNode.position = CGPoint(x: px(ball.x), y: groundY(ball.x) - 1)
+        if mode != .holed { // 홀인 드롭 연출 중에는 SKAction이 공 위치를 갖는다
+            ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
+            let heightAbove = ball.y - hole.ground(at: ball.x)
+            shadowNode.isHidden = heightAbove <= 0.2
+            shadowNode.position = CGPoint(x: px(ball.x), y: groundY(ball.x) - 1)
+        }
 
         if trailPoints.count > 1 {
             let path = CGMutablePath()

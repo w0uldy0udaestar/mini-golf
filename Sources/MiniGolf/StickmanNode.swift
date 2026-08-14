@@ -1,6 +1,25 @@
 import GolfCore
 import SpriteKit
 
+/// 클럽별 렌더 속성 — 클럽만 보고도 무엇을 들었는지 알 수 있게 (물리와 무관, 연출 전용)
+private extension Club {
+    /// 렌더 길이(px): 드라이버가 가장 길고 퍼터가 가장 짧다
+    var renderLength: Double {
+        switch id {
+        case "DR": 38
+        case "3W": 36.5
+        case "5W": 35
+        case "PT": 26.5
+        default: 34 - (loft - 21) * 6 / 35 // 아이언·웨지: 로프트가 클수록 짧게 (3I 34 → SW 28)
+        }
+    }
+
+    /// 페이스 기울기(rad): 로프트만큼 블레이드가 젖혀져 보인다
+    var faceTilt: Double {
+        loft * 0.9 * .pi / 180
+    }
+}
+
 /// 스틱맨 렌더 리그 — 로컬 좌표 (0,0) = 공이 놓인 지면 지점, y는 위쪽
 /// 굵고 둥근 획의 회색 스틱맨 (포인트 컬러는 깃발 하나뿐이라는 디자인 원칙)
 final class StickmanNode: SKNode {
@@ -63,7 +82,7 @@ final class StickmanNode: SKNode {
     }
 
     /// 포즈 리그 (조준·스윙·피니시)
-    func update(pose p: Pose, dir: Double, ballFwd: Double, clubCat: ClubCategory) {
+    func update(pose p: Pose, dir: Double, ballFwd: Double, club: Club) {
         let px = -dir * ballFwd // 스탠스 중심 (공 = 원점)
         let hip = CGPoint(x: px + dir * (p.hipDx - 5), y: 42)
         let shoulder = CGPoint(x: hip.x + dir * (6 + 0.5 * p.tilt), y: 66)
@@ -71,7 +90,7 @@ final class StickmanNode: SKNode {
         let aH = p.handA * .pi / 180
         let aC = p.clubA * .pi / 180
         let hands = CGPoint(x: shoulder.x + sin(aH) * p.handD * dir, y: shoulder.y - cos(aH) * p.handD)
-        let clubLen = 31.0
+        let clubLen = club.renderLength
         let tip = CGPoint(x: hands.x + sin(aC) * clubLen * dir, y: hands.y - cos(aC) * clubLen)
 
         headShape.position = head
@@ -112,8 +131,8 @@ final class StickmanNode: SKNode {
         shaftShape.path = shaft
         shaftRim.path = shaft
 
-        clubHeadShape.path = clubHeadPath(cat: clubCat, tip: tip, phi: aC, dir: dir)
-        clubHeadShape.lineWidth = clubCat == .putter ? 6 : (clubCat == .wedge ? 5 : 4)
+        clubHeadShape.path = clubHeadPath(club: club, tip: tip, phi: aC, dir: dir)
+        clubHeadShape.lineWidth = club.cat == .putter ? 5 : (club.cat == .wedge ? 5 : 4)
         clubHeadRim.path = clubHeadShape.path
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
@@ -123,7 +142,7 @@ final class StickmanNode: SKNode {
         phase: Double,
         vPx: Double,
         dir: Double,
-        clubCat: ClubCategory,
+        club: Club,
         groundDelta: (CGFloat) -> CGFloat
     ) {
         let s1 = sin(phase)
@@ -175,45 +194,52 @@ final class StickmanNode: SKNode {
         bodyShape.path = body
         bodyRim.path = body
 
-        // 클럽: 뒤로 비스듬히 든 채 이동
-        let tip = CGPoint(x: grip.x - dir * 16, y: 13 + bob)
+        // 클럽: 뒤로 비스듬히 든 채 이동 (길이는 클럽별)
+        let s = club.renderLength / 31
+        let tip = CGPoint(x: grip.x - dir * 16 * s, y: grip.y - 38 * s)
         let shaft = CGMutablePath()
         shaft.move(to: grip)
         shaft.addLine(to: tip)
         shaftShape.path = shaft
         shaftRim.path = shaft
         let carryPhi = atan2((tip.x - grip.x) * dir, grip.y - tip.y)
-        clubHeadShape.path = clubHeadPath(cat: clubCat, tip: tip, phi: carryPhi, dir: dir)
+        clubHeadShape.path = clubHeadPath(club: club, tip: tip, phi: carryPhi, dir: dir)
         clubHeadRim.path = clubHeadShape.path
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
 
-    /// 클럽 헤드 디자인 — 숫자 대신 생김새로 클럽을 구분한다
-    private func clubHeadPath(cat: ClubCategory, tip: CGPoint, phi: Double, dir: Double) -> CGPath {
+    /// 클럽 헤드 디자인 — 숫자 대신 생김새로 클럽을 구분한다 (심플·둥근 획)
+    /// 우드: 로프트가 작을수록 큰 둥근 헤드 / 아이언·웨지: 로프트만큼 젖혀진 블레이드 / 퍼터: 블록+점
+    private func clubHeadPath(club: Club, tip: CGPoint, phi: Double, dir: Double) -> CGPath {
         // 샤프트 방향(along)·타격 방향(perp), SpriteKit y-up 기준
         let along = CGVector(dx: sin(phi) * dir, dy: -cos(phi))
         let perp = CGVector(dx: cos(phi) * dir, dy: sin(phi))
         let p = CGMutablePath()
-        switch cat {
-        case .wood: // 크고 둥근 덩어리 헤드
+        switch club.cat {
+        case .wood: // 둥근 덩어리 헤드 — 드라이버가 가장 크다
+            let w = 16 - (club.loft - 10.5) * 0.45 // DR 16 · 3W 14 · 5W 12.6
+            let h = w * 0.68
             let c = CGPoint(x: tip.x + perp.dx * 4, y: tip.y + perp.dy * 4)
             var transform = CGAffineTransform(translationX: c.x, y: c.y)
                 .rotated(by: atan2(perp.dy, perp.dx))
             if let ellipse = CGPath(
-                ellipseIn: CGRect(x: -7.5, y: -5, width: 15, height: 10),
+                ellipseIn: CGRect(x: -w / 2, y: -h / 2, width: w, height: h),
                 transform: &transform
             ) as CGPath? {
                 p.addPath(ellipse)
             }
-        case .iron: // 얇은 블레이드
+        case .iron, .wedge: // 블레이드 — 로프트만큼 페이스가 젖혀진다 (9I가 7I보다 열려 보임)
+            let len = club.cat == .wedge ? 10.5 : 9.0
+            let lo = club.faceTilt
+            let bx = (perp.dx * cos(lo) - along.dx * sin(lo)) * len
+            let by = (perp.dy * cos(lo) - along.dy * sin(lo)) * len
             p.move(to: tip)
-            p.addLine(to: CGPoint(x: tip.x + perp.dx * 9 + along.dx * 3, y: tip.y + perp.dy * 9 + along.dy * 3))
-        case .wedge: // 넓고 젖혀진 블레이드
-            p.move(to: tip)
-            p.addLine(to: CGPoint(x: tip.x + perp.dx * 10 - along.dx * 5, y: tip.y + perp.dy * 10 - along.dy * 5))
-        case .putter: // 납작한 블록
+            p.addLine(to: CGPoint(x: tip.x + bx, y: tip.y + by))
+        case .putter: // 납작한 블록 + 얼라인먼트 점 하나
             p.move(to: CGPoint(x: tip.x - perp.dx * 3, y: tip.y - perp.dy * 3))
             p.addLine(to: CGPoint(x: tip.x + perp.dx * 7, y: tip.y + perp.dy * 7))
+            let mark = CGPoint(x: tip.x + perp.dx * 2 - along.dx * 5, y: tip.y + perp.dy * 2 - along.dy * 5)
+            p.addEllipse(in: CGRect(x: mark.x - 0.9, y: mark.y - 0.9, width: 1.8, height: 1.8))
         }
         return p
     }
