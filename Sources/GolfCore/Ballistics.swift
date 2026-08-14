@@ -69,8 +69,9 @@ public enum StepEvent: Sendable, Equatable {
 
 public enum Ballistics {
     /// 샷 발사: 클럽·백스윙 높이·라이를 반영해 공 상태를 설정
-    /// slope: 공이 놓인 지면 경사(dy/dx) — 오르막 라이는 발사각을 올린다 (진행 방향 기준)
-    /// mishit: 미스샷 정도 [-1, 1] — 풀파워 리스크. 발사각 ±4°, 파워 -12%, 스핀 -30%까지
+    /// slope: 유효 경사(dy/dx, 호출측에서 스탠스 기울기 비율 적용) — 오르막 라이는 발사각을 올린다
+    /// mishit: 미스샷 정도 [-1, 1] — 발사각 ±4°, 파워 -12%, 스핀 -30%까지
+    /// punch: 펀치샷 정도 [0, 1] — 로프트 -8°·스핀 -40% (벽 등 제한 상황의 낮은 탈출샷)
     public static func launch(
         _ b: inout BallState,
         club: Club,
@@ -78,15 +79,23 @@ public enum Ballistics {
         lie: Surface,
         dir: Double,
         slope: Double = 0,
-        mishit: Double = 0
+        mishit: Double = 0,
+        punch: Double = 0
     ) {
-        // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
+        // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 풀스윙은 실측 야디지 곡선(h^0.85 — 부분 스윙이 덜 죽는다)
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
-        let v0 = club.power * lie.powerFactor * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
-        let loft = max(0.02, club.loft * .pi / 180 + atan(slope * dir) + mishit * 4 * .pi / 180)
+        let h = club.isPutter ? heightPct : pow(heightPct, 0.85)
+        var v0 = club.power * lie.powerFactor * (minR + (1 - minR) * h) * (1 - abs(mishit) * 0.12)
+        let slopeDeg = abs(atan(slope)) * 180 / .pi
+        v0 *= 1 - min(0.12, 0.006 * slopeDeg) // 경사 라이 스피드 손실 (~0.6%/도, 실측)
+        let loft = max(
+            0.02,
+            club.loft * .pi / 180 + atan(slope * dir) + mishit * 4 * .pi / 180 - punch * 8 * .pi / 180
+        )
         b.vx = dir * v0 * cos(loft)
         b.vy = club.isPutter ? 0 : v0 * sin(loft)
-        b.spin = club.spin * lie.spinFactor * (0.6 + 0.4 * heightPct) * (1 - abs(mishit) * 0.3)
+        b.spin = club.spin * lie.spinFactor * (0.6 + 0.4 * heightPct)
+            * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch)
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly
         b.lipped = false

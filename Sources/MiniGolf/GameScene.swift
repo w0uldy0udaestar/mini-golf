@@ -30,6 +30,7 @@ final class GameScene: SKScene {
         var swingFrom = 0.0
         var swingTo = 0.0 // 리프트오프 순간 고정되는 다음 착지점
         var inSwing = false
+        var sw = 0.0 // 스윙 진행 0→1 (모노토닉 — 위상 또는 시간 중 빠른 쪽)
     }
 
     private struct WalkAnim {
@@ -64,6 +65,13 @@ final class GameScene: SKScene {
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     private var renderSlopeTilt = 0.0 // 경사 라이 스탠스 기울기 (스무딩)
+    private var renderDir = 1.0 // 바라보는 방향 스무딩 — 반전 시 종이처럼 접히며 돌아선다
+    // 모드 전환 타깃 크로스페이드 (Bollo Inertialization 계열 — 타깃 점프가 속도 계단을 만드는 것 방지)
+    private var lastBranch = -1
+    private var transFrom: Rig?
+    private var transAt: TimeInterval = 0
+    private var transDur = 0.25
+    private var lastTargetSnapshot: Rig?
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
 
@@ -84,6 +92,8 @@ final class GameScene: SKScene {
     }
 
     private let groundBase: CGFloat = 96
+    /// 경사 라이: 스탠스 기울기 = 로프트 전달 비율 (같은 상수를 공유해야 물리·애니메이션이 정합)
+    private let slopeTiltRatio = 0.7
 
     // 노드
     private let terrainNode = SKNode()
@@ -223,11 +233,12 @@ final class GameScene: SKScene {
         updateHUD()
     }
 
-    /// 화면 끝 = 벽. 몸 뒤 공간이 부족하면 백스윙이 제한된다 — 실제 트러블샷처럼 펀치샷만 가능
+    /// 화면 끝 = 벽. 몸 뒤 공간이 부족하면 백스윙이 제한된다 — 펀치샷 (낮은 탄도·적은 스핀)
+    /// 하한 0.55: 실측(Bulbulian 2001 — 제한 백스윙도 스피드 -8%뿐)상 파워를 심하게 깎지 않는다
     private var wallSwingCap: Double {
         guard !club.isPutter else { return 1 }
         let behind = dir > 0 ? Double(px(stickX)) : Double(size.width - px(stickX))
-        return min(1, max(0.15, (behind - 28) / 45))
+        return min(1, max(0.55, (behind - 28) / 45))
     }
 
     /// 퍼터를 잡으면 남은 거리에 맞는 백스윙에서 시작한다 — 평지 기준 계산이라
@@ -248,7 +259,8 @@ final class GameScene: SKScene {
             dir = to >= from ? 1 : -1
         }
         // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
-        var anim = WalkAnim(fromX: from, toX: to, dur: min(12.0, max(1.2, dist / 10)))
+        // (smootherstep은 피크 속도가 1.875Δ/T라 dist/8로 보정 — 체감 속도는 이전과 동일)
+        var anim = WalkAnim(fromX: from, toX: to, dur: min(12.0, max(1.2, dist / 8)))
         // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 20종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
@@ -284,12 +296,18 @@ final class GameScene: SKScene {
     private func launchBall() {
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
         // 경사 라이(오르막=더 뜸) + 풀파워 리스크(80% 초과분의 제곱으로 미스샷 확률·크기 증가)
-        let slope = club.isPutter ? 0 : hole.slope(at: ball.x)
+        // 경사는 스탠스 기울기와 같은 비율만 로프트로 전달 (물리·애니메이션 정합 — 리서치 C)
+        let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
+        // 미스샷: 모든 샷에 베이스 분산(±1°) + 80% 초과분^1.6 리스크, 정규분포 근사 (리서치 E)
         let overdrive = max(0, (heightPct - 0.8) / 0.2)
-        let mishit = club.isPutter ? 0 : overdrive * overdrive * Double.random(in: -1 ... 1)
+        let risk = 0.25 + 0.75 * pow(overdrive, 1.6)
+        let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
+        let mishit = club.isPutter ? 0 : risk * gauss
+        // 벽 제한 = 펀치샷: 파워는 남기고 낮은 탄도·적은 스핀으로 (리서치 D — 장르 관행)
+        let punch = club.isPutter ? 0 : max(0, 1 - wallSwingCap)
         Ballistics.launch(
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
-            slope: slope, mishit: mishit
+            slope: slope, mishit: mishit, punch: punch
         )
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
@@ -616,7 +634,7 @@ final class GameScene: SKScene {
             let tw = w.t - w.relax
             if tw >= 0 {
                 let u = min(1, tw / w.dur)
-                stickX = w.fromX + (w.toX - w.fromX) * smoothstep(u)
+                stickX = w.fromX + (w.toX - w.fromX) * smootherstep(u) // 최소 저크 (가속도도 0에서 시작)
                 let vInst = abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
                 w.vPx = vInst * Double(pxPerM)
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
@@ -628,19 +646,31 @@ final class GameScene: SKScene {
                     // 첫 접지점 = 지금 서 있는 발 위치 그대로 — 걷기 진입 순간 발이 점프하지 않는다
                     w.feet[0].plant = dNow + Double(renderRig.foot1.x)
                     w.feet[1].plant = dNow + Double(renderRig.foot2.x)
+                    // 위상을 duty에서 시작 = 뒷발이 첫 프레임에 리프트오프 (보행 개시·pose matching)
+                    // gaitPhase=0이면 뒷발이 위상 0.68까지 안 떨어져 다리가 늘어난다 (리서치 A2)
+                    w.gaitPhase = w.duty
                 }
                 w.gaitPhase += w.vPx * dt / (2 * w.stepL)
                 for i in 0 ..< 2 {
                     let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
-                    if f < w.duty {
-                        if w.feet[i].inSwing { // 착지 — 목표점에 래치
+                    if !w.feet[i].inSwing {
+                        // 과신장 강제 리프트오프 (Holden unlock) — 다리가 늘어나기 전에 발을 뗀다
+                        let cx = w.feet[i].plant - dNow
+                        let overreach = (cx * cx + 43.5 * 43.5).squareRoot() > 48
+                        if f >= w.duty || overreach {
+                            w.feet[i].inSwing = true
+                            w.feet[i].sw = 0
+                            w.feet[i].swingFrom = w.feet[i].plant
+                            w.feet[i].swingTo = dNow + 2 * w.stepL * (1 - w.duty) + w.duty * w.stepL
+                        }
+                    } else {
+                        // 스윙 진행: 위상 기반과 시간 바닥(0.35s) 중 빠른 쪽, 모노토닉
+                        let phaseSw = f >= w.duty ? (f - w.duty) / (1 - w.duty) : 0
+                        w.feet[i].sw = max(phaseSw, w.feet[i].sw + dt / 0.35)
+                        if w.feet[i].sw >= 1 { // 착지 — 목표점에 래치
                             w.feet[i].inSwing = false
                             w.feet[i].plant = w.feet[i].swingTo
                         }
-                    } else if !w.feet[i].inSwing { // 리프트오프 — 다음 착지점을 지금 고정
-                        w.feet[i].inSwing = true
-                        w.feet[i].swingFrom = w.feet[i].plant
-                        w.feet[i].swingTo = dNow + 2 * w.stepL * (1 - w.duty) + w.duty * w.stepL
                     }
                 }
                 walkAnim = w
@@ -738,6 +768,7 @@ final class GameScene: SKScene {
         var targetRig: Rig
         let rigRate: Double
         var rigClubRate: Double? = nil // 팔로스루 오버랩 — 클럽만 느린 추적
+        var branch = 4 // 타깃 브랜치 id: 0 스윙 · 1 걷기 · 2 조준 · 3 여운 · 4 홀드
         if let anim = swingAnim {
             targetRig = RigBuilder.fromPose(
                 swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
@@ -746,6 +777,7 @@ final class GameScene: SKScene {
             // 다운스윙은 초고속 추적(220) — 스무딩 지연(≈31°)이 '클럽이 공에 닿는 프레임'을
             // 지우고 있었다 (리서치 P1). 임팩트 후는 45로 복귀 (그 시점 오차 ≈1°라 킥 없음)
             rigRate = anim.t < anim.prof.down ? 220 : 45
+            branch = 0
             if anim.t >= anim.prof.down { // 팔로스루: 클럽만 늦게 멈추는 오버랩 (리서치 P6)
                 rigClubRate = 22
             }
@@ -797,12 +829,11 @@ final class GameScene: SKScene {
             let dPx = abs(stickX - w.fromX) * Double(pxPerM)
             let vAmp = min(1, w.vPx / 30)
             func footPose(_ i: Int) -> (x: Double, lift: Double) {
-                let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
                 let g = w.feet[i]
                 if !g.inSwing {
                     return (g.plant - dPx, 0)
                 }
-                let sw = max(0, (f - w.duty) / (1 - w.duty))
+                let sw = min(1, g.sw)
                 // sin² 프로파일: 이륙·착지 모두 속도 0 (발 '찍기' 제거)
                 let lift = sin(.pi * sw) * sin(.pi * sw) * (3 + 5 * vAmp + 6 * flavor.skip)
                 return (mix(g.swingFrom, g.swingTo, smoothstep(sw)) - dPx, lift)
@@ -814,7 +845,17 @@ final class GameScene: SKScene {
                 let xm = self.stickX + dx / Double(self.pxPerM)
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
+            // 도착 위상: 진입(relax)의 원점 블렌드와 대칭 — 마지막 0.6s 동안 걷기 원점(0)에서
+            // 어드레스 스탠스(-ballFwd)로 흘려보내 24~51px 스케이팅 제거 (리서치 B5)
+            let arriveU = smootherstep(min(1, max(0, (w.t - (w.relax + w.dur - 0.6)) / 0.6)))
+            if arriveU > 0 {
+                let standRig = RigBuilder.fromPose(
+                    Poses.upright, ballFwd: renderBallFwd * arriveU, clubLen: renderLen
+                )
+                targetRig = Rig.lerp(targetRig, standRig, arriveU)
+            }
             rigRate = 14 // 상체는 부드럽게 — 발·무릎은 아래 footRate로 고속 추적
+            branch = 1
         } else if mode == .aim {
             targetRig = RigBuilder.fromPose(
                 backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
@@ -822,11 +863,13 @@ final class GameScene: SKScene {
             )
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
+            branch = 2
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
             // 스탠스 원점(-ballFwd)을 걷기 원점(0)으로 흘려보내 걷기 시작 순간의 스텝 밀림 제거
             let ru = walkAnim.map { smoothstep(min(1, $0.t / $0.relax)) } ?? 1
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd * (1 - ru), clubLen: renderLen)
             rigRate = 5
+            branch = 3
         } else {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
@@ -841,17 +884,39 @@ final class GameScene: SKScene {
             }
         }
         // 걷기 중 발·무릎은 고속 추적 — 접지점이 스무딩에 밀려 미끄러져 보이는 것을 방지
+        // 모드 전환 크로스페이드 — 타깃이 한 프레임에 점프해 속도 계단(0→213px/s)을 만드는 것 방지.
+        // 스윙 진입(branch 0)만 즉응 유지 (Bollo GDC 2018, UE 블렌드 0.4s 상한)
+        if branch != lastBranch {
+            if lastBranch >= 0, branch != 0 {
+                transFrom = lastTargetSnapshot
+                transAt = currentTime
+                transDur = branch == 3 ? 0.35 : 0.25 // 피니시→직립이 가장 먼 포즈
+            }
+            lastBranch = branch
+        }
+        if let from = transFrom {
+            let tt = (currentTime - transAt) / transDur
+            if tt < 1 {
+                targetRig = Rig.lerp(from, targetRig, smootherstep(max(0, min(1, tt))))
+            } else {
+                transFrom = nil
+            }
+        }
+        lastTargetSnapshot = targetRig
+
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
-        // 렌더 반영 — 경사 라이: 걷기 외에는 스탠스가 지면 경사를 70% 따라 기운다
-        let tiltTarget = mode == .walking ? 0 : 0.7 * atan(hole.slope(at: stickX))
+        // 렌더 반영 — 경사 라이: 걷기 외에는 스탠스가 지면 경사를 따라 기운다 (물리와 동일 비율)
+        let tiltTarget = mode == .walking ? 0 : slopeTiltRatio * atan(hole.slope(at: stickX))
         renderSlopeTilt += (tiltTarget - renderSlopeTilt) * (1 - exp(-6 * dt))
         stickman.zRotation = CGFloat(renderSlopeTilt)
+        // 방향 반전은 한 프레임 미러 대신 종이 인형처럼 접히며 돌아선다
+        renderDir += (dir - renderDir) * (1 - exp(-8 * dt))
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
         stickman.render(
             rig: renderRig, club: club, prevClub: prevHeadClub,
-            headMorph: headMorph, visualLoft: renderLoft, dir: dir
+            headMorph: headMorph, visualLoft: renderLoft, dir: renderDir
         )
 
         if mode != .holed { // 홀인 드롭 연출 중에는 SKAction이 공 위치를 갖는다
