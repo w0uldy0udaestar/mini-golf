@@ -509,7 +509,10 @@ final class GameScene: SKScene {
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
         case 123: clubIdx = max(0, clubIdx - 1); clubSettle = 0; presetPutterHeight(); updateHUD() // ←
-        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); clubSettle = 0; presetPutterHeight(); updateHUD() // →
+        case 124: clubIdx = min(
+                ClubTable.all.count - 1,
+                clubIdx + 1
+            ); clubSettle = 0; presetPutterHeight(); updateHUD() // →
         case 49: startSwing() // Space
         default: break
         }
