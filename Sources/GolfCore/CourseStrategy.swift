@@ -4,7 +4,9 @@ import Foundation
 /// 실코스 설계 관례(2026-08-15 사용자 설계): 해저드는 '평균적인 티샷이 떨어지는 곳'에 있어야
 /// "지를까, 끊어갈까"라는 선택이 생긴다. 시뮬레이션 앵커라 클럽 밸런스가 바뀌면 배치도 따라온다.
 public enum CourseStrategy {
-    /// 평지 풀샷 도달 거리 (m) — 결정론적 시뮬레이션 1회, 캐시
+    /// 평지 풀샷 도달 거리 (m) — 결정론적 시뮬레이션 1회, 캐시.
+    /// ⚠️ 전제 (리뷰 S-2): flatTest()는 장애물이 없어야 하고 launch/step은 RNG가 없어야 한다 —
+    /// 둘 중 하나라도 깨지면 앵커가 흔들려 모든 코스 배치가 달라진다
     public static let anchors: [String: (carry: Double, total: Double)] = {
         var out: [String: (carry: Double, total: Double)] = [:]
         let flat = Hole.flatTest()

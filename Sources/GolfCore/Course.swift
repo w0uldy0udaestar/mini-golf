@@ -275,10 +275,12 @@ public enum CourseGenerator {
         // ── 그린: 주변 지형 흐름을 따르는 미세 경사(브레이크) ──
         let gFrom = Int(apronStart - 2)
         let gTo = min(Int(ceil(greenEnd + 6)), elev.count - 1)
-        // 솟은 그린 (35%): 어프로치가 오르막이 된다 — 실코스의 elevated green
-        if rand.next() < 0.35 {
+        // 솟은 그린 (35%): 어프로치가 오르막이 된다 — 실코스의 elevated green.
+        // 램프 발치에 워터가 있으면 생략 (수면이 주변보다 솟는 어색함 방지 — 리뷰 S-4)
+        let rampFrom = max(0, gFrom - 45)
+        let waterAtRampFoot = waterRange.map { $0.upperBound > Double(rampFrom) - 4 } ?? false
+        if rand.next() < 0.35, !waterAtRampFoot {
             let lift = rand.next(2, 5.5)
-            let rampFrom = max(0, gFrom - 45)
             for i in rampFrom ... gTo where i < elev.count {
                 let u = min(1, Double(i - rampFrom) / Double(max(1, gFrom - rampFrom)))
                 elev[i] += lift * (u * u * (3 - 2 * u)) // smoothstep 램프
@@ -288,7 +290,11 @@ public enum CourseGenerator {
         let gSlope = trend * rand.next(0.02, 0.06) // 2~6% 브레이크
         let gBase = elev[gFrom]
         for i in gFrom ... gTo {
-            elev[i] = gBase + gSlope * Double(i - gFrom)
+            // 그린 가드 벙커의 모래 딥은 보존 — 슬로프로 덮어쓰면 벙커가 평지가 된다 (리뷰 S-1)
+            let inBunker = segments.contains { $0.type == .bunker && Double(i) >= $0.from && Double(i) < $0.to }
+            if !inBunker {
+                elev[i] = gBase + gSlope * Double(i - gFrom)
+            }
         }
         for k in 1 ... 5 { // 그린 뒤 러프와 자연 연결
             let ri = gTo + k

@@ -20,6 +20,8 @@ public enum Phys {
     public static let captureFly = 10.0
     public static let wallRestitution = 0.5
     public static let maxStrokes = 12
+    /// 경사 라이 스탠스 기울기 = 로프트 전달 비율 — 물리·애니메이션이 이 하나를 공유해야 정합 (리뷰 S-6)
+    public static let stanceSlopeRatio = 0.7
     public static let dt = 1.0 / 240.0 // 고정 물리 스텝
 }
 
@@ -135,8 +137,12 @@ public enum Ballistics {
                         b.x = ob.x + nx * (ob.size + 0.05)
                         b.y = max(hole.ground(at: b.x), cy + ny * (ob.size + 0.05))
                         b.spin *= 0.5
-                        if b.phase == .roll, b.vy > 0.8 {
-                            b.phase = .fly // 바위를 타고 튀어오른다
+                        if b.phase == .roll {
+                            if b.vy > 0.8 {
+                                b.phase = .fly // 바위를 타고 튀어오른다
+                            } else {
+                                b.vy = 0 // roll 불변식: 수직 속도 없음 (리뷰 S-3)
+                            }
                         }
                         return .wall(speed: -vn)
                     }

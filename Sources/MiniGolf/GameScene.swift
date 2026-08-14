@@ -90,8 +90,8 @@ final class GameScene: SKScene {
     }
 
     private var groundBase: CGFloat = 96 // 홀 최저 표고에 맞춰 rebuildTerrain에서 보정 (HUD 침범 방지)
-    /// 경사 라이: 스탠스 기울기 = 로프트 전달 비율 (같은 상수를 공유해야 물리·애니메이션이 정합)
-    private let slopeTiltRatio = 0.7
+    /// 경사 라이: 스탠스 기울기 = 로프트 전달 비율 — 단일 출처는 Phys (리뷰 S-6)
+    private let slopeTiltRatio = Phys.stanceSlopeRatio
     private var renderSlopeTilt = 0.0 // 경사 스탠스 기울기 (스무딩)
 
     // 노드
@@ -747,6 +747,7 @@ final class GameScene: SKScene {
                 trunk.lineWidth = 2.2
                 trunk.lineCap = .round
                 let canopy = SKShapeNode(circleOfRadius: CGFloat(ob.size) * pxPerM)
+                // above: 0 = 지면 기준 오프셋만 취한다 (gy에 이미 표고 포함 — 리뷰 S-5)
                 canopy.position = CGPoint(x: gx, y: gy + CGFloat(ob.canopyCenterY(above: 0)) * pxPerM)
                 canopy.strokeColor = Palette.hairline.withAlphaComponent(0.55)
                 canopy.lineWidth = 1.6
