@@ -711,7 +711,9 @@ final class GameScene: SKScene {
                 swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
                 ballFwd: renderBallFwd, clubLen: renderLen
             )
-            rigRate = 45 // 스윙은 기민하게
+            // 다운스윙은 초고속 추적(220) — 스무딩 지연(≈31°)이 '클럽이 공에 닿는 프레임'을
+            // 지우고 있었다 (리서치 P1). 임팩트 후는 45로 복귀 (그 시점 오차 ≈1°라 킥 없음)
+            rigRate = anim.t < anim.prof.down ? 220 : 45
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
