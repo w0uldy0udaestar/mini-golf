@@ -75,7 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         soundMenuItem = statusMenu.addItem(withTitle: "사운드", action: #selector(toggleSound), keyEquivalent: "")
         soundMenuItem.target = self
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
-        contrastMenuItem = statusMenu.addItem(withTitle: "고대비 모드 (밝은 배경용)", action: #selector(toggleContrast), keyEquivalent: "")
+        contrastMenuItem = statusMenu.addItem(
+            withTitle: "고대비 모드 (밝은 배경용)",
+            action: #selector(toggleContrast),
+            keyEquivalent: ""
+        )
         contrastMenuItem.target = self
         contrastMenuItem.state = Theme.highContrast ? .on : .off
         statusMenu.addItem(.separator())
