@@ -6,6 +6,7 @@ import SpriteKit
 final class StickmanNode: SKNode {
     private let stickColor = NSColor(white: 0.88, alpha: 0.95)
     private let shaftColor = NSColor(white: 0.76, alpha: 0.9)
+    private let clubHeadColor = NSColor(white: 0.85, alpha: 0.95)
     private let rimColor = NSColor(white: 0, alpha: 0.32) // 밝은 배경 대비용 다크 림
     private let headShape = SKShapeNode(circleOfRadius: 10)
     private let bodyShape = SKShapeNode() // 척추+다리+팔 통합 경로
@@ -37,8 +38,8 @@ final class StickmanNode: SKNode {
         shaftRim.strokeColor = rimColor
         shaftRim.lineWidth = 5.2
         shaftRim.lineCap = .round
-        clubHeadShape.strokeColor = NSColor(white: 0.85, alpha: 0.95)
-        clubHeadShape.fillColor = NSColor(white: 0.85, alpha: 0.95)
+        clubHeadShape.strokeColor = clubHeadColor
+        clubHeadShape.fillColor = clubHeadColor
         clubHeadShape.lineCap = .round
         clubHeadRim.strokeColor = rimColor
         clubHeadRim.fillColor = rimColor
