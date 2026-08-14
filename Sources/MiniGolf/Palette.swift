@@ -8,3 +8,11 @@ enum Palette {
     static let roughGray = NSColor(white: 0.85, alpha: 1)
     static let hairline = NSColor(white: 0.94, alpha: 1) // 티·페어웨이·에이프런 지형선
 }
+
+/// 고대비 모드 — 밝은 배경 사용자를 위한 opt-in 듀얼톤 (기본 꺼짐 = 원래의 '조용한' 디자인)
+/// 사용자 피드백(2026-08-14): 상시 다크 림은 이질감 → 기본값 복원, 토글로 전환
+enum Theme {
+    static var highContrast = UserDefaults.standard.bool(forKey: "highContrast") {
+        didSet { UserDefaults.standard.set(highContrast, forKey: "highContrast") }
+    }
+}

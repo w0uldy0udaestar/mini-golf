@@ -48,6 +48,14 @@ final class StickmanNode: SKNode {
                   headShape] as [SKNode] {
             addChild(n)
         }
+        applyContrast()
+    }
+
+    /// 고대비 모드에서만 다크 림을 켠다 (기본은 원래의 가벼운 획)
+    func applyContrast() {
+        for r in [headRim, bodyRim, shaftRim, clubHeadRim] as [SKNode] {
+            r.isHidden = !Theme.highContrast
+        }
     }
 
     @available(*, unavailable) required init?(coder _: NSCoder) {

@@ -9,14 +9,12 @@ enum HUDFont {
     static let semibold = "AppleSDGothicNeo-SemiBold"
 }
 
-/// 상자 없는 텍스트: 본문 + 사방 헤일로 그림자 — 밝은 배경에서도 상자 없이 읽힌다
+/// 상자 없는 텍스트: 본문 + 오프셋 그림자 (기본). 고대비 모드에서만 사방 헤일로가 추가로 켜진다
 final class GlassLabel: SKNode {
-    /// 사방 확산 + 우하단 깊이 한 겹 (배경 무관 대비, FINDING-001)
-    private static let haloOffsets: [(CGFloat, CGFloat, CGFloat)] = [
-        (-1.2, 1.2, 0.28), (1.2, 1.2, 0.28), (-1.2, -1.2, 0.28), (1.2, -1.2, 0.28), (1.0, -1.4, 0.45),
-    ]
+    private static let haloOffsets: [(CGFloat, CGFloat)] = [(-1.2, 1.2), (1.2, 1.2), (-1.2, -1.2), (1.2, -1.2)]
 
     private var haloLabels: [SKLabelNode] = []
+    private let shadowLabel = SKLabelNode()
     private let mainLabel = SKLabelNode()
     private let font: String
     private let size: CGFloat
@@ -35,7 +33,7 @@ final class GlassLabel: SKNode {
         textAlpha = alpha
         self.kern = kern
         super.init()
-        for (dx, dy, _) in Self.haloOffsets {
+        for (dx, dy) in Self.haloOffsets {
             let l = SKLabelNode()
             l.horizontalAlignmentMode = align
             l.verticalAlignmentMode = .top
@@ -43,9 +41,14 @@ final class GlassLabel: SKNode {
             haloLabels.append(l)
             addChild(l)
         }
+        shadowLabel.horizontalAlignmentMode = align
+        shadowLabel.verticalAlignmentMode = .top
+        shadowLabel.position = CGPoint(x: 1, y: -1.2)
+        addChild(shadowLabel)
+        addChild(mainLabel)
         mainLabel.horizontalAlignmentMode = align
         mainLabel.verticalAlignmentMode = .top
-        addChild(mainLabel)
+        applyContrast()
     }
 
     @available(*, unavailable) required init?(coder _: NSCoder) {
@@ -54,8 +57,16 @@ final class GlassLabel: SKNode {
 
     func setText(_ text: String) {
         mainLabel.attributedText = attributed(text, color: NSColor(white: 0.98, alpha: textAlpha))
-        for (l, offset) in zip(haloLabels, Self.haloOffsets) {
-            l.attributedText = attributed(text, color: NSColor(white: 0, alpha: offset.2))
+        shadowLabel.attributedText = attributed(text, color: NSColor(white: 0, alpha: 0.5))
+        for l in haloLabels {
+            l.attributedText = attributed(text, color: NSColor(white: 0, alpha: 0.28))
+        }
+    }
+
+    /// 고대비 설정 변경 반영
+    func applyContrast() {
+        for l in haloLabels {
+            l.isHidden = !Theme.highContrast
         }
     }
 
@@ -82,6 +93,12 @@ final class ScorecardNode: SKNode {
 
     @available(*, unavailable) required init?(coder _: NSCoder) {
         fatalError()
+    }
+
+    func applyContrast() {
+        for l in lines {
+            l.applyContrast()
+        }
     }
 
     func show(rows: [String], title: String, footer: String) {

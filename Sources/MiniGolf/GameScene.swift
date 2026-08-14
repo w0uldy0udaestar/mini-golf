@@ -89,7 +89,6 @@ final class GameScene: SKScene {
         backgroundColor = .clear // ⚠️ skView.backgroundColor는 설정 금지
 
         ballNode.fillColor = .white
-        ballNode.strokeColor = NSColor(white: 0, alpha: 0.4) // 밝은 배경에서 공이 사라지지 않게
         ballNode.lineWidth = 1.2
         shadowNode.fillColor = NSColor(white: 0, alpha: 0.28)
         shadowNode.strokeColor = .clear
@@ -136,7 +135,28 @@ final class GameScene: SKScene {
         // 힌트는 잠시 후 조용히 사라진다 (화면을 어지르지 않기)
         hintLabel.run(.sequence([.wait(forDuration: 8), .fadeOut(withDuration: 1.2)]))
 
+        applyContrastMode()
         newRound()
+    }
+
+    /// ── 고대비 모드 (밝은 배경 opt-in) ──
+    func setHighContrast(_ on: Bool) {
+        Theme.highContrast = on
+        applyContrastMode()
+        rebuildTerrain() // 지형 언더스트로크·깃대 테두리는 재생성으로 반영
+    }
+
+    private func applyContrastMode() {
+        ballNode.strokeColor = Theme.highContrast ? NSColor(white: 0, alpha: 0.4) : .clear
+        trailUnderNode.isHidden = !Theme.highContrast
+        stickman.applyContrast()
+        scorecard.applyContrast()
+        for l in [
+            scoreTitle, scoreSub, clubTitle, clubSub, hintLabel,
+            pauseLabel, toastTitle, toastSub, powerLabel,
+        ] {
+            l.applyContrast()
+        }
     }
 
     func newRound() {
@@ -376,12 +396,13 @@ final class GameScene: SKScene {
                 node.lineWidth = 1.8
             }
             node.lineCap = .round
-            // 언더스트로크: 같은 경로를 어둡고 굵게 한 겹 아래 — 밝은 배경에서 헤어라인이 사라지지 않게
-            let under = SKShapeNode(path: node.path ?? base)
-            under.strokeColor = NSColor(white: 0, alpha: 0.32)
-            under.lineWidth = node.lineWidth + 2.2
-            under.lineCap = .round
-            terrainNode.addChild(under)
+            if Theme.highContrast { // 언더스트로크: 밝은 배경에서 헤어라인이 사라지지 않게 (opt-in)
+                let under = SKShapeNode(path: node.path ?? base)
+                under.strokeColor = NSColor(white: 0, alpha: 0.32)
+                under.lineWidth = node.lineWidth + 2.2
+                under.lineCap = .round
+                terrainNode.addChild(under)
+            }
             terrainNode.addChild(node)
         }
 
@@ -406,7 +427,7 @@ final class GameScene: SKScene {
         flagNode.zRotation = 0 // flagWave가 중간에 끊겨도 잔여 회전이 남지 않게
         let pole = SKShapeNode(rect: CGRect(x: -0.6, y: 0, width: 1.2, height: 62))
         pole.fillColor = NSColor(white: 0.95, alpha: 0.85)
-        pole.strokeColor = NSColor(white: 0, alpha: 0.35)
+        pole.strokeColor = Theme.highContrast ? NSColor(white: 0, alpha: 0.35) : .clear
         pole.lineWidth = 1
         let flag = SKShapeNode(path: {
             let p = CGMutablePath()

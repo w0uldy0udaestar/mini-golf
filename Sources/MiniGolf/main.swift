@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var statusMenu: NSMenu!
     private var soundMenuItem: NSMenuItem!
+    private var contrastMenuItem: NSMenuItem!
     private var lastAutoPause = Date.distantPast
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -74,6 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         soundMenuItem = statusMenu.addItem(withTitle: "사운드", action: #selector(toggleSound), keyEquivalent: "")
         soundMenuItem.target = self
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
+        contrastMenuItem = statusMenu.addItem(withTitle: "고대비 모드 (밝은 배경용)", action: #selector(toggleContrast), keyEquivalent: "")
+        contrastMenuItem.target = self
+        contrastMenuItem.state = Theme.highContrast ? .on : .off
         statusMenu.addItem(.separator())
         statusMenu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
         // statusItem.menu는 비워둔다 — 지정하면 좌클릭이 메뉴를 열어 버튼 동작을 삼킨다
@@ -92,6 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleSound() {
         SoundKit.shared.enabled.toggle()
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
+    }
+
+    @objc private func toggleContrast() {
+        scene.setHighContrast(!Theme.highContrast)
+        contrastMenuItem.state = Theme.highContrast ? .on : .off
     }
 
     @objc private func panelResignedKey() {
