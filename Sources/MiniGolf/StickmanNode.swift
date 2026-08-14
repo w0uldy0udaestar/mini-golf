@@ -2,7 +2,7 @@ import GolfCore
 import SpriteKit
 
 /// 클럽별 렌더 속성 — 클럽만 보고도 무엇을 들었는지 알 수 있게 (물리와 무관, 연출 전용)
-private extension Club {
+extension Club {
     /// 렌더 길이(px): 드라이버가 가장 길고 퍼터가 가장 짧다
     var renderLength: Double {
         switch id {
@@ -20,7 +20,7 @@ private extension Club {
     }
 }
 
-/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감 (twirl: 트월 진행 0→1, shoulder: 어깨 캐리 블렌드 0→1)
+/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감 (twirl: 트월 진행 0→1 후 1 유지, shoulder: 어깨 캐리 블렌드)
 struct WalkFlavor {
     var twirl: Double?
     var shoulder = 0.0
@@ -30,22 +30,139 @@ private func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {
     CGPoint(x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u)
 }
 
-/// 스틱맨 렌더 리그 — 로컬 좌표 (0,0) = 공이 놓인 지면 지점, y는 위쪽
-/// 굵고 둥근 획의 회색 스틱맨 (포인트 컬러는 깃발 하나뿐이라는 디자인 원칙)
+private func mix(_ a: Double, _ b: Double, _ u: Double) -> Double {
+    a + (b - a) * u
+}
+
+/// ═══════════════════════════════════════════════════════════════
+/// 통합 리그 — 스윙·걷기·전환이 전부 이 하나의 파라미터 공간을 지나간다.
+/// 모드는 '타깃 리그'만 바꾸고, 렌더는 지수 감쇠로 타깃을 쫓는다.
+/// 어떤 모드 전환도 같은 공간 안의 보간이므로 순간이동이 구조적으로 불가능하다.
+/// 좌표는 facing 기준(+x = 바라보는 쪽), 렌더에서 dir로 미러링한다.
+/// ═══════════════════════════════════════════════════════════════
+struct Rig {
+    var hip = CGPoint(x: -5, y: 42)
+    var shoulder = CGPoint(x: 1, y: 66)
+    var headDx = 7.0
+    var foot1 = CGPoint(x: -16, y: 0) // 포즈에선 뒷발, 걷기에선 위상 +발
+    var foot2 = CGPoint(x: 11, y: 0)
+    var knee1 = CGPoint(x: -13, y: 22)
+    var knee2 = CGPoint(x: 6, y: 21)
+    var grip = CGPoint(x: 8, y: 33) // 리드 손 = 클럽 그립
+    var handTrail = CGPoint(x: 10, y: 30) // 트레일 손 (스윙: 그립에 겹침 · 걷기: 자유 팔)
+    var clubPhi = 0.2 // 샤프트 절대각 (0 = 수직 아래, + = 타겟 쪽)
+    var clubLen = 31.0
+
+    /// 지수 감쇠 추적 — clubPhi는 최단 각도 경로로 (트월 한 바퀴 후 되감기 방지)
+    mutating func chase(_ t: Rig, rate: Double, dt: Double) {
+        let k = 1 - exp(-rate * dt)
+        hip = mix(hip, t.hip, k)
+        shoulder = mix(shoulder, t.shoulder, k)
+        headDx = mix(headDx, t.headDx, k)
+        foot1 = mix(foot1, t.foot1, k)
+        foot2 = mix(foot2, t.foot2, k)
+        knee1 = mix(knee1, t.knee1, k)
+        knee2 = mix(knee2, t.knee2, k)
+        grip = mix(grip, t.grip, k)
+        handTrail = mix(handTrail, t.handTrail, k)
+        clubLen = mix(clubLen, t.clubLen, k)
+        let dPhi = (t.clubPhi - clubPhi).remainder(dividingBy: 2 * .pi)
+        clubPhi += dPhi * k
+    }
+}
+
+enum RigBuilder {
+    /// P-System 포즈 → 리그 (스탠스는 공 원점 기준)
+    static func fromPose(_ p: Pose, ballFwd: Double, clubLen: Double) -> Rig {
+        let px = -ballFwd
+        var r = Rig()
+        r.hip = CGPoint(x: px + p.hipDx - 5, y: 42)
+        r.shoulder = CGPoint(x: r.hip.x + 6 + 0.5 * p.tilt, y: 66)
+        r.headDx = p.headDx
+        let aH = p.handA * .pi / 180
+        let aC = p.clubA * .pi / 180
+        // 긴 클럽일수록 그립을 몸쪽으로 — 어드레스·임팩트에서 헤드가 지면에 닿는 기하 유지
+        let handD = max(16, p.handD - (clubLen - 31))
+        r.grip = CGPoint(x: r.shoulder.x + sin(aH) * handD, y: r.shoulder.y - cos(aH) * handD)
+        r.handTrail = CGPoint(x: r.grip.x + sin(aC) * 4, y: r.grip.y - cos(aC) * 4) // 그립 아래쪽에 겹쳐 잡는다
+        r.clubPhi = aC
+        r.clubLen = clubLen
+        // 뒷발꿈치 들림 = 발끝으로 서기 (발이 뜨지 않는다)
+        r.foot1 = CGPoint(x: px - (16 - p.heel * 0.45), y: min(p.heel * 0.25, 3.5))
+        r.foot2 = CGPoint(x: px + 11, y: 0)
+        r.knee1 = CGPoint(x: px - 13 + p.hipDx * 0.5, y: 22)
+        r.knee2 = CGPoint(x: px + 6 + p.hipDx * 0.5, y: 21)
+        return r
+    }
+
+    /// 걷기 — 같은 Rig 공간. groundDelta: 로컬 x(px) → 그 지점 지면의 로컬 y(px)
+    static func walking(
+        phase: Double,
+        vPx: Double,
+        clubLen: Double,
+        flavor: WalkFlavor,
+        groundDelta: (Double) -> Double
+    ) -> Rig {
+        let s1 = sin(phase)
+        let c1 = cos(phase)
+        let vAmp = min(1, vPx / 30)
+        let bob = 1.6 * vAmp * abs(c1)
+        let stride = 16.0 * (0.2 + 0.8 * vAmp) // 보폭 ∝ 속도 — 출발·도착 때 발이 모인다
+
+        var r = Rig()
+        r.hip = CGPoint(x: 0, y: 43.5 + bob)
+        r.shoulder = CGPoint(x: 2 + 2.5 * vAmp, y: 67 + bob)
+        r.headDx = 4
+        let f1x = stride * s1
+        let f2x = -stride * s1
+        r.foot1 = CGPoint(x: f1x, y: groundDelta(f1x) + 7 * vAmp * max(0, c1))
+        r.foot2 = CGPoint(x: f2x, y: groundDelta(f2x) + 7 * vAmp * max(0, -c1))
+        r.knee1 = CGPoint(
+            x: (r.hip.x + f1x) / 2 + 3,
+            y: (r.hip.y + r.foot1.y) / 2 + 3 + 6 * vAmp * max(0, c1)
+        )
+        r.knee2 = CGPoint(
+            x: (r.hip.x + f2x) / 2 + 3,
+            y: (r.hip.y + r.foot2.y) / 2 + 3 + 6 * vAmp * max(0, -c1)
+        )
+
+        // 클럽 캐리: 기본은 옆에, 어깨 캐리 블렌드 시 어깨 위로
+        let s = clubLen / 38
+        var grip = CGPoint(x: -12, y: 47 + bob)
+        var tip = CGPoint(x: grip.x - 16 * s, y: grip.y - 38 * s)
+        if flavor.shoulder > 0 {
+            let sGrip = CGPoint(x: r.shoulder.x + 9, y: r.shoulder.y - 3)
+            let sTip = CGPoint(x: r.shoulder.x - 26 * s, y: r.shoulder.y + 15 * s)
+            grip = mix(grip, sGrip, flavor.shoulder)
+            tip = mix(tip, sTip, flavor.shoulder)
+        }
+        var phi = atan2(tip.x - grip.x, grip.y - tip.y)
+        if let tw = flavor.twirl { // 손목 트월 — 완료 후에도 +2π를 유지해 되감기 없음
+            phi += tw * 2 * .pi
+        }
+        r.grip = grip
+        r.clubPhi = phi
+        r.clubLen = clubLen
+        r.handTrail = CGPoint(x: 5 - 8 * s1 * vAmp, y: 47 + bob) // 자유 팔 (다리 반대 위상)
+        return r
+    }
+}
+
+/// 스틱맨 렌더 — Rig 하나를 그린다. 로컬 (0,0) = 공이 놓인 지면 지점, y는 위쪽
+/// 굵고 둥근 획의 회색 스틱맨. 두 팔: 리드 암(진하게) + 트레일 암(옅게 — 원근)
 final class StickmanNode: SKNode {
     private let stickColor = NSColor(white: 0.88, alpha: 0.95)
     private let shaftColor = NSColor(white: 0.76, alpha: 0.9)
     private let clubHeadColor = NSColor(white: 0.85, alpha: 0.95)
-    private let rimColor = NSColor(white: 0, alpha: 0.32) // 밝은 배경 대비용 다크 림
+    private let rimColor = NSColor(white: 0, alpha: 0.32) // 고대비 모드용 다크 림
     private let headShape = SKShapeNode(circleOfRadius: 10)
-    private let bodyShape = SKShapeNode() // 척추+다리+앞팔 통합 경로
-    private let farArmShape = SKShapeNode() // 먼 쪽 팔 — 옅게 그려 원근을 만든다
+    private let bodyShape = SKShapeNode() // 척추+다리+리드 암 통합 경로
+    private let trailArmShape = SKShapeNode() // 트레일 암 — 옅게 그려 원근을 만든다
     private let shaftShape = SKShapeNode()
     private let clubHeadShape = SKShapeNode()
-    // 언더스트로크 트윈 — 같은 경로를 어둡고 굵게 한 겹 아래 (FINDING-001)
     private let headRim = SKShapeNode(circleOfRadius: 11.2)
     private let bodyRim = SKShapeNode()
-    private let farArmRim = SKShapeNode()
+    private let trailArmRim = SKShapeNode()
     private let shaftRim = SKShapeNode()
     private let clubHeadRim = SKShapeNode()
 
@@ -63,12 +180,12 @@ final class StickmanNode: SKNode {
         bodyRim.lineWidth = 8.4
         bodyRim.lineCap = .round
         bodyRim.lineJoin = .round
-        farArmShape.strokeColor = stickColor.withAlphaComponent(0.5)
-        farArmShape.lineWidth = 5
-        farArmShape.lineCap = .round
-        farArmRim.strokeColor = rimColor
-        farArmRim.lineWidth = 7.2
-        farArmRim.lineCap = .round
+        trailArmShape.strokeColor = stickColor.withAlphaComponent(0.55)
+        trailArmShape.lineWidth = 5.5
+        trailArmShape.lineCap = .round
+        trailArmRim.strokeColor = rimColor
+        trailArmRim.lineWidth = 7.7
+        trailArmRim.lineCap = .round
         shaftShape.strokeColor = shaftColor
         shaftShape.lineWidth = 3
         shaftShape.lineCap = .round
@@ -81,178 +198,80 @@ final class StickmanNode: SKNode {
         clubHeadRim.strokeColor = rimColor
         clubHeadRim.fillColor = rimColor
         clubHeadRim.lineCap = .round
-        for n in [farArmRim, bodyRim, shaftRim, clubHeadRim, headRim, farArmShape, bodyShape,
+        for n in [trailArmRim, bodyRim, shaftRim, clubHeadRim, headRim, trailArmShape, bodyShape,
                   shaftShape, clubHeadShape, headShape] as [SKNode] {
             addChild(n)
         }
         applyContrast()
     }
 
-    /// 고대비 모드에서만 다크 림을 켠다 (기본은 원래의 가벼운 획)
-    func applyContrast() {
-        for r in [headRim, bodyRim, farArmRim, shaftRim, clubHeadRim] as [SKNode] {
-            r.isHidden = !Theme.highContrast
-        }
-    }
-
     @available(*, unavailable) required init?(coder _: NSCoder) {
         fatalError()
     }
 
-    /// 포즈 리그 (조준·스윙·피니시)
-    func update(pose p: Pose, dir: Double, ballFwd: Double, club: Club) {
-        let px = -dir * ballFwd // 스탠스 중심 (공 = 원점)
-        let hip = CGPoint(x: px + dir * (p.hipDx - 5), y: 42)
-        let shoulder = CGPoint(x: hip.x + dir * (6 + 0.5 * p.tilt), y: 66)
-        let head = CGPoint(x: shoulder.x + dir * p.headDx, y: shoulder.y + 12)
-        let aH = p.handA * .pi / 180
-        let aC = p.clubA * .pi / 180
-        let clubLen = club.renderLength
-        // 긴 클럽일수록 그립을 몸쪽으로 — 어드레스·임팩트에서 헤드가 정확히 지면에 닿는 기하 유지
-        let handD = max(16, p.handD - (clubLen - 31))
-        let hands = CGPoint(x: shoulder.x + sin(aH) * handD * dir, y: shoulder.y - cos(aH) * handD)
-        let tip = CGPoint(x: hands.x + sin(aC) * clubLen * dir, y: hands.y - cos(aC) * clubLen)
+    /// 고대비 모드에서만 다크 림을 켠다 (기본은 원래의 가벼운 획)
+    func applyContrast() {
+        for r in [headRim, bodyRim, trailArmRim, shaftRim, clubHeadRim] as [SKNode] {
+            r.isHidden = !Theme.highContrast
+        }
+    }
 
+    func render(rig r: Rig, club: Club, dir: Double) {
+        func m(_ p: CGPoint) -> CGPoint {
+            CGPoint(x: p.x * dir, y: p.y)
+        } // facing → 화면 미러
+        let hip = m(r.hip)
+        let shoulder = m(r.shoulder)
+        let head = CGPoint(x: shoulder.x + dir * r.headDx, y: shoulder.y + 12)
         headShape.position = head
         headRim.position = head
+
+        let f1 = m(r.foot1), f2 = m(r.foot2)
+        let k1 = m(r.knee1), k2 = m(r.knee2)
+        let grip = m(r.grip)
 
         let body = CGMutablePath()
         // 척추 (살짝 굽음)
         body.move(to: shoulder)
-        body.addQuadCurve(to: hip, control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 3, y: (shoulder.y + hip.y) / 2))
-        // 다리: 발 위치 고정, 힙 이동으로 체중 표현
-        // 뒷발꿈치 들림은 발이 뜨는 게 아니라 발끝으로 서는 것 — 끝점이 지면 근처에 남는다
-        body.move(to: hip)
-        body.addQuadCurve(
-            to: CGPoint(x: px - dir * (16 - p.heel * 0.45), y: min(p.heel * 0.25, 3.5)),
-            control: CGPoint(x: px - dir * 13 + dir * p.hipDx * 0.5, y: 22)
-        )
-        body.move(to: hip)
-        body.addQuadCurve(
-            to: CGPoint(x: px + dir * 11, y: 0),
-            control: CGPoint(x: px + dir * 6 + dir * p.hipDx * 0.5, y: 21)
-        )
-        // 앞팔 (리드 암)
-        body.move(to: shoulder)
-        body.addQuadCurve(
-            to: hands,
-            control: CGPoint(x: (shoulder.x + hands.x) / 2 + dir * 2, y: (shoulder.y + hands.y) / 2 + 2)
-        )
-        bodyShape.path = body
-        bodyRim.path = body
-
-        // 먼 팔: 살짝 뒤 어깨에서 그립 위쪽(샤프트 방향 3px)으로 — 옅은 색이 원근을 만든다
-        let farShoulder = CGPoint(x: shoulder.x - dir * 3, y: shoulder.y + 2)
-        let farHand = CGPoint(x: hands.x - sin(aC) * 3 * dir, y: hands.y + cos(aC) * 3)
-        let farArm = CGMutablePath()
-        farArm.move(to: farShoulder)
-        farArm.addQuadCurve(
-            to: farHand,
-            control: CGPoint(x: (farShoulder.x + farHand.x) / 2 + dir * 7, y: (farShoulder.y + farHand.y) / 2)
-        )
-        farArmShape.path = farArm
-        farArmRim.path = farArm
-
-        let shaft = CGMutablePath()
-        shaft.move(to: hands)
-        shaft.addLine(to: tip)
-        shaftShape.path = shaft
-        shaftRim.path = shaft
-
-        clubHeadShape.path = clubHeadPath(club: club, tip: tip, phi: aC, dir: dir)
-        clubHeadShape.lineWidth = club.cat == .putter ? 5 : (club.cat == .wedge ? 5 : 4)
-        clubHeadRim.path = clubHeadShape.path
-        clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
-    }
-
-    /// 걷기 리그 — 발이 지면을 딛는 보행. groundDelta: 로컬 x(px) → 그 지점 지면의 로컬 y(px)
-    func updateWalking(
-        phase: Double,
-        vPx: Double,
-        dir: Double,
-        club: Club,
-        flavor: WalkFlavor = WalkFlavor(),
-        groundDelta: (CGFloat) -> CGFloat
-    ) {
-        let s1 = sin(phase)
-        let c1 = cos(phase)
-        let vAmp = min(1, vPx / 30)
-        let bob = 1.6 * vAmp * abs(c1)
-        // 보폭은 속도에 비례 — 출발·도착 순간 발이 모여 포즈 리그와 매끄럽게 이어진다
-        let stride = 16.0 * (0.2 + 0.8 * vAmp)
-
-        let hip = CGPoint(x: 0, y: 43.5 + bob)
-        let shoulder = CGPoint(x: dir * (2 + 2.5 * vAmp), y: 67 + bob)
-        let head = CGPoint(x: shoulder.x + dir * 4, y: shoulder.y + 12)
-        headShape.position = head
-        headRim.position = head
-
-        let f1x = dir * stride * s1
-        let f2x = -dir * stride * s1
-        let f1 = CGPoint(x: f1x, y: groundDelta(f1x) + 7 * vAmp * max(0, c1))
-        let f2 = CGPoint(x: f2x, y: groundDelta(f2x) + 7 * vAmp * max(0, -c1))
-
-        let body = CGMutablePath()
-        body.move(to: shoulder)
         body.addQuadCurve(
             to: hip,
-            control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 1.5, y: (shoulder.y + hip.y) / 2)
+            control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 2.5, y: (shoulder.y + hip.y) / 2)
         )
+        // 다리 둘 (무릎 제어점 포함)
         body.move(to: hip)
-        body.addQuadCurve(
-            to: f1,
-            control: CGPoint(x: (hip.x + f1.x) / 2 + dir * 3, y: (hip.y + f1.y) / 2 + 3 + 6 * vAmp * max(0, c1))
-        )
+        body.addQuadCurve(to: f1, control: k1)
         body.move(to: hip)
-        body.addQuadCurve(
-            to: f2,
-            control: CGPoint(x: (hip.x + f2.x) / 2 + dir * 3, y: (hip.y + f2.y) / 2 + 3 + 6 * vAmp * max(0, -c1))
-        )
-        // 클럽 위치: 기본은 옆에 들고, 어깨 캐리 블렌드 시 어깨 위로 (길이는 클럽별)
-        let s = club.renderLength / 38
-        var grip = CGPoint(x: -dir * 12, y: 47 + bob)
-        var tip = CGPoint(x: grip.x - dir * 16 * s, y: grip.y - 38 * s)
-        if flavor.shoulder > 0 { // 어깨에 걸치고 걷기 — 그립은 어깨 앞, 헤드는 등 뒤 위로
-            let sGrip = CGPoint(x: shoulder.x + dir * 9, y: shoulder.y - 3)
-            let sTip = CGPoint(x: shoulder.x - dir * 26 * s, y: shoulder.y + 15 * s)
-            grip = mix(grip, sGrip, flavor.shoulder)
-            tip = mix(tip, sTip, flavor.shoulder)
-        }
-        if let tw = flavor.twirl { // 손목 트월 — 그립을 축으로 한 바퀴
-            let ang = tw * 2 * .pi * (dir > 0 ? 1 : -1)
-            let dx = tip.x - grip.x, dy = tip.y - grip.y
-            tip = CGPoint(
-                x: grip.x + dx * cos(ang) - dy * sin(ang),
-                y: grip.y + dx * sin(ang) + dy * cos(ang)
-            )
-        }
-
-        // 클럽 든 팔 (앞팔) + 자유 팔 (먼 팔, 옅게 — 다리 반대 위상)
+        body.addQuadCurve(to: f2, control: k2)
+        // 리드 암
         body.move(to: shoulder)
         body.addQuadCurve(
             to: grip,
-            control: CGPoint(x: (shoulder.x + grip.x) / 2 - dir * 3, y: (shoulder.y + grip.y) / 2 - 2)
+            control: CGPoint(x: (shoulder.x + grip.x) / 2 + dir * 2, y: (shoulder.y + grip.y) / 2 + 2)
         )
         bodyShape.path = body
         bodyRim.path = body
 
-        let freeHand = CGPoint(x: dir * (5 - 8 * s1 * vAmp), y: 47 + bob)
-        let farArm = CGMutablePath()
-        farArm.move(to: CGPoint(x: shoulder.x - dir * 3, y: shoulder.y + 2))
-        farArm.addQuadCurve(
-            to: freeHand,
-            control: CGPoint(x: (shoulder.x + freeHand.x) / 2 + dir * 2, y: (shoulder.y + freeHand.y) / 2 - 3)
+        // 트레일 암 — 살짝 뒤 어깨에서, 팔꿈치는 몸쪽으로 굽는다
+        let hTrail = m(r.handTrail)
+        let tShoulder = CGPoint(x: shoulder.x - dir * 3, y: shoulder.y + 2)
+        let trail = CGMutablePath()
+        trail.move(to: tShoulder)
+        trail.addQuadCurve(
+            to: hTrail,
+            control: CGPoint(x: (tShoulder.x + hTrail.x) / 2 + dir * 1.5, y: (tShoulder.y + hTrail.y) / 2 - 1.5)
         )
-        farArmShape.path = farArm
-        farArmRim.path = farArm
+        trailArmShape.path = trail
+        trailArmRim.path = trail
 
+        // 클럽
+        let tip = CGPoint(x: grip.x + sin(r.clubPhi) * r.clubLen * dir, y: grip.y - cos(r.clubPhi) * r.clubLen)
         let shaft = CGMutablePath()
         shaft.move(to: grip)
         shaft.addLine(to: tip)
         shaftShape.path = shaft
         shaftRim.path = shaft
-        let carryPhi = atan2((tip.x - grip.x) * dir, grip.y - tip.y)
-        clubHeadShape.path = clubHeadPath(club: club, tip: tip, phi: carryPhi, dir: dir)
+        clubHeadShape.path = clubHeadPath(club: club, tip: tip, phi: r.clubPhi, dir: dir)
+        clubHeadShape.lineWidth = club.cat == .putter ? 5 : (club.cat == .wedge ? 5 : 4)
         clubHeadRim.path = clubHeadShape.path
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }

@@ -38,8 +38,8 @@ final class GameScene: SKScene {
     private var swingAnim: SwingAnim?
     private var walkAnim: WalkAnim?
     private var lastFinishPose: Pose?
-    private var renderPose = Poses.p1
-    private var renderBf = 24.0
+    private var renderRig = RigBuilder.fromPose(Poses.p1, ballFwd: 24, clubLen: 31)
+    private var renderLen = 31.0 // 클럽 길이도 스무딩 — 클럽 변경 시 움찔 방지
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
@@ -191,9 +191,6 @@ final class GameScene: SKScene {
     }
 
     private func enterAim() {
-        if mode == .walking { // 걷기 리그에서 돌아올 때는 직립에서 어드레스로 자연스럽게 가라앉는다
-            renderPose = Poses.upright
-        }
         mode = .aim
         aimTime = 0
         walkAnim = nil
@@ -216,13 +213,12 @@ final class GameScene: SKScene {
         endShotTrail()
         let from = stickX, to = ball.x
         let dist = abs(to - from)
-        if dist < 1 {
-            enterAim(); return
-        }
         mode = .walking
-        dir = to >= from ? 1 : -1
+        if dist > 0.5 { // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
+            dir = to >= from ? 1 : -1
+        }
         // 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
-        var anim = WalkAnim(fromX: from, toX: to, dur: min(9.0, max(2.0, dist / 16)))
+        var anim = WalkAnim(fromX: from, toX: to, dur: min(9.0, max(0.9, dist / 16)))
         // 랜덤 잉여 동작: 긴 이동은 어깨 캐리, 아니면 가끔 클럽 트월 (동시엔 안 한다)
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
@@ -235,7 +231,7 @@ final class GameScene: SKScene {
 
     private func startSwing() {
         mode = .swinging
-        swingAnim = SwingAnim(prof: profile, fromPose: renderPose)
+        swingAnim = SwingAnim(prof: profile, fromPose: backswingPose(heightPct: heightPct, profile: profile))
         if !club.isPutter {
             SoundKit.shared.whoosh(power: heightPct, dur: profile.down + 0.05)
         }
@@ -631,43 +627,52 @@ final class GameScene: SKScene {
             updateHUD()
         }
 
-        // 포즈 스무딩
-        let target: Pose = if let anim = swingAnim {
-            swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct)
-        } else if mode == .aim {
-            backswingPose(heightPct: heightPct, profile: profile)
-        } else if mode == .walking {
-            Poses.upright
-        } else {
-            lastFinishPose ?? Poses.p10
-        }
-        // 전환은 느긋하게(5~6), 스윙과 조준 입력만 기민하게(45/14)
+        // ── 통합 리그: 모든 상태가 같은 파라미터 공간의 '타깃'만 바꾼다 → 전환이 자동으로 이어진다 ──
+        renderLen += (club.renderLength - renderLen) * (1 - exp(-8 * dt)) // 클럽 변경도 부드럽게
         if mode == .aim {
             aimTime += dt
         }
-        let rate: Double = swingAnim != nil ? 45 : mode == .aim ? (aimTime < 0.9 ? 6 : 14) : 5
-        renderPose.chase(target, rate: rate, dt: dt)
-        renderBf += (profile.ballFwd - renderBf) * (1 - exp(-rate * dt))
-
-        // 렌더 반영
-        stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
-        if mode == .walking, let w = walkAnim, w.t >= w.relax {
+        let targetRig: Rig
+        let rigRate: Double
+        if let anim = swingAnim {
+            targetRig = RigBuilder.fromPose(
+                swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
+                ballFwd: profile.ballFwd, clubLen: renderLen
+            )
+            rigRate = 45 // 스윙은 기민하게
+        } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
                 let up = min(1, max(0, (w.t - r.lowerBound) / 0.6))
                 let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
                 flavor.shoulder = smoothstep(min(up, down))
             }
-            if let ta = w.twirlAt, w.t >= ta, w.t < ta + 1.0 {
-                flavor.twirl = smoothstep((w.t - ta) / 1.0)
+            if let ta = w.twirlAt, w.t >= ta { // 완료 후에도 1 유지 (+2π 고정 — 되감기 없음)
+                flavor.twirl = smoothstep(min(1, (w.t - ta) / 1.0))
             }
-            stickman.updateWalking(phase: w.phase, vPx: w.vPx, dir: dir, club: club, flavor: flavor) { dxPx in
-                let xm = self.stickX + Double(dxPx / self.pxPerM)
-                return self.groundY(xm) - self.groundY(self.stickX)
+            targetRig = RigBuilder.walking(phase: w.phase, vPx: w.vPx, clubLen: renderLen, flavor: flavor) { dx in
+                let xm = self.stickX + dx / Double(self.pxPerM)
+                return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
+            rigRate = 14 // 걸음은 또렷하게 — 진입·이탈은 보폭 램프가 받쳐준다
+        } else if mode == .aim {
+            targetRig = RigBuilder.fromPose(
+                backswingPose(heightPct: heightPct, profile: profile),
+                ballFwd: profile.ballFwd, clubLen: renderLen
+            )
+            rigRate = aimTime < 0.9 ? 6 : 14 // 진입 직후엔 천천히 가라앉고, 이후 입력에 기민하게
+        } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
+            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: profile.ballFwd, clubLen: renderLen)
+            rigRate = 5
         } else {
-            stickman.update(pose: renderPose, dir: dir, ballFwd: renderBf, club: club)
+            targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: profile.ballFwd, clubLen: renderLen)
+            rigRate = 5
         }
+        renderRig.chase(targetRig, rate: rigRate, dt: dt)
+
+        // 렌더 반영
+        stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
+        stickman.render(rig: renderRig, club: club, dir: dir)
 
         if mode != .holed { // 홀인 드롭 연출 중에는 SKAction이 공 위치를 갖는다
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
@@ -691,6 +696,6 @@ final class GameScene: SKScene {
 
         powerLabel.setText("\(Int(heightPct * 100))")
         powerLabel.isHidden = mode != .aim
-        powerLabel.position = CGPoint(x: px(stickX) - CGFloat(dir) * CGFloat(renderBf), y: groundY(stickX) + 112)
+        powerLabel.position = CGPoint(x: px(stickX) - CGFloat(dir) * 20, y: groundY(stickX) + 112)
     }
 }
