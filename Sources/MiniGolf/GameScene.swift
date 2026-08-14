@@ -25,7 +25,7 @@ final class GameScene: SKScene {
     // 연출 상태
     private struct SwingAnim { var t = 0.0; var launched = false; let prof: SwingProfile; let fromPose: Pose }
     private struct WalkAnim { let fromX, toX,
-                                  dur: Double; var t = 0.0; let relax = 0.4; var phase = -0.6; var vPx = 0.0
+                                  dur: Double; var t = 0.0; let relax = 0.5; var phase = -0.6; var vPx = 0.0
     }
 
     private var swingAnim: SwingAnim?
@@ -183,6 +183,9 @@ final class GameScene: SKScene {
     }
 
     private func enterAim() {
+        if mode == .walking { // 걷기 리그에서 돌아올 때는 직립에서 어드레스로 자연스럽게 가라앉는다
+            renderPose = Poses.upright
+        }
         mode = .aim
         walkAnim = nil
         stickX = ball.x
@@ -209,7 +212,8 @@ final class GameScene: SKScene {
         }
         mode = .walking
         dir = to >= from ? 1 : -1
-        walkAnim = WalkAnim(fromX: from, toX: to, dur: min(4.5, max(1.0, dist / 55)))
+        // 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
+        walkAnim = WalkAnim(fromX: from, toX: to, dur: min(7.0, max(1.6, dist / 26)))
         updateHUD()
     }
 

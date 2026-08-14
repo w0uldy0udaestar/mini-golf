@@ -6,11 +6,11 @@ private extension Club {
     /// 렌더 길이(px): 드라이버가 가장 길고 퍼터가 가장 짧다
     var renderLength: Double {
         switch id {
-        case "DR": 38
-        case "3W": 36.5
-        case "5W": 35
-        case "PT": 26.5
-        default: 34 - (loft - 21) * 6 / 35 // 아이언·웨지: 로프트가 클수록 짧게 (3I 34 → SW 28)
+        case "DR": 45
+        case "3W": 43.5
+        case "5W": 42
+        case "PT": 31
+        default: 41 - (loft - 21) * 6 / 35 // 아이언·웨지: 로프트가 클수록 짧게 (3I 41 → SW 35)
         }
     }
 
@@ -89,8 +89,10 @@ final class StickmanNode: SKNode {
         let head = CGPoint(x: shoulder.x + dir * p.headDx, y: shoulder.y + 12)
         let aH = p.handA * .pi / 180
         let aC = p.clubA * .pi / 180
-        let hands = CGPoint(x: shoulder.x + sin(aH) * p.handD * dir, y: shoulder.y - cos(aH) * p.handD)
         let clubLen = club.renderLength
+        // 긴 클럽일수록 그립을 몸쪽으로 — 어드레스·임팩트에서 헤드가 정확히 지면에 닿는 기하 유지
+        let handD = max(16, p.handD - (clubLen - 31))
+        let hands = CGPoint(x: shoulder.x + sin(aH) * handD * dir, y: shoulder.y - cos(aH) * handD)
         let tip = CGPoint(x: hands.x + sin(aC) * clubLen * dir, y: hands.y - cos(aC) * clubLen)
 
         headShape.position = head
@@ -149,10 +151,11 @@ final class StickmanNode: SKNode {
         let c1 = cos(phase)
         let vAmp = min(1, vPx / 30)
         let bob = 1.6 * vAmp * abs(c1)
-        let stride = 16.0
+        // 보폭은 속도에 비례 — 출발·도착 순간 발이 모여 포즈 리그와 매끄럽게 이어진다
+        let stride = 16.0 * (0.2 + 0.8 * vAmp)
 
-        let hip = CGPoint(x: 0, y: 45 + bob)
-        let shoulder = CGPoint(x: dir * (2 + 2.5 * vAmp), y: 68 + bob)
+        let hip = CGPoint(x: 0, y: 43.5 + bob)
+        let shoulder = CGPoint(x: dir * (2 + 2.5 * vAmp), y: 67 + bob)
         let head = CGPoint(x: shoulder.x + dir * 4, y: shoulder.y + 12)
         headShape.position = head
         headRim.position = head
@@ -178,14 +181,14 @@ final class StickmanNode: SKNode {
             to: f2,
             control: CGPoint(x: (hip.x + f2.x) / 2 + dir * 3, y: (hip.y + f2.y) / 2 + 3 + 6 * vAmp * max(0, -c1))
         )
-        // 클럽 든 팔 + 자유 팔 (다리 반대 위상)
-        let grip = CGPoint(x: -dir * 12, y: 51 + bob)
+        // 클럽 든 팔 + 자유 팔 (다리 반대 위상) — 직립 포즈의 손 높이에 맞춰 전환 점프 최소화
+        let grip = CGPoint(x: -dir * 12, y: 47 + bob)
         body.move(to: shoulder)
         body.addQuadCurve(
             to: grip,
             control: CGPoint(x: (shoulder.x + grip.x) / 2 - dir * 3, y: (shoulder.y + grip.y) / 2 - 2)
         )
-        let freeHand = CGPoint(x: dir * (5 - 8 * s1 * vAmp), y: 51 + bob)
+        let freeHand = CGPoint(x: dir * (5 - 8 * s1 * vAmp), y: 47 + bob)
         body.move(to: shoulder)
         body.addQuadCurve(
             to: freeHand,
@@ -195,7 +198,7 @@ final class StickmanNode: SKNode {
         bodyRim.path = body
 
         // 클럽: 뒤로 비스듬히 든 채 이동 (길이는 클럽별)
-        let s = club.renderLength / 31
+        let s = club.renderLength / 38
         let tip = CGPoint(x: grip.x - dir * 16 * s, y: grip.y - 38 * s)
         let shaft = CGMutablePath()
         shaft.move(to: grip)
