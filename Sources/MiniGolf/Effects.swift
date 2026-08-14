@@ -6,8 +6,8 @@ enum FX {
     /// 착지·타격 먼지 — 라이별 색의 작은 점 몇 개가 튀었다 가라앉는다
     static func dust(on parent: SKNode, at p: CGPoint, surface: Surface, intensity: Double) {
         let color = switch surface {
-        case .bunker: NSColor(red: 0.82, green: 0.78, blue: 0.7, alpha: 0.7)
-        case .rough: NSColor(white: 0.85, alpha: 0.5)
+        case .bunker: Palette.bunkerSand.withAlphaComponent(0.7)
+        case .rough: Palette.roughGray.withAlphaComponent(0.5)
         default: NSColor(white: 0.95, alpha: 0.55)
         }
         let count = 2 + Int(intensity * 3)
@@ -34,7 +34,7 @@ enum FX {
     static func ripple(on parent: SKNode, at p: CGPoint) {
         for i in 0 ..< 2 {
             let ring = SKShapeNode(ellipseOf: CGSize(width: 18, height: 5))
-            ring.strokeColor = NSColor(red: 0.62, green: 0.71, blue: 0.78, alpha: 0.7)
+            ring.strokeColor = Palette.waterBlue.withAlphaComponent(0.7)
             ring.lineWidth = 1.2
             ring.fillColor = .clear
             ring.position = p

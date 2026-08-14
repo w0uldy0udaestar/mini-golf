@@ -333,7 +333,7 @@ final class GameScene: SKScene {
             switch surface {
             case .water: // 잔잔한 대시 라인
                 node.path = base.copy(dashingWithPhase: 0, lengths: [5, 4])
-                node.strokeColor = NSColor(red: 0.62, green: 0.71, blue: 0.78, alpha: 0.75)
+                node.strokeColor = Palette.waterBlue.withAlphaComponent(0.75)
                 node.lineWidth = 1.6
             case .green: // 살짝 도드라진 순백
                 node.path = base
@@ -341,7 +341,7 @@ final class GameScene: SKScene {
                 node.lineWidth = 2.6
             case .rough: // 어둡게 가라앉힘 + 잔디 틱
                 node.path = base
-                node.strokeColor = NSColor(white: 0.85, alpha: 0.42)
+                node.strokeColor = Palette.roughGray.withAlphaComponent(0.42)
                 node.lineWidth = 1.8
                 let grass = CGMutablePath()
                 var gx = from + 1.2
@@ -352,12 +352,12 @@ final class GameScene: SKScene {
                     gx += 2.4
                 }
                 let grassNode = SKShapeNode(path: grass)
-                grassNode.strokeColor = NSColor(white: 0.85, alpha: 0.3)
+                grassNode.strokeColor = Palette.roughGray.withAlphaComponent(0.3)
                 grassNode.lineWidth = 1
                 terrainNode.addChild(grassNode)
             case .bunker: // 모래 스티플
                 node.path = base
-                node.strokeColor = NSColor(red: 0.82, green: 0.78, blue: 0.7, alpha: 0.8)
+                node.strokeColor = Palette.bunkerSand.withAlphaComponent(0.8)
                 node.lineWidth = 1.8
                 let dots = CGMutablePath()
                 var bx = from + 0.8
@@ -367,12 +367,12 @@ final class GameScene: SKScene {
                     bx += 1.5
                 }
                 let dotNode = SKShapeNode(path: dots)
-                dotNode.fillColor = NSColor(red: 0.82, green: 0.78, blue: 0.7, alpha: 0.45)
+                dotNode.fillColor = Palette.bunkerSand.withAlphaComponent(0.45)
                 dotNode.strokeColor = .clear
                 terrainNode.addChild(dotNode)
             default: // 티·페어웨이·에이프런: 조용한 헤어라인
                 node.path = base
-                node.strokeColor = NSColor(white: 0.94, alpha: 0.75)
+                node.strokeColor = Palette.hairline.withAlphaComponent(0.75)
                 node.lineWidth = 1.8
             }
             node.lineCap = .round
