@@ -60,6 +60,7 @@ final class GameScene: SKScene {
     private let ballNode = SKShapeNode(circleOfRadius: 5.5)
     private let shadowNode = SKShapeNode(ellipseOf: CGSize(width: 15, height: 4.5))
     private let trailNode = SKShapeNode()
+    private let trailUnderNode = SKShapeNode() // 궤적 언더스트로크 (밝은 배경 대비)
     private let flagNode = SKNode()
     private let scoreTitle = GlassLabel(font: HUDFont.medium, size: 17, align: .right, kern: 1.0)
     private let scoreSub = GlassLabel(font: HUDFont.regular, size: 12, alpha: 0.8, align: .right)
@@ -88,11 +89,15 @@ final class GameScene: SKScene {
         backgroundColor = .clear // ⚠️ skView.backgroundColor는 설정 금지
 
         ballNode.fillColor = .white
-        ballNode.strokeColor = .clear
+        ballNode.strokeColor = NSColor(white: 0, alpha: 0.4) // 밝은 배경에서 공이 사라지지 않게
+        ballNode.lineWidth = 1.2
         shadowNode.fillColor = NSColor(white: 0, alpha: 0.28)
         shadowNode.strokeColor = .clear
         trailNode.strokeColor = NSColor(white: 1, alpha: 0.28)
         trailNode.lineWidth = 1
+        trailUnderNode.strokeColor = NSColor(white: 0, alpha: 0.3)
+        trailUnderNode.lineWidth = 2.8
+        trailUnderNode.lineCap = .round
 
         scoreTitle.position = CGPoint(x: size.width - 24, y: size.height - 46)
         scoreSub.position = CGPoint(x: size.width - 24, y: size.height - 72)
@@ -110,7 +115,7 @@ final class GameScene: SKScene {
         scorecard.position = CGPoint(x: size.width / 2, y: size.height / 2)
         scorecard.hide()
 
-        for n in [terrainNode, trailNode, stickman, shadowNode, ballNode, flagNode] as [SKNode] {
+        for n in [terrainNode, trailUnderNode, trailNode, stickman, shadowNode, ballNode, flagNode] as [SKNode] {
             addChild(n)
         }
         for n in [
@@ -198,8 +203,10 @@ final class GameScene: SKScene {
         Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir)
         strokes += 1
         trailPoints = []
-        trailNode.removeAllActions()
-        trailNode.alpha = 1
+        for t in [trailNode, trailUnderNode] {
+            t.removeAllActions()
+            t.alpha = 1
+        }
         mode = .motion
         SoundKit.shared.impact(cat: club.cat, lie: lie, power: heightPct)
         if lie == .rough || lie == .bunker { // 러프 풀잎·벙커 모래가 튄다
@@ -216,12 +223,16 @@ final class GameScene: SKScene {
     /// 샷이 끝나면 궤적은 잠시 여운을 남기고 사라진다
     private func endShotTrail() {
         guard !trailPoints.isEmpty else { return }
+        trailUnderNode.removeAllActions()
+        trailUnderNode.run(.fadeAlpha(to: 0, duration: 1.1))
         trailNode.removeAllActions()
         trailNode.run(.sequence([
             .fadeAlpha(to: 0, duration: 1.1),
             .run { [weak self] in
-                self?.trailPoints.removeAll()
-                self?.trailNode.alpha = 1
+                guard let self else { return }
+                trailPoints.removeAll()
+                trailNode.alpha = 1
+                trailUnderNode.alpha = 1
             },
         ]))
     }
@@ -365,6 +376,12 @@ final class GameScene: SKScene {
                 node.lineWidth = 1.8
             }
             node.lineCap = .round
+            // 언더스트로크: 같은 경로를 어둡고 굵게 한 겹 아래 — 밝은 배경에서 헤어라인이 사라지지 않게
+            let under = SKShapeNode(path: node.path ?? base)
+            under.strokeColor = NSColor(white: 0, alpha: 0.32)
+            under.lineWidth = node.lineWidth + 2.2
+            under.lineCap = .round
+            terrainNode.addChild(under)
             terrainNode.addChild(node)
         }
 
@@ -389,7 +406,8 @@ final class GameScene: SKScene {
         flagNode.zRotation = 0 // flagWave가 중간에 끊겨도 잔여 회전이 남지 않게
         let pole = SKShapeNode(rect: CGRect(x: -0.6, y: 0, width: 1.2, height: 62))
         pole.fillColor = NSColor(white: 0.95, alpha: 0.85)
-        pole.strokeColor = .clear
+        pole.strokeColor = NSColor(white: 0, alpha: 0.35)
+        pole.lineWidth = 1
         let flag = SKShapeNode(path: {
             let p = CGMutablePath()
             p.move(to: CGPoint(x: 0, y: 62))
@@ -586,8 +604,10 @@ final class GameScene: SKScene {
                 path.addLine(to: p)
             }
             trailNode.path = path
+            trailUnderNode.path = path
         } else {
             trailNode.path = nil
+            trailUnderNode.path = nil
         }
 
         powerLabel.setText("\(Int(heightPct * 100))")

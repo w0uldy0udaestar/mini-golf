@@ -6,26 +6,45 @@ import SpriteKit
 final class StickmanNode: SKNode {
     private let stickColor = NSColor(white: 0.88, alpha: 0.95)
     private let shaftColor = NSColor(white: 0.76, alpha: 0.9)
+    private let rimColor = NSColor(white: 0, alpha: 0.32) // 밝은 배경 대비용 다크 림
     private let headShape = SKShapeNode(circleOfRadius: 10)
     private let bodyShape = SKShapeNode() // 척추+다리+팔 통합 경로
     private let shaftShape = SKShapeNode()
     private let clubHeadShape = SKShapeNode()
+    // 언더스트로크 트윈 — 같은 경로를 어둡고 굵게 한 겹 아래 (FINDING-001)
+    private let headRim = SKShapeNode(circleOfRadius: 11.2)
+    private let bodyRim = SKShapeNode()
+    private let shaftRim = SKShapeNode()
+    private let clubHeadRim = SKShapeNode()
 
     override init() {
         super.init()
         headShape.fillColor = stickColor
         headShape.strokeColor = .clear
+        headRim.fillColor = rimColor
+        headRim.strokeColor = .clear
         bodyShape.strokeColor = stickColor
         bodyShape.lineWidth = 6
         bodyShape.lineCap = .round
         bodyShape.lineJoin = .round
+        bodyRim.strokeColor = rimColor
+        bodyRim.lineWidth = 8.4
+        bodyRim.lineCap = .round
+        bodyRim.lineJoin = .round
         shaftShape.strokeColor = shaftColor
         shaftShape.lineWidth = 3
         shaftShape.lineCap = .round
+        shaftRim.strokeColor = rimColor
+        shaftRim.lineWidth = 5.2
+        shaftRim.lineCap = .round
         clubHeadShape.strokeColor = NSColor(white: 0.85, alpha: 0.95)
         clubHeadShape.fillColor = NSColor(white: 0.85, alpha: 0.95)
         clubHeadShape.lineCap = .round
-        for n in [bodyShape, shaftShape, clubHeadShape, headShape] as [SKNode] {
+        clubHeadRim.strokeColor = rimColor
+        clubHeadRim.fillColor = rimColor
+        clubHeadRim.lineCap = .round
+        for n in [bodyRim, shaftRim, clubHeadRim, headRim, bodyShape, shaftShape, clubHeadShape,
+                  headShape] as [SKNode] {
             addChild(n)
         }
     }
@@ -47,6 +66,7 @@ final class StickmanNode: SKNode {
         let tip = CGPoint(x: hands.x + sin(aC) * clubLen * dir, y: hands.y - cos(aC) * clubLen)
 
         headShape.position = head
+        headRim.position = head
 
         let body = CGMutablePath()
         // 척추 (살짝 굽음)
@@ -75,14 +95,18 @@ final class StickmanNode: SKNode {
             control: CGPoint(x: (shoulder.x + hands.x) / 2 + dir * 4, y: (shoulder.y + hands.y) / 2)
         )
         bodyShape.path = body
+        bodyRim.path = body
 
         let shaft = CGMutablePath()
         shaft.move(to: hands)
         shaft.addLine(to: tip)
         shaftShape.path = shaft
+        shaftRim.path = shaft
 
         clubHeadShape.path = clubHeadPath(cat: clubCat, tip: tip, phi: aC, dir: dir)
         clubHeadShape.lineWidth = clubCat == .putter ? 6 : (clubCat == .wedge ? 5 : 4)
+        clubHeadRim.path = clubHeadShape.path
+        clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
 
     /// 걷기 리그 — 발이 지면을 딛는 보행. groundDelta: 로컬 x(px) → 그 지점 지면의 로컬 y(px)
@@ -103,6 +127,7 @@ final class StickmanNode: SKNode {
         let shoulder = CGPoint(x: dir * (2 + 2.5 * vAmp), y: 68 + bob)
         let head = CGPoint(x: shoulder.x + dir * 4, y: shoulder.y + 12)
         headShape.position = head
+        headRim.position = head
 
         let f1x = dir * stride * s1
         let f2x = -dir * stride * s1
@@ -139,6 +164,7 @@ final class StickmanNode: SKNode {
             control: CGPoint(x: (shoulder.x + freeHand.x) / 2 + dir * 2, y: (shoulder.y + freeHand.y) / 2 - 3)
         )
         bodyShape.path = body
+        bodyRim.path = body
 
         // 클럽: 뒤로 비스듬히 든 채 이동
         let tip = CGPoint(x: grip.x - dir * 16, y: 13 + bob)
@@ -146,8 +172,11 @@ final class StickmanNode: SKNode {
         shaft.move(to: grip)
         shaft.addLine(to: tip)
         shaftShape.path = shaft
+        shaftRim.path = shaft
         let carryPhi = atan2((tip.x - grip.x) * dir, grip.y - tip.y)
         clubHeadShape.path = clubHeadPath(cat: clubCat, tip: tip, phi: carryPhi, dir: dir)
+        clubHeadRim.path = clubHeadShape.path
+        clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
 
     /// 클럽 헤드 디자인 — 숫자 대신 생김새로 클럽을 구분한다

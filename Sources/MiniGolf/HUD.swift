@@ -9,9 +9,14 @@ enum HUDFont {
     static let semibold = "AppleSDGothicNeo-SemiBold"
 }
 
-/// 상자 없는 텍스트: 본문 + 오프셋 그림자 두 겹
+/// 상자 없는 텍스트: 본문 + 사방 헤일로 그림자 — 밝은 배경에서도 상자 없이 읽힌다
 final class GlassLabel: SKNode {
-    private let shadowLabel = SKLabelNode()
+    /// 사방 확산 + 우하단 깊이 한 겹 (배경 무관 대비, FINDING-001)
+    private static let haloOffsets: [(CGFloat, CGFloat, CGFloat)] = [
+        (-1.2, 1.2, 0.28), (1.2, 1.2, 0.28), (-1.2, -1.2, 0.28), (1.2, -1.2, 0.28), (1.0, -1.4, 0.45),
+    ]
+
+    private var haloLabels: [SKLabelNode] = []
     private let mainLabel = SKLabelNode()
     private let font: String
     private let size: CGFloat
@@ -30,12 +35,16 @@ final class GlassLabel: SKNode {
         textAlpha = alpha
         self.kern = kern
         super.init()
-        shadowLabel.horizontalAlignmentMode = align
+        for (dx, dy, _) in Self.haloOffsets {
+            let l = SKLabelNode()
+            l.horizontalAlignmentMode = align
+            l.verticalAlignmentMode = .top
+            l.position = CGPoint(x: dx, y: dy)
+            haloLabels.append(l)
+            addChild(l)
+        }
         mainLabel.horizontalAlignmentMode = align
-        shadowLabel.verticalAlignmentMode = .top
         mainLabel.verticalAlignmentMode = .top
-        shadowLabel.position = CGPoint(x: 1, y: -1.2)
-        addChild(shadowLabel)
         addChild(mainLabel)
     }
 
@@ -45,7 +54,9 @@ final class GlassLabel: SKNode {
 
     func setText(_ text: String) {
         mainLabel.attributedText = attributed(text, color: NSColor(white: 0.98, alpha: textAlpha))
-        shadowLabel.attributedText = attributed(text, color: NSColor(white: 0, alpha: 0.5))
+        for (l, offset) in zip(haloLabels, Self.haloOffsets) {
+            l.attributedText = attributed(text, color: NSColor(white: 0, alpha: offset.2))
+        }
     }
 
     private func attributed(_ text: String, color: NSColor) -> NSAttributedString {
