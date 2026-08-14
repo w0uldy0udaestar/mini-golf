@@ -77,9 +77,10 @@ Render  (SpriteKit)
 - [x] 메뉴바 앱 흐름: 시작/새 라운드/종료, 포커스 상실 자동 일시정지
 - 추가(2026-08-14 머지): '조용한 계기판' HUD 재설계(상자 제거·타이포 중심·헤어라인 지형), 전역 단축키 ⌃⇧G(Carbon 핫키, 권한 불필요), 퍼터 거리 프리셋·홀인 창 확대
 
-### M3 · 폴리시 — [게이트: /design-review 통과]
+### M3 · 폴리시 — 게이트 통과 (2026-08-14)
 - [x] 비주얼 방향 정의 후 적용 — '조용한 계기판' 방향으로 HUD 재설계 완료 (feature/quiet-hud)
-- [ ] 사운드(타격·홀인), 궤적 이펙트, 스윙 연출
+- [x] 사운드(타격·홀인·휘시·착지·립아웃·워터·차임 — 합성음 SoundKit)·궤적 이펙트·미세 파티클 FX (feature/m3-sound-fx). 사용자 청음 튜닝 피드백은 열려 있음
+- [x] **/design-review 게이트 통과** — 발견 4건(critical 1: 밝은 배경 시인성) 전부 수정, Design Score A- · AI Slop A. 보고서: `~/.gstack/projects/mini-golf/designs/design-audit-20260814/`. 핵심 수정: 듀얼톤 헤일로·언더스트로크로 배경 무관 대비 확보 + Palette 상수 도입
 
 ### M4 · 오픈소스 공개 — [게이트: 공개 전 사용자 최종 확인]
 - [ ] README (빌드·실행 방법, 미서명 실행 `xattr` 안내), 데모 GIF, MIT LICENSE, CHANGELOG
