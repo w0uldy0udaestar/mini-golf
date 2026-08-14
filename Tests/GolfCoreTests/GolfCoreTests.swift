@@ -308,6 +308,23 @@ final class GolfCoreTests: XCTestCase {
         }
     }
 
+    // ── 경사 라이 (3eccc4f 복원) ──
+
+    func testSlopeLieTiltsLaunchAndCostsSpeed() {
+        let c = club("7I")
+        func launched(slope: Double) -> BallState {
+            var b = BallState(x: 0, y: 0)
+            Ballistics.launch(&b, club: c, heightPct: 0.8, lie: .fairway, dir: 1, slope: slope)
+            return b
+        }
+        let flat = launched(slope: 0)
+        let up = launched(slope: 0.15)
+        let down = launched(slope: -0.15)
+        XCTAssertGreaterThan(atan2(up.vy, up.vx), atan2(flat.vy, flat.vx) + 0.05, "오르막 라이가 더 뜨지 않음")
+        XCTAssertLessThan(atan2(down.vy, down.vx), atan2(flat.vy, flat.vx) - 0.05, "내리막 라이가 더 낮지 않음")
+        XCTAssertLessThan(hypot(up.vx, up.vy), hypot(flat.vx, flat.vy), "경사 라이 스피드 손실 없음")
+    }
+
     // ── 펀치샷 (벽 백스윙 제한) ──
 
     func testPunchLowersTrajectoryAndSpin() {

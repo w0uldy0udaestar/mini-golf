@@ -89,6 +89,9 @@ final class GameScene: SKScene {
     }
 
     private let groundBase: CGFloat = 96
+    /// 경사 라이: 스탠스 기울기 = 로프트 전달 비율 (같은 상수를 공유해야 물리·애니메이션이 정합)
+    private let slopeTiltRatio = 0.7
+    private var renderSlopeTilt = 0.0 // 경사 스탠스 기울기 (스무딩)
 
     // 노드
     private let terrainNode = SKNode()
@@ -351,6 +354,29 @@ final class GameScene: SKScene {
         }
     }
 
+    /// 라이별 어드레스 자세 — 벙커는 발을 파묻는 와이드 스탠스·웅크림·초크다운, 러프는 살짝
+    /// 웅크림 (2026-08-15 사용자 요청 2번). 타깃에만 적용 — 라이 전환은 기존 추적 스무딩이 처리
+    private func applyLieStance(_ rig: inout Rig) {
+        let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
+        switch lie {
+        case .bunker:
+            rig.foot1.x -= 3 // 와이드 스탠스
+            rig.foot2.x += 3
+            rig.foot1.y -= 1.5 // 모래에 파묻힌 발
+            rig.foot2.y -= 1.5
+            rig.knee1.y -= 2
+            rig.knee2.y -= 2
+            rig.hip.y -= 2.5 // 무릎을 굽혀 낮게
+            rig.shoulder.y -= 2.5
+            rig.clubLen *= 0.93 // 초크다운
+        case .rough:
+            rig.hip.y -= 1.2 // 풀을 누르며 살짝 웅크린다
+            rig.shoulder.y -= 1.5
+        default:
+            break
+        }
+    }
+
     /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
     /// 그립은 초크다운. t: 벽 근접도 0~1 (renderWallT로 스무딩되어 들어온다)
     private func applyWallStance(_ rig: inout Rig, t: Double) {
@@ -423,7 +449,12 @@ final class GameScene: SKScene {
         let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
         let mishit = club.isPutter ? 0 : risk * gauss
         // 벽 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
-        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir, mishit: mishit, punch: wallPunch)
+        // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
+        let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
+        Ballistics.launch(
+            &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
+            mishit: mishit, punch: wallPunch, slope: slope
+        )
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -921,6 +952,7 @@ final class GameScene: SKScene {
                 ? renderWallT
                 : renderWallT * max(0, 1 - (anim.t - anim.prof.down) / 0.25)
             applyWallStance(&targetRig, t: wallSwingT)
+            applyLieStance(&targetRig)
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
@@ -993,6 +1025,7 @@ final class GameScene: SKScene {
                 ballFwd: wallBallFwd, clubLen: renderLen
             )
             applyWallStance(&targetRig, t: renderWallT)
+            applyLieStance(&targetRig)
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
@@ -1015,6 +1048,11 @@ final class GameScene: SKScene {
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
+        // 경사 라이: 걷기 외에는 스탠스가 지면 경사를 따라 기운다 (물리와 동일 비율 — 3eccc4f 복원).
+        // 벽 근처에선 억제 — 벽 경성 클램프가 무회전 평면을 가정하기 때문
+        let tiltTarget = mode == .walking ? 0 : slopeTiltRatio * atan(hole.slope(at: stickX)) * (1 - renderWallT)
+        renderSlopeTilt += (tiltTarget - renderSlopeTilt) * (1 - exp(-6 * dt))
+        stickman.zRotation = CGFloat(renderSlopeTilt)
         // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
         var drawRig = renderRig
