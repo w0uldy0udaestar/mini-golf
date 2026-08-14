@@ -308,6 +308,52 @@ final class GolfCoreTests: XCTestCase {
         }
     }
 
+    // ── 전략 배치 (클럽 거리 앵커) ──
+
+    func testClubAnchorsAreOrderedAndSane() {
+        let dr = CourseStrategy.total(of: "DR")
+        XCTAssertGreaterThan(dr, CourseStrategy.total(of: "3W"), "드라이버가 3우드보다 짧음")
+        XCTAssertGreaterThan(CourseStrategy.total(of: "3W"), CourseStrategy.total(of: "7I"), "3우드가 7아이언보다 짧음")
+        XCTAssertTrue((150 ... 330).contains(dr), "드라이버 토탈 \(dr)m 비정상")
+        XCTAssertLessThan(CourseStrategy.carry(of: "DR"), dr, "캐리가 토탈보다 김")
+    }
+
+    func testHazardsClusterAtTeeShotLandingAndSpareLayupZone() {
+        let dr = CourseStrategy.total(of: "DR")
+        var inBand = 0, par45 = 0, layupViolations = 0
+        for seed in 1 ... 30 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.par >= 4 {
+                par45 += 1
+                func fromTee(_ x: Double) -> Double {
+                    abs(x - h.teeX)
+                } // 미러 정규화
+                // 생성기와 같은 앵커: 이 홀의 합리적 최대 티샷 (그린 60m 앞 상한)
+                let anchor = min(dr, h.dist - 60)
+                let hazards = h.segments.filter { $0.type == .bunker || $0.type == .water }
+                for seg in hazards {
+                    let a = fromTee(seg.from), b = fromTee(seg.to)
+                    let center = (min(a, b) + max(a, b)) / 2
+                    if center > anchor - 60, center < anchor + 30 {
+                        inBand += 1
+                        break
+                    }
+                }
+                // 안전선 보장: 티 직후~레이업 지대는 항상 깨끗하다
+                for seg in hazards {
+                    let a = fromTee(seg.from), b = fromTee(seg.to)
+                    if min(a, b) < min(0.92 * dr, h.dist - 60) - 62, max(a, b) > 30 {
+                        layupViolations += 1
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(layupViolations, 0, "레이업 안전 지대에 해저드가 있음")
+        XCTAssertGreaterThan(
+            Double(inBand) / Double(par45), 0.45,
+            "낙하 지대 해저드 비율이 너무 낮음 (\(inBand)/\(par45))"
+        )
+    }
+
     // ── 경사 라이 (3eccc4f 복원) ──
 
     func testSlopeLieTiltsLaunchAndCostsSpeed() {

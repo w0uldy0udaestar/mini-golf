@@ -160,12 +160,19 @@ public enum CourseGenerator {
             elev[i] = a.e + (b.e - a.e) * (0.5 - 0.5 * cos(u * .pi))
         }
 
-        // ── 워터 해저드: 파4·5의 중반부에 35% 확률, 평평한 저지대 ──
+        // ── 해저드 전략 배치: 클럽 실측 도달 거리를 앵커로 (2026-08-15 사용자 설계) ──
+        // 원칙: 티샷 낙하 지대에 리스크를, 티~레이업 지대에는 항상 안전선을 남긴다
+        let drTotal = CourseStrategy.total(of: "DR")
+        // 낙하 지대 앵커 = 이 홀에서 합리적인 최대 티샷: 드라이버 토탈 ±8%, 단 그린 60m 앞 상한
+        // (짧은 홀에선 아무도 드라이버 풀샷을 안 친다 — 실코스 설계도 '치는 클럽' 기준으로 배치)
+        let landing = teeX + min(drTotal * (0.92 + 0.16 * rand.next()), dist - 60)
+
+        // 워터: 낙하 지대 직전을 가로지른다 — 풀드라이브는 캐리로 넘기고, 레이업은 그 앞에 선다
         var waterRange: ClosedRange<Double>? = nil
         if par >= 4, rand.next() < 0.35 {
-            let wFrom = teeEnd + 40 + rand.next() * (apronStart - teeEnd - 100)
-            let wTo = wFrom + rand.next(15, 30)
-            if wTo < apronStart - 25 {
+            let wTo = landing - rand.next(15, 25)
+            let wFrom = wTo - rand.next(15, 30)
+            if wFrom > teeEnd + 35, wTo < apronStart - 25 {
                 waterRange = wFrom ... wTo
                 segments = carve(segments, from: wFrom, to: wTo, type: .water)
                 let wl = min(elev[Int(wFrom)], elev[Int(ceil(wTo))]) - 1.2
@@ -186,14 +193,15 @@ public enum CourseGenerator {
             }
         }
 
-        /// ── 벙커: 그린 앞 1개(60%) + 페어웨이 중반 1개(35%), 얕은 모래 구덩이 ──
-        func addBunker(from bFrom: Double, width: Double) {
+        /// ── 벙커: 얕은 모래 구덩이. 배치 성공 여부를 돌려줘 전략 배치가 재시도할 수 있게 ──
+        @discardableResult
+        func addBunker(from bFrom: Double, width: Double) -> Bool {
             let bTo = bFrom + width
             if let wr = waterRange, bFrom < wr.upperBound + 6, bTo > wr.lowerBound - 6 {
-                return
+                return false
             }
             if bTo >= greenStart - 1 || bFrom <= teeEnd + 5 {
-                return
+                return false
             }
             segments = carve(segments, from: bFrom, to: bTo, type: .bunker)
             let mid = (bFrom + bTo) / 2
@@ -201,15 +209,28 @@ public enum CourseGenerator {
                 let d = 1 - abs(Double(i) - mid) / (width / 2 + 0.5) // 가운데가 깊게
                 elev[i] -= max(0, d) * 0.9
             }
+            return true
         }
-        if rand.next() < 0.6 {
+        // 페어웨이 벙커: 드라이버 낙하 지대 그 자체를 지킨다 — 지르면 벙커 리스크, 끊으면 안전.
+        // 그린·워터와 겹쳐 기각되면 낙하 지대 앞쪽으로 물러나며 재시도 (짧은 파4 대응)
+        if par >= 4, rand.next() < 0.55 {
+            let w = rand.next(6, 9)
+            var bFrom = landing - rand.next(2, 10)
+            for _ in 0 ..< 3 {
+                if addBunker(from: bFrom, width: w) {
+                    break
+                }
+                bFrom -= 13
+            }
+        }
+        // 파5: 2온 도전 지점(드라이버+3우드 도달선)에 추가 리스크
+        if par == 5, rand.next() < 0.4 {
+            let second = teeX + drTotal + CourseStrategy.total(of: "3W") * rand.next(0.8, 0.95)
+            addBunker(from: min(second, apronStart - 32), width: rand.next(7, 10))
+        }
+        // 그린 가드 벙커: 파3는 티샷 정밀도 시험이라 더 자주 (관례)
+        if rand.next() < (par == 3 ? 0.65 : 0.6) {
             addBunker(from: greenStart - 4 - rand.next(3, 8), width: rand.next(5, 8))
-        }
-        if rand.next() < 0.35 {
-            addBunker(
-                from: teeEnd + 50 + rand.next() * (apronStart - teeEnd - 90),
-                width: rand.next(6, 10)
-            )
         }
 
         // ── 그린: 주변 지형 흐름을 따르는 미세 경사(브레이크) ──
