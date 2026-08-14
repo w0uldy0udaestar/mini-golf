@@ -211,8 +211,6 @@ final class StickmanNode: SKNode {
         }
     }
 
-    private var headKind = "" // 헤드 모양 종류 — 바뀌는 순간 고스트 크로스페이드
-
     func render(rig r: Rig, club: Club, visualLoft: Double, dir: Double) {
         func m(_ p: CGPoint) -> CGPoint {
             CGPoint(x: p.x * dir, y: p.y)
@@ -267,25 +265,6 @@ final class StickmanNode: SKNode {
         shaft.addLine(to: tip)
         shaftShape.path = shaft
         shaftRim.path = shaft
-
-        // 헤드 모양 '종류'가 바뀌는 경계(우드↔아이언, 웨지↔퍼터)는 고스트 크로스페이드로
-        let kind = club.cat == .wood ? "wood" : club.cat == .putter ? "putter" : "blade"
-        if kind != headKind, !headKind.isEmpty {
-            if let old = clubHeadShape.path {
-                let ghost = SKShapeNode(path: old)
-                ghost.strokeColor = clubHeadShape.strokeColor
-                ghost.fillColor = clubHeadShape.fillColor
-                ghost.lineWidth = clubHeadShape.lineWidth
-                ghost.lineCap = .round
-                addChild(ghost)
-                ghost.run(.sequence([.fadeOut(withDuration: 0.28), .removeFromParent()]))
-            }
-            clubHeadShape.alpha = 0
-            clubHeadShape.run(.fadeIn(withDuration: 0.28))
-            clubHeadRim.alpha = 0
-            clubHeadRim.run(.fadeIn(withDuration: 0.28))
-        }
-        headKind = kind
 
         clubHeadShape.path = clubHeadPath(club: club, visualLoft: visualLoft, tip: tip, phi: r.clubPhi, dir: dir)
         // 블레이드 굵기도 로프트 연속 함수 (아이언 4 → SW 5)

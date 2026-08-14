@@ -44,6 +44,7 @@ final class GameScene: SKScene {
     private var renderBallFwd = 24.0
     private var renderTop = 1.0
     private var renderLoft = 10.5 // 헤드 기하(크기·틸트·굵기)도 이 값으로 구동 — 모양 점프 방지
+    private var displayClub = ClubTable.all[0] // 그려지는 클럽 — 종류가 바뀌면 재그립 딥 최저점에서 교체
     private var clubSettle = 1.0 // 클럽 변경 후 경과 — 직후엔 추적을 늦춰 잔여 점프를 누른다
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var stickX = CourseGenerator.teeX
@@ -641,8 +642,15 @@ final class GameScene: SKScene {
         renderLen += (club.renderLength - renderLen) * clubK
         renderBallFwd += (profile.ballFwd - renderBallFwd) * clubK
         renderTop += (profile.topScale - renderTop) * clubK
-        renderLoft += (club.loft - renderLoft) * clubK
         clubSettle += dt
+        /// 헤드 모양 '종류'(우드/블레이드/퍼터)가 바뀌면 재그립 딥 최저점에서 교체 — 몸 동작이 교체를 감춘다
+        func headKind(_ c: Club) -> Int {
+            c.cat == .wood ? 0 : c.cat == .putter ? 2 : 1
+        }
+        if headKind(displayClub) == headKind(club) || clubSettle >= 0.27 {
+            displayClub = club
+        }
+        renderLoft += (displayClub.loft - renderLoft) * clubK
         if mode == .aim {
             aimTime += dt
         }
@@ -670,12 +678,14 @@ final class GameScene: SKScene {
             }
             rigRate = 14 // 걸음은 또렷하게 — 진입·이탈은 보폭 램프가 받쳐준다
         } else if mode == .aim {
+            // 재그립 제스처: 클럽 교체 직후 어드레스로 내렸다가 다시 든다 (교체 동작 자체가 연출)
+            let dip = clubSettle < 0.55 ? 1 - 0.94 * sin(.pi * clubSettle / 0.55) : 1
             targetRig = RigBuilder.fromPose(
-                backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
+                backswingPose(heightPct: heightPct * dip, profile: profile, topScale: renderTop),
                 ballFwd: renderBallFwd, clubLen: renderLen
             )
-            // 진입 직후·클럽 변경 직후엔 천천히 가라앉고, 이후 입력에 기민하게
-            rigRate = aimTime < 0.9 ? 6 : (clubSettle < 0.45 ? 7 : 14)
+            // 진입 직후엔 천천히 가라앉고, 재그립 중엔 딥을 따라가고, 그 외엔 입력에 기민하게
+            rigRate = aimTime < 0.9 ? 6 : (clubSettle < 0.55 ? 10 : 14)
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
@@ -687,7 +697,7 @@ final class GameScene: SKScene {
 
         // 렌더 반영
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
-        stickman.render(rig: renderRig, club: club, visualLoft: renderLoft, dir: dir)
+        stickman.render(rig: renderRig, club: displayClub, visualLoft: renderLoft, dir: dir)
 
         if mode != .holed { // 홀인 드롭 연출 중에는 SKAction이 공 위치를 갖는다
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
