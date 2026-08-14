@@ -15,17 +15,56 @@ extension Club {
     }
 }
 
-/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감. 전부 0~1 블렌드(또는 누적 각)라 겹쳐도 안전
+/// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감.
+/// 20종의 모션은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로 표현된다 (겹쳐도 안전)
 struct WalkFlavor {
     var twirlAngle = 0.0 // 클럽 트월 누적 회전(rad) — 완료 후에도 유지 (되감기 없음)
-    var shoulder = 0.0 // 어깨 캐리
-    var lookBack = 0.0 // 뒤돌아보기 (머리만)
-    var hatTouch = 0.0 // 모자 만지기 (자유 팔이 머리로)
-    var skip = 0.0 // 폴짝 스킵 (발 들기·바운스 부스트)
+    var shoulder = 0.0 // 어깨 캐리 블렌드
+    var lookBack = 0.0 // 뒤돌아보기 블렌드
+    var hatTouch = 0.0 // 모자 만지기 블렌드 (자유 팔이 머리로)
+    var skip = 0.0 // 폴짝 (발 들기·바운스 부스트)
+    var headDxOff = 0.0 // 머리 수평 오프셋 (응시·까딱)
+    var headDyOff = 0.0 // 머리 수직 오프셋 (하늘 보기·갸웃)
+    var shoulderYOff = 0.0 // 어깨 오프셋 (으쓱·처짐·기지개)
+    var hipXOff = 0.0 // 힙 흔들기
+    var armAmpBoost = 0.0 // 자유 팔 진폭 부스트
+    var phiWobble = 0.0 // 클럽 각 진동(rad)
+    var gripLift = 0.0 // 클럽 살짝 들기 (0~1)
 }
 
-enum WalkFlavorKind {
-    case twirl, twirlDouble, lookBack, hatTouch, skip
+/// 랜덤 모션 20종
+enum WalkFlavorKind: CaseIterable {
+    case twirl, twirlDouble, twirlReverse // 클럽 트월 3종
+    case lookBack, lookSky, lookHole, headBob, headTilt // 머리 5종
+    case hatTouch, armSwing, shrug, slump, stretch // 상체 5종
+    case skip, skipJoy, hipSway, shoulderRoll // 리듬 4종
+    case wristRoll, clubRaise, clubTapShoulder // 클럽 손짓 3종
+
+    /// 클럽이 손에 있어야 하는 모션 (어깨 캐리 중 금지)
+    var needsClub: Bool {
+        switch self {
+        case .twirl, .twirlDouble, .twirlReverse, .wristRoll, .clubRaise, .clubTapShoulder: true
+        default: false
+        }
+    }
+
+    var duration: Double {
+        switch self {
+        case .twirl, .twirlReverse: 1.0
+        case .twirlDouble: 1.5
+        case .lookBack: 1.3
+        case .lookSky: 1.4
+        case .lookHole, .headBob, .wristRoll: 1.2
+        case .headTilt: 1.0
+        case .hatTouch: 1.1
+        case .armSwing, .slump, .skipJoy: 1.6
+        case .shrug: 0.8
+        case .stretch: 1.5
+        case .skip: 0.7
+        case .hipSway, .clubTapShoulder: 1.4
+        case .shoulderRoll, .clubRaise: 1.3
+        }
+    }
 }
 
 struct WalkFlavorEvent {
@@ -58,19 +97,23 @@ struct Rig {
     var knee2 = CGPoint(x: 6, y: 21)
     var grip = CGPoint(x: 8, y: 33) // 리드 손 = 클럽 그립
     var handTrail = CGPoint(x: 10, y: 30) // 트레일 손 (스윙: 그립에 겹침 · 걷기: 자유 팔)
+    var headDy = 12.0 // 어깨→머리 수직 거리
     var clubPhi = 0.2 // 샤프트 절대각 (0 = 수직 아래, + = 타겟 쪽)
     var clubLen = 31.0
 
     /// 지수 감쇠 추적 — clubPhi는 최단 각도 경로로 (트월 한 바퀴 후 되감기 방지)
-    mutating func chase(_ t: Rig, rate: Double, dt: Double) {
+    /// footRate: 걷기 중 발·무릎만 고속 추적 — 접지점이 스무딩에 밀리면 미끄러져 보인다
+    mutating func chase(_ t: Rig, rate: Double, footRate: Double? = nil, dt: Double) {
         let k = 1 - exp(-rate * dt)
+        let kf = footRate.map { 1 - exp(-$0 * dt) } ?? k
         hip = mix(hip, t.hip, k)
         shoulder = mix(shoulder, t.shoulder, k)
         headDx = mix(headDx, t.headDx, k)
-        foot1 = mix(foot1, t.foot1, k)
-        foot2 = mix(foot2, t.foot2, k)
-        knee1 = mix(knee1, t.knee1, k)
-        knee2 = mix(knee2, t.knee2, k)
+        headDy = mix(headDy, t.headDy, k)
+        foot1 = mix(foot1, t.foot1, kf)
+        foot2 = mix(foot2, t.foot2, kf)
+        knee1 = mix(knee1, t.knee1, kf)
+        knee2 = mix(knee2, t.knee2, kf)
         grip = mix(grip, t.grip, k)
         handTrail = mix(handTrail, t.handTrail, k)
         clubLen = mix(clubLen, t.clubLen, k)
@@ -139,9 +182,10 @@ enum RigBuilder {
         let bob = (1.6 * vAmp + 2.5 * flavor.skip) * abs(sin(bodyPhase)) * gather
 
         var r = Rig()
-        r.hip = CGPoint(x: 0, y: 43.5 + bob)
-        r.shoulder = CGPoint(x: 2 + 2.5 * vAmp, y: 67 + bob)
-        r.headDx = mix(4, -7, flavor.lookBack) // 뒤돌아보기
+        r.hip = CGPoint(x: flavor.hipXOff, y: 43.5 + bob)
+        r.shoulder = CGPoint(x: 2 + 2.5 * vAmp, y: 67 + bob + flavor.shoulderYOff)
+        r.headDx = mix(4, -7, flavor.lookBack) + flavor.headDxOff // 뒤돌아보기·응시·까딱
+        r.headDy = 12 + flavor.headDyOff
         r.foot1 = CGPoint(x: f1.x, y: groundDelta(f1.x) + f1.lift)
         r.foot2 = CGPoint(x: f2.x, y: groundDelta(f2.x) + f2.lift)
         r.knee1 = CGPoint(
@@ -153,9 +197,9 @@ enum RigBuilder {
             y: (r.hip.y + r.foot2.y) / 2 + 3 + f2.lift * 0.5
         )
 
-        // 클럽 캐리: 기본은 옆에, 어깨 캐리 블렌드 시 어깨 위로
+        // 클럽 캐리: 기본은 옆에(gripLift로 살짝 들기), 어깨 캐리 블렌드 시 어깨 위로
         let s = clubLen / 38
-        var grip = CGPoint(x: -12, y: 47 + bob)
+        var grip = CGPoint(x: -12, y: 47 + bob + 6 * flavor.gripLift)
         var tip = CGPoint(x: grip.x - 16 * s, y: grip.y - 38 * s)
         if flavor.shoulder > 0 {
             let sGrip = CGPoint(x: r.shoulder.x + 9, y: r.shoulder.y - 3)
@@ -164,11 +208,12 @@ enum RigBuilder {
             tip = mix(tip, sTip, flavor.shoulder)
         }
         r.grip = grip
-        r.clubPhi = atan2(tip.x - grip.x, grip.y - tip.y) + flavor.twirlAngle
+        r.clubPhi = atan2(tip.x - grip.x, grip.y - tip.y) + flavor.twirlAngle + flavor.phiWobble
         r.clubLen = clubLen
 
-        // 자유 팔: 다리 반대 위상 스윙, 모자 만지기 블렌드 시 머리로
-        let free = CGPoint(x: 5 - 8 * sin(bodyPhase) * vAmp * gather, y: 47 + bob)
+        // 자유 팔: 다리 반대 위상 스윙(부스트 가능), 모자 만지기 블렌드 시 머리로
+        let armAmp = 8 * (1 + flavor.armAmpBoost)
+        let free = CGPoint(x: 5 - armAmp * sin(bodyPhase) * vAmp * gather, y: 47 + bob)
         let hat = CGPoint(x: r.shoulder.x + r.headDx + 3, y: r.shoulder.y + 9)
         r.handTrail = mix(free, hat, flavor.hatTouch)
         return r
@@ -249,7 +294,7 @@ final class StickmanNode: SKNode {
         } // facing → 화면 미러
         let hip = m(r.hip)
         let shoulder = m(r.shoulder)
-        let head = CGPoint(x: shoulder.x + dir * r.headDx, y: shoulder.y + 12)
+        let head = CGPoint(x: shoulder.x + dir * r.headDx, y: shoulder.y + r.headDy)
         headShape.position = head
         headRim.position = head
 

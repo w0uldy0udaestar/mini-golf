@@ -224,35 +224,27 @@ final class GameScene: SKScene {
         if dist > 0.5 { // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
             dir = to >= from ? 1 : -1
         }
-        // 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
-        var anim = WalkAnim(fromX: from, toX: to, dur: min(9.0, max(0.9, dist / 16)))
-        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 짧은 모션들을 겹치지 않게 흩뿌린다
+        // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
+        var anim = WalkAnim(fromX: from, toX: to, dur: min(12.0, max(1.2, dist / 10)))
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 20종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
         var t = anim.relax + 0.7
-        while t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 3 {
-            guard Double.random(in: 0 ..< 1) < 0.45 else {
-                t += 1.2
+        while t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 4 {
+            guard Double.random(in: 0 ..< 1) < 0.5 else {
+                t += 1.1
                 continue
             }
-            let kind: WalkFlavorKind = [.twirl, .twirl, .lookBack, .hatTouch, .skip, .twirlDouble]
-                .randomElement()!
-            let dur = switch kind {
-            case .twirl: 1.0
-            case .twirlDouble: 1.5
-            case .lookBack: 1.3
-            case .hatTouch: 1.1
-            case .skip: 0.7
-            }
-            // 어깨에 클럽을 걸친 동안엔 트월 불가 (클럽이 손에 없다)
-            let isTwirl = kind == .twirl || kind == .twirlDouble
-            if isTwirl, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
+            let kind = WalkFlavorKind.allCases.randomElement()!
+            let dur = kind.duration
+            // 어깨에 클럽을 걸친 동안엔 클럽 손짓 불가 (클럽이 손에 없다)
+            if kind.needsClub, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
                 t += 1.0
                 continue
             }
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
-            t += dur + Double.random(in: 0.8 ... 2.0)
+            t += dur + Double.random(in: 0.8 ... 2.2)
         }
         walkAnim = anim
         updateHUD()
@@ -693,22 +685,37 @@ final class GameScene: SKScene {
             for e in w.flavorEvents {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
+                let ss = smoothstep(min(1, u))
                 switch e.kind {
-                case .twirl: // 완료 후에도 누적각 유지 — 되감기 없음
-                    flavor.twirlAngle += 2 * .pi * smoothstep(min(1, u))
-                case .twirlDouble:
-                    flavor.twirlAngle += 4 * .pi * smoothstep(min(1, u))
-                case .lookBack, .hatTouch, .skip:
+                // 트월 계열: 완료 후에도 누적각 유지 — 되감기 없음
+                case .twirl: flavor.twirlAngle += 2 * .pi * ss
+                case .twirlDouble: flavor.twirlAngle += 4 * .pi * ss
+                case .twirlReverse: flavor.twirlAngle -= 2 * .pi * ss
+                default:
                     guard u < 1 else { continue }
-                    let bell = smoothstep(min(1, min(u, 1 - u) / 0.3))
-                    if e.kind == .lookBack {
-                        flavor.lookBack = max(flavor.lookBack, bell)
-                    }
-                    if e.kind == .hatTouch {
-                        flavor.hatTouch = max(flavor.hatTouch, bell)
-                    }
-                    if e.kind == .skip {
-                        flavor.skip = max(flavor.skip, bell)
+                    let bell = smoothstep(min(1, min(u, 1 - u) / 0.3)) // 부드러운 in-hold-out
+                    let wob2 = sin(4 * .pi * u) * bell // 2회 진동
+                    switch e.kind {
+                    case .lookBack: flavor.lookBack = max(flavor.lookBack, bell)
+                    case .lookSky: flavor.headDxOff += 2 * bell; flavor.headDyOff += 3 * bell
+                    case .lookHole: flavor.headDxOff += 3.5 * bell
+                    case .headBob: flavor.headDxOff += 1.5 * sin(6 * .pi * u) * bell
+                    case .headTilt: flavor.headDyOff -= 2.5 * bell
+                    case .hatTouch: flavor.hatTouch = max(flavor.hatTouch, bell)
+                    case .armSwing: flavor.armAmpBoost += 1.2 * bell
+                    case .shrug: flavor.shoulderYOff += 2.5 * bell
+                    case .slump: flavor.shoulderYOff -= 2 * bell
+                    case .stretch:
+                        flavor.shoulderYOff += 1.5 * bell
+                        flavor.headDyOff += 2 * bell
+                        flavor.gripLift += 0.4 * bell
+                    case .skip, .skipJoy: flavor.skip = max(flavor.skip, bell)
+                    case .hipSway: flavor.hipXOff += 2 * wob2
+                    case .shoulderRoll: flavor.shoulderYOff += 1.8 * wob2
+                    case .wristRoll: flavor.phiWobble += 0.25 * wob2
+                    case .clubRaise: flavor.gripLift += bell; flavor.phiWobble += 0.35 * bell
+                    case .clubTapShoulder: flavor.gripLift += 0.8 * bell; flavor.phiWobble += 0.3 * wob2
+                    case .twirl, .twirlDouble, .twirlReverse: break
                     }
                 }
             }
@@ -722,7 +729,7 @@ final class GameScene: SKScene {
                 let xm = self.stickX + dx / Double(self.pxPerM)
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
-            rigRate = 20 // 발 디딤이 뭉개지지 않게 또렷이 추적 — 진입·이탈은 gather가 받쳐준다
+            rigRate = 14 // 상체는 부드럽게 — 발·무릎은 아래 footRate로 고속 추적
         } else if mode == .aim {
             targetRig = RigBuilder.fromPose(
                 backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
@@ -737,7 +744,9 @@ final class GameScene: SKScene {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
         }
-        renderRig.chase(targetRig, rate: rigRate, dt: dt)
+        // 걷기 중 발·무릎은 고속 추적 — 접지점이 스무딩에 밀려 미끄러져 보이는 것을 방지
+        let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
+        renderRig.chase(targetRig, rate: rigRate, footRate: footRate, dt: dt)
 
         // 렌더 반영
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
