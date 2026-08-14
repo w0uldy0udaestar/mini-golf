@@ -211,7 +211,7 @@ final class StickmanNode: SKNode {
         }
     }
 
-    func render(rig r: Rig, club: Club, visualLoft: Double, dir: Double) {
+    func render(rig r: Rig, club: Club, prevClub: Club, headMorph: Double, visualLoft: Double, dir: Double) {
         func m(_ p: CGPoint) -> CGPoint {
             CGPoint(x: p.x * dir, y: p.y)
         } // facing → 화면 미러
@@ -266,48 +266,55 @@ final class StickmanNode: SKNode {
         shaftShape.path = shaft
         shaftRim.path = shaft
 
-        clubHeadShape.path = clubHeadPath(club: club, visualLoft: visualLoft, tip: tip, phi: r.clubPhi, dir: dir)
-        // 블레이드 굵기도 로프트 연속 함수 (아이언 4 → SW 5)
-        clubHeadShape.lineWidth = club.cat == .putter
-            ? 5
-            : club.cat == .wood ? 4 : 4 + max(0, visualLoft - 42) * 0.0714
-        clubHeadRim.path = clubHeadShape.path
+        // 클럽 헤드 — 모든 종류를 '캡슐(둥근 굵은 선)' 하나로 표현해, 종류 전환도 기하 morph로 이어진다
+        let now = headParams(club: club, loft: visualLoft, tip: tip, phi: r.clubPhi, dir: dir)
+        let prev = headParams(club: prevClub, loft: prevClub.loft, tip: tip, phi: r.clubPhi, dir: dir)
+        let m = smoothstep(min(1, max(0, headMorph)))
+        let head = CGMutablePath()
+        head.move(to: mix(prev.a, now.a, m))
+        head.addLine(to: mix(prev.b, now.b, m))
+        // 퍼터 얼라인먼트 점은 블렌드에 따라 자라거나 사라진다
+        let dotBlend = (club.cat == .putter ? m : 0) + (prevClub.cat == .putter ? 1 - m : 0)
+        if dotBlend > 0.05, let dot = club.cat == .putter ? now.dot : prev.dot {
+            let rr = 0.9 * dotBlend
+            head.addEllipse(in: CGRect(x: dot.x - rr, y: dot.y - rr, width: rr * 2, height: rr * 2))
+        }
+        clubHeadShape.path = head
+        clubHeadShape.lineWidth = mix(prev.lw, now.lw, m)
+        clubHeadRim.path = head
         clubHeadRim.lineWidth = clubHeadShape.lineWidth + 2.2
     }
 
-    /// 클럽 헤드 디자인 — 숫자 대신 생김새로 클럽을 구분한다 (심플·둥근 획)
-    /// 기하는 전부 스무딩된 visualLoft로 구동 — 클럽 변경 시 모양이 미끄러지듯 변한다
-    private func clubHeadPath(club: Club, visualLoft: Double, tip: CGPoint, phi: Double, dir: Double) -> CGPath {
-        // 샤프트 방향(along)·타격 방향(perp), SpriteKit y-up 기준
+    /// 헤드 캡슐 파라미터 — 시작점·끝점·굵기(·퍼터 점). 종류가 달라도 같은 표현이라 morph 가능
+    private func headParams(
+        club: Club, loft: Double, tip: CGPoint, phi: Double, dir: Double
+    ) -> (a: CGPoint, b: CGPoint, lw: Double, dot: CGPoint?) {
         let along = CGVector(dx: sin(phi) * dir, dy: -cos(phi))
         let perp = CGVector(dx: cos(phi) * dir, dy: sin(phi))
-        let p = CGMutablePath()
         switch club.cat {
-        case .wood: // 둥근 덩어리 헤드 — 드라이버가 가장 크다
-            let w = 16 - (visualLoft - 10.5) * 0.45 // DR 16 · 3W 14 · 5W 12.6
+        case .wood: // 둥근 덩어리 — 짧고 아주 굵은 캡슐 (드라이버가 가장 크다)
+            let w = 16 - (loft - 10.5) * 0.45 // DR 16 · 3W 14 · 5W 12.6
             let h = w * 0.68
             let c = CGPoint(x: tip.x + perp.dx * 4, y: tip.y + perp.dy * 4)
-            var transform = CGAffineTransform(translationX: c.x, y: c.y)
-                .rotated(by: atan2(perp.dy, perp.dx))
-            if let ellipse = CGPath(
-                ellipseIn: CGRect(x: -w / 2, y: -h / 2, width: w, height: h),
-                transform: &transform
-            ) as CGPath? {
-                p.addPath(ellipse)
-            }
-        case .iron, .wedge: // 블레이드 — 로프트만큼 페이스가 젖혀지고(9I>7I), 웨지로 갈수록 길어진다
-            let len = 9 + max(0, visualLoft - 42) * 0.107 // 아이언 9 → SW 10.5
-            let lo = visualLoft * 0.9 * .pi / 180
+            let half = (w - h) / 2
+            return (
+                CGPoint(x: c.x - perp.dx * half, y: c.y - perp.dy * half),
+                CGPoint(x: c.x + perp.dx * half, y: c.y + perp.dy * half),
+                h, nil
+            )
+        case .iron, .wedge: // 블레이드 — 로프트만큼 젖혀지고 웨지로 갈수록 길고 굵다
+            let len = 9 + max(0, loft - 42) * 0.107
+            let lo = loft * 0.9 * .pi / 180
             let bx = (perp.dx * cos(lo) - along.dx * sin(lo)) * len
             let by = (perp.dy * cos(lo) - along.dy * sin(lo)) * len
-            p.move(to: tip)
-            p.addLine(to: CGPoint(x: tip.x + bx, y: tip.y + by))
-        case .putter: // 납작한 블록 + 얼라인먼트 점 하나
-            p.move(to: CGPoint(x: tip.x - perp.dx * 3, y: tip.y - perp.dy * 3))
-            p.addLine(to: CGPoint(x: tip.x + perp.dx * 7, y: tip.y + perp.dy * 7))
-            let mark = CGPoint(x: tip.x + perp.dx * 2 - along.dx * 5, y: tip.y + perp.dy * 2 - along.dy * 5)
-            p.addEllipse(in: CGRect(x: mark.x - 0.9, y: mark.y - 0.9, width: 1.8, height: 1.8))
+            return (tip, CGPoint(x: tip.x + bx, y: tip.y + by), 4 + max(0, loft - 42) * 0.0714, nil)
+        case .putter: // 납작한 블록 + 얼라인먼트 점
+            return (
+                CGPoint(x: tip.x - perp.dx * 3, y: tip.y - perp.dy * 3),
+                CGPoint(x: tip.x + perp.dx * 7, y: tip.y + perp.dy * 7),
+                5,
+                CGPoint(x: tip.x + perp.dx * 2 - along.dx * 5, y: tip.y + perp.dy * 2 - along.dy * 5)
+            )
         }
-        return p
     }
 }
