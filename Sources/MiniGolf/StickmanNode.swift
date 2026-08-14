@@ -73,11 +73,11 @@ struct WalkFlavorEvent {
     let dur: Double
 }
 
-private func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {
+func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {
     CGPoint(x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u)
 }
 
-private func mix(_ a: Double, _ b: Double, _ u: Double) -> Double {
+func mix(_ a: Double, _ b: Double, _ u: Double) -> Double {
     a + (b - a) * u
 }
 
@@ -146,40 +146,20 @@ enum RigBuilder {
         return r
     }
 
-    /// 걷기 — 같은 Rig 공간, 거리 기반 발 디딤.
-    /// 발은 지면 위 한 점을 밟고(traveled에서 유도 — 미끄러짐이 구조적으로 0), 몸이 그 위를 지나간다.
-    /// traveled: 걸은 거리(px, 진행 방향 누적) · gather: 출발·도착에서 발이 모이는 계수(0~1)
+    /// 걷기 — 같은 Rig 공간. 발 위치는 호출측 게이트 상태(접지점 래치·stride warping)에서 온다.
+    /// f1/f2: 발 로컬 x·들림 — 접지발은 월드 고정점이라 미끄러짐이 구조적으로 0
     static func walking(
-        traveled: Double,
-        gather: Double,
+        f1: (x: Double, lift: Double),
+        f2: (x: Double, lift: Double),
+        gaitPhase: Double,
         vPx: Double,
         clubLen: Double,
         flavor: WalkFlavor,
         groundDelta: (Double) -> Double
     ) -> Rig {
         let vAmp = min(1, vPx / 30)
-        let stepL = 22.0 // 한 걸음(px) — 발이 이 간격으로 지면을 짚는다
-        let duty = 0.62 // 접지 구간 비율 (나머지는 스윙)
-        let centerOff = duty * stepL // 발 궤적을 힙 아래 중심으로
-
-        /// 발 i(0/1)의 로컬 x·들림 — traveled만의 함수라 속도 프로파일과 무관하게 노슬립
-        func foot(_ i: Double) -> (x: Double, lift: Double) {
-            let s = (traveled - i * stepL) / (2 * stepL)
-            let k = s.rounded(.down)
-            let f = s - k
-            let plant = k * 2 * stepL + i * stepL // 이 사이클의 접지점 (지면 고정)
-            if f < duty {
-                return ((plant - traveled + centerOff) * gather, 0)
-            }
-            let sw = (f - duty) / (1 - duty)
-            let x = (plant + smoothstep(sw) * 2 * stepL - traveled + centerOff) * gather
-            return (x, sin(.pi * sw) * (3 + 5 * vAmp + 6 * flavor.skip) * gather)
-        }
-        let f1 = foot(0)
-        let f2 = foot(1)
-
-        let bodyPhase = .pi * traveled / stepL
-        let bob = (1.6 * vAmp + 2.5 * flavor.skip) * abs(sin(bodyPhase)) * gather
+        // 바디 밥: C1 연속(첨점 없음), 최저점 = 접지 순간
+        let bob = (1.6 * vAmp + 2.5 * flavor.skip) * (1 - cos(4 * .pi * gaitPhase)) / 2
 
         var r = Rig()
         r.hip = CGPoint(x: flavor.hipXOff, y: 43.5 + bob)
@@ -211,9 +191,9 @@ enum RigBuilder {
         r.clubPhi = atan2(tip.x - grip.x, grip.y - tip.y) + flavor.twirlAngle + flavor.phiWobble
         r.clubLen = clubLen
 
-        // 자유 팔: 다리 반대 위상 스윙(부스트 가능), 모자 만지기 블렌드 시 머리로
-        let armAmp = 8 * (1 + flavor.armAmpBoost)
-        let free = CGPoint(x: 5 - armAmp * sin(bodyPhase) * vAmp * gather, y: 47 + bob)
+        // 자유 팔: 다리 반대 위상 스윙 — 느긋한 걸음일수록 팔은 거의 늘어진다 (저속 감쇠)
+        let armAmp = 8 * (1 + flavor.armAmpBoost) * vAmp * vAmp
+        let free = CGPoint(x: 5 - armAmp * sin(2 * .pi * gaitPhase), y: 47 + bob)
         let hat = CGPoint(x: r.shoulder.x + r.headDx + 3, y: r.shoulder.y + 9)
         r.handTrail = mix(free, hat, flavor.hatTouch)
         return r

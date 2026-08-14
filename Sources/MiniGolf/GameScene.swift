@@ -22,13 +22,27 @@ final class GameScene: SKScene {
     private let timeScale = 2.5
     var isGamePaused = false
 
-    // 연출 상태
+    /// 연출 상태
     private struct SwingAnim { var t = 0.0; var launched = false; let prof: SwingProfile; let fromPose: Pose }
+    /// 발 하나의 게이트 상태 — 접지점은 월드(진행축) 좌표로 래치되어 절대 밀리지 않는다
+    private struct FootGait {
+        var plant = 0.0 // 접지점 (진행축 px, 래치)
+        var swingFrom = 0.0
+        var swingTo = 0.0 // 리프트오프 순간 고정되는 다음 착지점
+        var inSwing = false
+    }
+
     private struct WalkAnim {
         let fromX, toX, dur: Double
         var t = 0.0
         let relax = 0.8 // 피니시 여운 — 서두르지 않는다
         var vPx = 0.0
+        // 게이트 상태 (리서치 반영: stride warping + 접지점 래치)
+        var gaitPhase = 0.0 // 보행 위상 (1 = 두 걸음)
+        var stepL = 22.0 // 현재 보폭 — 속도에 비례해 줄어든다 (walk ratio)
+        var duty = 0.66 // 접지 비율 — 느릴수록 커진다 (double support 증가)
+        var feet = [FootGait(), FootGait()]
+        var gaitReady = false
         // 랜덤 잉여 동작 (생명감): 어깨 캐리 구간 + 짧은 모션 이벤트들 (walk 시작 기준 초)
         var shoulderRange: ClosedRange<Double>?
         var flavorEvents: [WalkFlavorEvent] = []
@@ -575,6 +589,29 @@ final class GameScene: SKScene {
                 stickX = w.fromX + (w.toX - w.fromX) * smoothstep(u)
                 let vInst = abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
                 w.vPx = vInst * Double(pxPerM)
+                // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
+                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot()))
+                w.duty = 0.68 - 0.08 * min(1, w.vPx / 30)
+                let dNow = abs(stickX - w.fromX) * Double(pxPerM)
+                if !w.gaitReady {
+                    w.gaitReady = true
+                    w.feet[0].plant = dNow + 8 // 어드레스 발 위치 근처에서 시작
+                    w.feet[1].plant = dNow - 10
+                }
+                w.gaitPhase += w.vPx * dt / (2 * w.stepL)
+                for i in 0 ..< 2 {
+                    let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
+                    if f < w.duty {
+                        if w.feet[i].inSwing { // 착지 — 목표점에 래치
+                            w.feet[i].inSwing = false
+                            w.feet[i].plant = w.feet[i].swingTo
+                        }
+                    } else if !w.feet[i].inSwing { // 리프트오프 — 다음 착지점을 지금 고정
+                        w.feet[i].inSwing = true
+                        w.feet[i].swingFrom = w.feet[i].plant
+                        w.feet[i].swingTo = dNow + 2 * w.stepL * (1 - w.duty) + w.duty * w.stepL
+                    }
+                }
                 walkAnim = w
                 if u >= 1 {
                     enterAim()
@@ -719,12 +756,23 @@ final class GameScene: SKScene {
                     }
                 }
             }
-            // 발 디딤은 걸은 거리에서 유도 — 출발·도착에선 발이 모인다
+            // 발 위치: 접지발 = 래치된 접지점 그대로, 스윙발 = 고정된 목표로 보간 (노슬립)
             let dPx = abs(stickX - w.fromX) * Double(pxPerM)
-            let totalPx = abs(w.toX - w.fromX) * Double(pxPerM)
-            let gather = max(0, min(1, min(dPx / 40, (totalPx - dPx) / 40)))
+            let vAmp = min(1, w.vPx / 30)
+            func footPose(_ i: Int) -> (x: Double, lift: Double) {
+                let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
+                let g = w.feet[i]
+                if !g.inSwing {
+                    return (g.plant - dPx, 0)
+                }
+                let sw = max(0, (f - w.duty) / (1 - w.duty))
+                // sin² 프로파일: 이륙·착지 모두 속도 0 (발 '찍기' 제거)
+                let lift = sin(.pi * sw) * sin(.pi * sw) * (3 + 5 * vAmp + 6 * flavor.skip)
+                return (mix(g.swingFrom, g.swingTo, smoothstep(sw)) - dPx, lift)
+            }
             targetRig = RigBuilder.walking(
-                traveled: dPx, gather: gather, vPx: w.vPx, clubLen: renderLen, flavor: flavor
+                f1: footPose(0), f2: footPose(1), gaitPhase: w.gaitPhase,
+                vPx: w.vPx, clubLen: renderLen, flavor: flavor
             ) { dx in
                 let xm = self.stickX + dx / Double(self.pxPerM)
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
