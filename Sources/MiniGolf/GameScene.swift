@@ -39,7 +39,11 @@ final class GameScene: SKScene {
     private var walkAnim: WalkAnim?
     private var lastFinishPose: Pose?
     private var renderRig = RigBuilder.fromPose(Poses.p1, ballFwd: 24, clubLen: 31)
-    private var renderLen = 31.0 // 클럽 길이도 스무딩 — 클럽 변경 시 움찔 방지
+    // 클럽 변경 시 즉시 점프하는 값들은 전부 스무딩을 탄다 (길이·스탠스·백스윙 폭)
+    private var renderLen = 31.0
+    private var renderBallFwd = 24.0
+    private var renderTop = 1.0
+    private var clubSettle = 1.0 // 클럽 변경 후 경과 — 직후엔 추적을 늦춰 잔여 점프를 누른다
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
@@ -504,8 +508,8 @@ final class GameScene: SKScene {
         guard mode == .aim, !isGamePaused else { return }
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
-        case 123: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // ←
-        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // →
+        case 123: clubIdx = max(0, clubIdx - 1); clubSettle = 0; presetPutterHeight(); updateHUD() // ←
+        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); clubSettle = 0; presetPutterHeight(); updateHUD() // →
         case 49: startSwing() // Space
         default: break
         }
@@ -628,7 +632,12 @@ final class GameScene: SKScene {
         }
 
         // ── 통합 리그: 모든 상태가 같은 파라미터 공간의 '타깃'만 바꾼다 → 전환이 자동으로 이어진다 ──
-        renderLen += (club.renderLength - renderLen) * (1 - exp(-8 * dt)) // 클럽 변경도 부드럽게
+        // 클럽 변경으로 점프하는 값 전부 스무딩 (길이·스탠스·백스윙 폭 — 카테고리 경계 움찔 방지)
+        let clubK = 1 - exp(-8 * dt)
+        renderLen += (club.renderLength - renderLen) * clubK
+        renderBallFwd += (profile.ballFwd - renderBallFwd) * clubK
+        renderTop += (profile.topScale - renderTop) * clubK
+        clubSettle += dt
         if mode == .aim {
             aimTime += dt
         }
@@ -637,7 +646,7 @@ final class GameScene: SKScene {
         if let anim = swingAnim {
             targetRig = RigBuilder.fromPose(
                 swingPose(t: anim.t, fromPose: anim.fromPose, profile: anim.prof, heightPct: heightPct),
-                ballFwd: profile.ballFwd, clubLen: renderLen
+                ballFwd: renderBallFwd, clubLen: renderLen
             )
             rigRate = 45 // 스윙은 기민하게
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
@@ -657,15 +666,16 @@ final class GameScene: SKScene {
             rigRate = 14 // 걸음은 또렷하게 — 진입·이탈은 보폭 램프가 받쳐준다
         } else if mode == .aim {
             targetRig = RigBuilder.fromPose(
-                backswingPose(heightPct: heightPct, profile: profile),
-                ballFwd: profile.ballFwd, clubLen: renderLen
+                backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
+                ballFwd: renderBallFwd, clubLen: renderLen
             )
-            rigRate = aimTime < 0.9 ? 6 : 14 // 진입 직후엔 천천히 가라앉고, 이후 입력에 기민하게
+            // 진입 직후·클럽 변경 직후엔 천천히 가라앉고, 이후 입력에 기민하게
+            rigRate = aimTime < 0.9 ? 6 : (clubSettle < 0.45 ? 7 : 14)
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
-            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: profile.ballFwd, clubLen: renderLen)
+            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
         } else {
-            targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: profile.ballFwd, clubLen: renderLen)
+            targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
         }
         renderRig.chase(targetRig, rate: rigRate, dt: dt)

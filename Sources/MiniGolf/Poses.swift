@@ -79,11 +79,12 @@ func smoothstep(_ u: Double) -> Double {
 }
 
 /// 백스윙 궤적: ↑↓ 입력이 어드레스→테이크어웨이→톱 경로 위의 몸 전체 포즈를 움직인다
-func backswingPose(heightPct: Double, profile: SwingProfile) -> Pose {
+/// topScale: 카테고리 경계에서 움찔하지 않게 스무딩된 값을 넘길 수 있다 (기본은 프로파일 값)
+func backswingPose(heightPct: Double, profile: SwingProfile, topScale: Double? = nil) -> Pose {
     if profile.isPutter {
         return Pose.lerp(Poses.ptA, Poses.ptTop, heightPct)
     }
-    let s = 0.22 + 0.78 * heightPct * profile.topScale
+    let s = 0.22 + 0.78 * heightPct * (topScale ?? profile.topScale)
     return s < 0.35
         ? Pose.lerp(Poses.p1, Poses.p2, s / 0.35)
         : Pose.lerp(Poses.p2, Poses.p4, (s - 0.35) / 0.65)
