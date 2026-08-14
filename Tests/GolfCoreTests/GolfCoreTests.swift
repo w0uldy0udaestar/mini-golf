@@ -296,6 +296,18 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(drive.vx, 5, "저스핀 드라이브가 전진하지 않음")
     }
 
+    // ── 탱탱볼 스킵 회귀 방지 (2026-08-14 실플레이 판정) ──
+
+    func testShotsSettleWithoutEndlessSkipping() {
+        // 얕은 재바운스마다 β를 풀로 적용하면 수평→수직 펌핑으로 공이 끝없이 스킵한다.
+        // 풀샷 런이 캐리 대비 비정상적으로 길지 않고, 시뮬레이션 시한(60s) 안에 정지해야 한다
+        for id in ["DR", "7I", "SW"] {
+            let r = simulate(club: club(id))
+            XCTAssertGreaterThan(r.carry, 10, "\(id) 캐리 비정상")
+            XCTAssertLessThan(r.total, r.carry * 1.8 + 20, "\(id) 런이 비정상적으로 김 (스킵 펌핑 의심)")
+        }
+    }
+
     // ── 펀치샷 (벽 백스윙 제한) ──
 
     func testPunchLowersTrajectoryAndSpin() {

@@ -125,7 +125,13 @@ public enum Ballistics {
                 // 접촉 프레임: 지형 경사 + Penner 유효 경사(β) — 잔디 변형을 '진행 방향을 마주보는
                 // 가상 오르막'으로 등가 처리 (Penner 2002, Biber 2023 — 실측 1000+회 검증 모델)
                 let s = hole.slope(at: b.x)
-                let ang = atan(s) + surfType.bounceBeta * (b.vx >= 0 ? 1 : -1)
+                let baseAng = atan(s)
+                // β는 낙하 강도에 비례해서만 (Penner 원논문의 β도 속도·각 비례 — 관입 깊이의 등가 경사).
+                // 얕은 재바운스에 풀 β를 주면 구름 스핀(접선 무손실)과 결합해 수평→수직 펌핑이
+                // 반복되는 '탱탱볼 스킵'이 된다 (2026-08-14 실플레이 판정) — 법선 낙하 12 m/s에서 포화
+                let vnTerrain = -b.vx * sin(baseAng) + b.vy * cos(baseAng)
+                let beta = surfType.bounceBeta * min(1, max(0, -vnTerrain) / 12)
+                let ang = baseAng + beta * (b.vx >= 0 ? 1 : -1)
                 let nx = -sin(ang), ny = cos(ang), tx = cos(ang), ty = sin(ang)
                 let vn = b.vx * nx + b.vy * ny
                 if vn < 0 {
