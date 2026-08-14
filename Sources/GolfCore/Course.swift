@@ -13,6 +13,38 @@ public struct Segment: Sendable, Equatable {
     }
 }
 
+/// 코스 위 장애물 — 나무(트렁크+캐노피)·바위 (2026-08-15 사용자 요청 4번)
+public struct Obstacle: Sendable, Equatable {
+    public enum Kind: Sendable {
+        case tree, rock
+    }
+
+    public let kind: Kind
+    public let x: Double
+    public let size: Double // 나무: 캐노피 반지름(m) · 바위: 반지름(m)
+
+    public init(kind: Kind, x: Double, size: Double) {
+        self.kind = kind
+        self.x = x
+        self.size = size
+    }
+
+    /// 트렁크 높이(m) — 캐노피 밑 공간이 펀치샷 창이 된다
+    public var trunkHeight: Double {
+        kind == .tree ? size * 1.15 : 0
+    }
+
+    /// 캐노피 중심 높이 (지면 기준)
+    public func canopyCenterY(above groundY: Double) -> Double {
+        groundY + trunkHeight + size * 0.75
+    }
+
+    /// 바위 중심 높이 — 일부가 땅에 묻혀 둔덕처럼 솟는다
+    public func rockCenterY(above groundY: Double) -> Double {
+        groundY + size * 0.3
+    }
+}
+
 /// 홀 하나 — 세그먼트(라이 밴드)와 1m 간격 지형 표고 샘플을 가진다
 public struct Hole: Sendable {
     public let par: Int
@@ -27,13 +59,15 @@ public struct Hole: Sendable {
     public let elevation: [Double] // 1m 간격 표고 샘플
     public let waterRange: ClosedRange<Double>?
     public let greenSlope: Double // 그린 브레이크 (경사율)
+    public let obstacles: [Obstacle]
 
     public init(
         par: Int, dist: Double, holeX: Double, worldW: Double,
         greenStart: Double, greenEnd: Double, apronStart: Double,
         segments: [Segment], elevation: [Double],
         waterRange: ClosedRange<Double>?, greenSlope: Double,
-        teeX: Double = CourseGenerator.teeX
+        teeX: Double = CourseGenerator.teeX,
+        obstacles: [Obstacle] = []
     ) {
         self.par = par
         self.dist = dist
@@ -47,6 +81,7 @@ public struct Hole: Sendable {
         self.elevation = elevation
         self.waterRange = waterRange
         self.greenSlope = greenSlope
+        self.obstacles = obstacles
     }
 
     public func surface(at x: Double) -> Surface {
@@ -251,11 +286,39 @@ public enum CourseGenerator {
             }
         }
 
+        // ── 장애물: 나무는 어프로치 길목(넘기거나 밑으로 펀치), 바위는 중원 (요청 4번) ──
+        var obstacles: [Obstacle] = []
+        func hazardFree(_ x: Double, margin: Double) -> Bool {
+            !segments.contains { s in
+                (s.type == .water || s.type == .bunker || s.type == .green || s.type == .tee)
+                    && x >= s.from - margin && x <= s.to + margin
+            }
+        }
+        if par >= 4, rand.next() < 0.4 {
+            let t = landing + (greenStart - landing) * rand.next(0.3, 0.65)
+            if t > teeEnd + 30, t < apronStart - 18, hazardFree(t, margin: 5) {
+                obstacles.append(Obstacle(kind: .tree, x: t, size: rand.next(2.6, 4.2)))
+            }
+        }
+        if par == 3, rand.next() < 0.25 {
+            let t = teeX + dist * rand.next(0.45, 0.7)
+            if t < apronStart - 15, hazardFree(t, margin: 5) {
+                obstacles.append(Obstacle(kind: .tree, x: t, size: rand.next(2.2, 3.2)))
+            }
+        }
+        if rand.next() < 0.3 {
+            let rx = teeEnd + 35 + rand.next() * (apronStart - teeEnd - 70)
+            if hazardFree(rx, margin: 3) {
+                obstacles.append(Obstacle(kind: .rock, x: rx, size: rand.next(0.8, 1.4)))
+            }
+        }
+
         let hole = Hole(
             par: par, dist: dist, holeX: holeX, worldW: worldW,
             greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
             segments: segments, elevation: elev,
-            waterRange: waterRange, greenSlope: gSlope
+            waterRange: waterRange, greenSlope: gSlope,
+            obstacles: obstacles
         )
         // 진행 방향 좌우 랜덤: 절반은 미러 — 오른쪽 티에서 왼쪽 홀로 (2026-08-14 사용자 요청)
         return rand.next() < 0.5 ? mirrored(hole) : hole
@@ -279,7 +342,8 @@ public enum CourseGenerator {
             segments: segments, elevation: elev,
             waterRange: h.waterRange.map { (w - $0.upperBound) ... (w - $0.lowerBound) },
             greenSlope: -h.greenSlope,
-            teeX: w - h.teeX // 인스턴스 teeX (static 상수 아님 — 리뷰 S-1)
+            teeX: w - h.teeX, // 인스턴스 teeX (static 상수 아님 — 리뷰 S-1)
+            obstacles: h.obstacles.map { Obstacle(kind: $0.kind, x: w - $0.x, size: $0.size) }
         )
     }
 }

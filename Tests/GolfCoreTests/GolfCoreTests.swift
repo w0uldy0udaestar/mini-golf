@@ -354,6 +354,80 @@ final class GolfCoreTests: XCTestCase {
         )
     }
 
+    // ── 장애물 (나무·바위) ──
+
+    private func obstacleHole(_ obstacles: [Obstacle]) -> Hole {
+        Hole(
+            par: 4, dist: 300, holeX: 350, worldW: 400,
+            greenStart: 338, greenEnd: 358, apronStart: 333,
+            segments: [Segment(from: 0, to: 400, type: .fairway)],
+            elevation: [Double](repeating: 0, count: 402),
+            waterRange: nil, greenSlope: 0, obstacles: obstacles
+        )
+    }
+
+    func testCanopySwallowsFlight() {
+        let tree = Obstacle(kind: .tree, x: 100, size: 3.5)
+        let h = obstacleHole([tree])
+        var b = BallState(x: 90, y: tree.canopyCenterY(above: 0), vx: 35, vy: 0, spin: 5000, phase: .fly)
+        var hitLeaves = false
+        var t = 0.0
+        while b.phase != .rest, t < 20 {
+            if case .bounce(_, .rough) = Ballistics.step(&b, hole: h) {
+                hitLeaves = true
+            }
+            t += Phys.dt
+        }
+        XCTAssertTrue(hitLeaves, "캐노피 히트 이벤트가 없음")
+        XCTAssertLessThan(abs(b.x - tree.x), 12, "잎에 맞은 공은 나무 근처에 떨어져야 함")
+    }
+
+    func testPunchPassesUnderCanopy() {
+        // 낮은 펀치 탄도는 캐노피 밑(트렁크 옆)을 스쳐 지나간다 — 극복 샷의 존재 증명
+        let tree = Obstacle(kind: .tree, x: 100, size: 3.5)
+        let h = obstacleHole([tree])
+        var b = BallState(x: 80, y: 0.5, vx: 40, vy: 1.5, spin: 1500, phase: .fly)
+        var t = 0.0
+        while b.phase != .rest, t < 20 {
+            _ = Ballistics.step(&b, hole: h)
+            t += Phys.dt
+        }
+        XCTAssertGreaterThan(b.x, tree.x + 15, "펀치가 나무를 통과하지 못함")
+    }
+
+    func testRockReflectsRollingBall() {
+        let h = obstacleHole([Obstacle(kind: .rock, x: 100, size: 1.2)])
+        var b = BallState(x: 94, y: 0, vx: 6, phase: .roll)
+        var sawWall = false
+        var t = 0.0
+        while b.phase != .rest, t < 20 {
+            if case .wall = Ballistics.step(&b, hole: h) {
+                sawWall = true
+            }
+            t += Phys.dt
+        }
+        XCTAssertTrue(sawWall, "바위 반사 이벤트가 없음")
+        XCTAssertLessThan(b.x, 101, "굴러온 공이 바위를 뚫고 지나감")
+    }
+
+    func testObstaclesPlacedOnSaneGround() {
+        var seen = 0
+        for seed in 1 ... 30 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
+                for ob in h.obstacles {
+                    seen += 1
+                    let s = h.surface(at: ob.x)
+                    XCTAssertTrue(
+                        s == .fairway || s == .rough || s == .apron,
+                        "장애물이 \(s)에 배치됨 (x \(ob.x))"
+                    )
+                    XCTAssertTrue(ob.x > 5 && ob.x < h.worldW - 5, "장애물이 코스 밖")
+                }
+            }
+        }
+        XCTAssertGreaterThan(seen, 20, "30시드에서 장애물이 너무 적음 (\(seen))")
+    }
+
     // ── 경사 라이 (3eccc4f 복원) ──
 
     func testSlopeLieTiltsLaunchAndCostsSpeed() {

@@ -101,6 +101,51 @@ public enum Ballistics {
         b.lipped = false
     }
 
+    /// 장애물 충돌 — 캐노피는 비행을 삼키고(잎 스침 = rough 바운스 이벤트 재활용),
+    /// 바위는 단단한 원호 반사(wall 이벤트). 트렁크는 화면 뒤편(2D 사이드뷰 관례)이라
+    /// 충돌하지 않는다 — 그래야 '캐노피 밑 펀치샷'이라는 극복 플레이가 성립한다.
+    /// 결정론적 — RNG 없음, 기하가 곧 예측 불가성
+    static func obstacleCollision(_ b: inout BallState, hole: Hole) -> StepEvent {
+        for ob in hole.obstacles {
+            let g = hole.ground(at: ob.x)
+            switch ob.kind {
+            case .tree:
+                // 캐노피: 원 안에 들어오면 잎이 비행을 삼킨다 — 뚝 떨어짐
+                let cy = ob.canopyCenterY(above: g)
+                let dx = b.x - ob.x, dy = b.y - cy
+                if b.phase == .fly, dx * dx + dy * dy < ob.size * ob.size {
+                    let speed = hypot(b.vx, b.vy)
+                    b.vx *= 0.12
+                    b.vy = min(b.vy, 0) * 0.2 - 1.5
+                    b.spin *= 0.3
+                    return .bounce(speed: speed, surface: .rough)
+                }
+            case .rock:
+                // 바위: 원호 표면 법선 반사 — 어디에 맞느냐가 방향을 정한다
+                let cy = ob.rockCenterY(above: g)
+                let dx = b.x - ob.x, dy = b.y + 0.02 - cy
+                let d2 = dx * dx + dy * dy
+                if d2 < ob.size * ob.size, d2 > 1e-9 {
+                    let d = d2.squareRoot()
+                    let nx = dx / d, ny = dy / d
+                    let vn = b.vx * nx + b.vy * ny
+                    if vn < 0 {
+                        b.vx -= 1.55 * vn * nx // 반발 0.55
+                        b.vy -= 1.55 * vn * ny
+                        b.x = ob.x + nx * (ob.size + 0.05)
+                        b.y = max(hole.ground(at: b.x), cy + ny * (ob.size + 0.05))
+                        b.spin *= 0.5
+                        if b.phase == .roll, b.vy > 0.8 {
+                            b.phase = .fly // 바위를 타고 튀어오른다
+                        }
+                        return .wall(speed: -vn)
+                    }
+                }
+            }
+        }
+        return .none
+    }
+
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다
     public static func step(_ b: inout BallState, hole: Hole, dt: Double = Phys.dt) -> StepEvent {
         var ev = StepEvent.none
@@ -121,6 +166,10 @@ public enum Ballistics {
             b.x += b.vx * dt
             b.y += b.vy * dt
             b.spin *= 1 - min(0.06, max(0.01, Phys.spinDecayPerSpeed * v)) * dt // 느린 웨지가 스핀을 안고 착지
+            let obEv = obstacleCollision(&b, hole: hole)
+            if obEv != .none {
+                ev = obEv
+            }
 
             let ground = hole.ground(at: b.x)
             if b.y <= ground {
@@ -177,6 +226,13 @@ public enum Ballistics {
             let surfType = hole.surface(at: b.x)
             if surfType == .water {
                 return .water
+            }
+            let obEv = obstacleCollision(&b, hole: hole)
+            if obEv != .none {
+                ev = obEv
+                if b.phase == .fly {
+                    return ev // 바위를 타고 이륙 — 다음 스텝부터 비행 처리
+                }
             }
             let s = hole.slope(at: b.x)
             b.vx -= Phys.g * s * 0.85 * dt // 경사 중력: 그린 브레이크의 원천

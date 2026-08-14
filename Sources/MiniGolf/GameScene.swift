@@ -68,6 +68,7 @@ final class GameScene: SKScene {
     private var headMorph = 1.0
     private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var renderWallT = 0.0 // 벽 스탠스 근접도 (스무딩) — 뒷발 벽 딛기 자세 블렌드
+    private var renderTreeT = 0.0 // 나무 캐노피 근접도 (스무딩) — 웅크린 펀치 자세 블렌드
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
@@ -272,10 +273,23 @@ final class GameScene: SKScene {
         club.isPutter ? 0 : min(1, max(0, 1 - (wallBehindPx - 28) / 45))
     }
 
-    /// 벽 근접 시 백스윙 '폼'만 압축 — 짧은 백스윙으로 풀파워를 내는 극복 자세.
-    /// 팔·클럽이 화면(벽) 밖으로 나가지 않는 폭으로 제한한다
+    /// 나무 캐노피가 샷 방향에 드리우면 1 — 웅크린 펀치로 빠져나가는 극복 자세 (요청 2·4번 연동)
+    private var treePunchT: Double {
+        guard !club.isPutter else { return 0 }
+        var t = 0.0
+        for ob in hole.obstacles where ob.kind == .tree {
+            let ahead = (ob.x - ball.x) * dir // 샷 방향 거리(m)
+            if ahead > -ob.size, ahead < ob.size + 14 {
+                t = max(t, 1 - max(0, ahead - ob.size) / 14)
+            }
+        }
+        return t
+    }
+
+    /// 벽·나무 근접 시 백스윙 '폼'만 압축 — 짧은 백스윙으로 풀파워를 내는 극복 자세.
+    /// 팔·클럽이 화면(벽)이나 캐노피를 뚫지 않는 폭으로 제한한다
     private var wallTopScale: Double {
-        renderTop * min(1, max(0.18, (wallBehindPx - 36) / 45))
+        renderTop * min(1, max(0.18, (wallBehindPx - 36) / 45)) * (1 - 0.45 * renderTreeT)
     }
 
     /// 벽이 스탠스 폭보다 가까우면 몸을 벽 안쪽으로 압축 — 공이 스탠스 뒤쪽에 놓인다
@@ -375,6 +389,11 @@ final class GameScene: SKScene {
         default:
             break
         }
+        // 나무 캐노피가 머리 위에 드리우면 웅크린다 (극복 자세)
+        if renderTreeT > 0.001 {
+            rig.hip.y -= 2.5 * renderTreeT
+            rig.shoulder.y -= 3.5 * renderTreeT
+        }
     }
 
     /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
@@ -448,12 +467,12 @@ final class GameScene: SKScene {
         let risk = 0.25 + 0.75 * pow(overdrive, 1.6)
         let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
         let mishit = club.isPutter ? 0 : risk * gauss
-        // 벽 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
+        // 벽·나무 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
         // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
         Ballistics.launch(
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
-            mishit: mishit, punch: wallPunch, slope: slope
+            mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope
         )
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
@@ -708,6 +727,60 @@ final class GameScene: SKScene {
         flagNode.addChild(pole)
         flagNode.addChild(flag)
         flagNode.position = CGPoint(x: px(hole.holeX), y: cupY)
+
+        // 장애물 — 조용한 헤어라인: 나무는 줄기+캐노피 윤곽, 바위는 반원 둔덕
+        for ob in hole.obstacles {
+            let gx = px(ob.x)
+            let gy = groundY(ob.x)
+            switch ob.kind {
+            case .tree:
+                let trunkTop = gy + CGFloat(ob.trunkHeight) * pxPerM
+                let trunkPath = CGMutablePath()
+                trunkPath.move(to: CGPoint(x: gx, y: gy))
+                trunkPath.addLine(to: CGPoint(x: gx, y: trunkTop))
+                // 나무는 화면 뒤편(캐노피만 충돌) — 살짝 흐린 획으로 깊이를 암시한다
+                let trunk = SKShapeNode(path: trunkPath)
+                trunk.strokeColor = Palette.hairline.withAlphaComponent(0.55)
+                trunk.lineWidth = 2.2
+                trunk.lineCap = .round
+                let canopy = SKShapeNode(circleOfRadius: CGFloat(ob.size) * pxPerM)
+                canopy.position = CGPoint(x: gx, y: gy + CGFloat(ob.canopyCenterY(above: 0)) * pxPerM)
+                canopy.strokeColor = Palette.hairline.withAlphaComponent(0.55)
+                canopy.lineWidth = 1.6
+                canopy.fillColor = NSColor(white: 1, alpha: 0.04)
+                if Theme.highContrast {
+                    let under = SKShapeNode(circleOfRadius: CGFloat(ob.size) * pxPerM + 1.2)
+                    under.position = canopy.position
+                    under.strokeColor = NSColor(white: 0, alpha: 0.32)
+                    under.lineWidth = 3.4
+                    under.fillColor = .clear
+                    terrainNode.addChild(under)
+                }
+                terrainNode.addChild(trunk)
+                terrainNode.addChild(canopy)
+            case .rock:
+                let r = CGFloat(ob.size) * pxPerM
+                let cy = gy + CGFloat(ob.rockCenterY(above: 0)) * pxPerM
+                let arc = CGMutablePath()
+                // 지면과 만나는 각도(sinθ = -0.3)에서 정수리를 넘는 호 — 묻힌 둔덕
+                arc.addArc(
+                    center: CGPoint(x: gx, y: cy), radius: r,
+                    startAngle: -0.31, endAngle: .pi + 0.31, clockwise: false
+                )
+                let rock = SKShapeNode(path: arc)
+                rock.strokeColor = Palette.hairline.withAlphaComponent(0.7)
+                rock.lineWidth = 1.8
+                rock.lineCap = .round
+                if Theme.highContrast {
+                    let under = SKShapeNode(path: arc)
+                    under.strokeColor = NSColor(white: 0, alpha: 0.32)
+                    under.lineWidth = 4
+                    under.lineCap = .round
+                    terrainNode.addChild(under)
+                }
+                terrainNode.addChild(rock)
+            }
+        }
     }
 
     private func updateHUD() {
@@ -933,6 +1006,8 @@ final class GameScene: SKScene {
             ? smoothstep(min(1, max(0, (80 - wallBehindPx) / 36)))
             : 0
         renderWallT += (wallTarget - renderWallT) * (1 - exp(-6 * dt))
+        let treeTarget = mode == .aim || swingAnim != nil ? treePunchT : 0
+        renderTreeT += (treeTarget - renderTreeT) * (1 - exp(-6 * dt))
         var targetRig: Rig
         let rigRate: Double
         var rigClubRate: Double? = nil // 팔로스루 오버랩 — 클럽만 느린 추적
