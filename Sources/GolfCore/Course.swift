@@ -256,7 +256,7 @@ public enum CourseGenerator {
             segments: segments, elevation: elev,
             waterRange: h.waterRange.map { (w - $0.upperBound) ... (w - $0.lowerBound) },
             greenSlope: -h.greenSlope,
-            teeX: w - teeX
+            teeX: w - h.teeX // 인스턴스 teeX (static 상수 아님 — 리뷰 S-1)
         )
     }
 }

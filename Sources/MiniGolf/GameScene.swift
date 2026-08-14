@@ -215,8 +215,8 @@ final class GameScene: SKScene {
     private func startHole() {
         strokes = 0
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
-        if demoWallForce { // 벽 스탠스 관찰: 몸 뒤 공간이 ~45px 남는 대표 케이스로 시작
-            let m = 45 / Double(pxPerM)
+        if demoWallForce { // 벽 스탠스 관찰: 릴리프 하한(46px) 직후의 최소 이격 케이스로 시작
+            let m = 48 / Double(pxPerM)
             let x = hole.holeX > hole.teeX ? m : hole.worldW - m
             ball = BallState(x: x, y: hole.ground(at: x))
         }
@@ -255,16 +255,23 @@ final class GameScene: SKScene {
         dir > 0 ? Double(px(stickX)) : Double(size.width - px(stickX))
     }
 
-    /// 백스윙 상한 — 하한 0.55: 실측(Bulbulian 2001)상 제한 백스윙도 스피드 손실이 크지 않다
-    private var wallSwingCap: Double {
-        guard !club.isPutter else { return 1 }
-        return min(1, max(0.55, (wallBehindPx - 28) / 45))
+    /// 펀치 정도 [0,1] — 벽이 가까울수록 낮은 탄도·적은 스핀. 파워 제한이 아니다:
+    /// 사용자 의도(2026-08-14)는 '샷강도 제약'이 아니라 '극복하는 자세' — 폼만 컴팩트해진다
+    private var wallPunch: Double {
+        club.isPutter ? 0 : min(1, max(0, 1 - (wallBehindPx - 28) / 45))
     }
 
-    /// 벽이 스탠스 폭보다 가까우면 몸을 벽 안쪽으로 압축 — 공이 스탠스 뒤쪽(극단에선 뒷발 밑)에
-    /// 놓인다 (실제 펀치샷 기술: 볼을 스탠스 뒤에. 몸이 화면 밖으로 나가는 것도 이것으로 방지)
+    /// 벽 근접 시 백스윙 '폼'만 압축 — 짧은 백스윙으로 풀파워를 내는 극복 자세.
+    /// 팔·클럽이 화면(벽) 밖으로 나가지 않는 폭으로 제한한다
+    private var wallTopScale: Double {
+        renderTop * min(1, max(0.18, (wallBehindPx - 36) / 45))
+    }
+
+    /// 벽이 스탠스 폭보다 가까우면 몸을 벽 안쪽으로 압축 — 공이 스탠스 뒤쪽에 놓인다
+    /// (릴리프 46px 이후엔 거의 발동하지 않는 안전망. renderWallT로 스무딩 — 리뷰 S-2)
     private var wallBallFwd: Double {
-        club.isPutter ? renderBallFwd : min(renderBallFwd, max(2, wallBehindPx - 10))
+        guard !club.isPutter else { return renderBallFwd }
+        return mix(renderBallFwd, min(renderBallFwd, max(2, wallBehindPx - 10)), renderWallT)
     }
 
     /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
@@ -321,7 +328,10 @@ final class GameScene: SKScene {
 
     private func startSwing() {
         mode = .swinging
-        swingAnim = SwingAnim(prof: profile, fromPose: backswingPose(heightPct: heightPct, profile: profile))
+        swingAnim = SwingAnim(
+            prof: profile,
+            fromPose: backswingPose(heightPct: heightPct, profile: profile, topScale: wallTopScale)
+        )
         if !club.isPutter {
             SoundKit.shared.whoosh(power: heightPct, dur: profile.down + 0.05)
         }
@@ -335,9 +345,8 @@ final class GameScene: SKScene {
         let risk = 0.25 + 0.75 * pow(overdrive, 1.6)
         let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
         let mishit = club.isPutter ? 0 : risk * gauss
-        // 벽 제한 = 펀치샷: 파워는 남기고 낮은 탄도·적은 스핀으로 (장르 관행)
-        let punch = club.isPutter ? 0 : max(0, 1 - wallSwingCap)
-        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir, mishit: mishit, punch: punch)
+        // 벽 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
+        Ballistics.launch(&ball, club: club, heightPct: heightPct, lie: lie, dir: dir, mishit: mishit, punch: wallPunch)
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -636,7 +645,7 @@ final class GameScene: SKScene {
                 demoWait += dt
                 if demoWait > 1.2 {
                     demoWait = 0
-                    heightPct = min(Double.random(in: 0.5 ... 0.85), wallSwingCap)
+                    heightPct = Double.random(in: 0.5 ... 0.85)
                     startSwing()
                 }
             } else if mode == .end {
@@ -658,7 +667,6 @@ final class GameScene: SKScene {
             if heldKeys.contains(125) {
                 heightPct = max(0, heightPct - rate * dt)
             }
-            heightPct = min(heightPct, wallSwingCap) // 벽 뒤 공간만큼만 백스윙 (펀치샷)
         }
 
         if var anim = swingAnim {
@@ -770,6 +778,14 @@ final class GameScene: SKScene {
             case .water: onWater()
             default:
                 if ball.phase == .rest {
+                    // 벽 릴리프 (장애물 무벌타 구제 격): 스탠스·컴팩트 백스윙이 화면 안에
+                    // 온전히 서는 최소 이격(46px)을 보장 — 스틱맨은 절대 화면 밖에 서지 않는다
+                    let reliefM = 46 / Double(pxPerM)
+                    let relieved = min(max(ball.x, reliefM), hole.worldW - reliefM)
+                    if relieved != ball.x {
+                        ball.x = relieved
+                        ball.y = hole.ground(at: ball.x)
+                    }
                     if strokes >= Phys.maxStrokes {
                         giveUp()
                     } else {
@@ -892,7 +908,7 @@ final class GameScene: SKScene {
             rigRate = 14 // 상체는 부드럽게 — 발·무릎은 아래 footRate로 고속 추적
         } else if mode == .aim {
             targetRig = RigBuilder.fromPose(
-                backswingPose(heightPct: heightPct, profile: profile, topScale: renderTop),
+                backswingPose(heightPct: heightPct, profile: profile, topScale: wallTopScale),
                 ballFwd: wallBallFwd, clubLen: renderLen
             )
             applyWallStance(&targetRig, t: renderWallT)
