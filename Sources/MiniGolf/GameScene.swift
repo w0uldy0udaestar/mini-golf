@@ -21,6 +21,8 @@ final class GameScene: SKScene {
     private var acc = 0.0
     private let timeScale = 2.5
     var isGamePaused = false
+    var demoMode = false // --demo: 조준에서 자동 스윙 반복 — 모션 전환 관찰용 (디버그 전용)
+    private var demoWait = 0.0
 
     /// 연출 상태
     private struct SwingAnim { var t = 0.0; var launched = false; let prof: SwingProfile; let fromPose: Pose }
@@ -223,7 +225,38 @@ final class GameScene: SKScene {
         enterAim()
     }
 
+    /// 리그 로컬 원점 이동(스탠스 원점 ↔ 몸 원점) — 렌더 리그와 크로스페이드 스냅샷을 함께
+    /// 평행이동한다. 월드 위치가 변하지 않는 좌표 재명명이라 화면에는 아무 일도 일어나지 않는다.
+    private func shiftRigX(_ dx: Double) {
+        func shift(_ r: inout Rig) {
+            r.hip.x += CGFloat(dx)
+            r.shoulder.x += CGFloat(dx)
+            r.foot1.x += CGFloat(dx)
+            r.foot2.x += CGFloat(dx)
+            r.knee1.x += CGFloat(dx)
+            r.knee2.x += CGFloat(dx)
+            r.grip.x += CGFloat(dx)
+            r.handTrail.x += CGFloat(dx)
+        }
+        shift(&renderRig)
+        if var s = lastTargetSnapshot {
+            shift(&s)
+            lastTargetSnapshot = s
+        }
+        if var f = transFrom {
+            shift(&f)
+            transFrom = f
+        }
+    }
+
     private func enterAim() {
+        if demoMode, mode == .walking {
+            print(String(format: "AIM  %.2f", Date().timeIntervalSince1970))
+            fflush(stdout)
+        }
+        if walkAnim != nil { // 걷기 도착: 원점을 몸(도착점)→공으로 재명명 (화면 불변)
+            shiftRigX(Double(px(stickX) - px(ball.x)) * (renderDir < 0 ? -1 : 1))
+        }
         mode = .aim
         aimTime = 0
         walkAnim = nil
@@ -252,7 +285,17 @@ final class GameScene: SKScene {
 
     private func startWalk() {
         endShotTrail()
-        let from = stickX, to = ball.x
+        swingAnim = nil // 걷기 시작이 곧 스윙의 끝 — 잔존 스윙 타깃이 좌표 재명명과 어긋나지 않게
+        // 걷기는 몸 원점: 출발·도착 모두 '몸이 설 자리'(스탠스 지점)로 잡고, 리그 로컬 원점을
+        // 공→몸으로 재명명한다(화면 불변). 예전의 여운 원점 드리프트(24px)는 발을 제자리에 둔 채
+        // 몸만 미끄러뜨려 다리가 A자로 벌어졌다(2026-08-14 데모 프레임 관찰 g073~g077) —
+        // 그 거리는 드리프트가 아니라 걸음이 소화한다.
+        let fwdM = Double(renderBallFwd) / Double(pxPerM)
+        shiftRigX(dir * Double(renderBallFwd) * (renderDir < 0 ? -1 : 1))
+        let from = stickX - dir * fwdM // 현재 몸의 월드 x
+        stickX = from
+        let nextDir: Double = hole.holeX >= ball.x ? 1 : -1 // 새 공에서 바라볼 방향
+        let to = ball.x - nextDir * fwdM
         let dist = abs(to - from)
         mode = .walking
         if dist > 0.5 { // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
@@ -260,6 +303,15 @@ final class GameScene: SKScene {
         }
         // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
         // (smootherstep은 피크 속도가 1.875Δ/T라 dist/8로 보정 — 체감 속도는 이전과 동일)
+        if demoMode { // 프레임 캡처와 대조할 전환 타임스탬프 (관찰용)
+            print(String(
+                format: "WALK %.2f dist %.1fm dur %.1fs",
+                Date().timeIntervalSince1970,
+                dist,
+                min(12.0, max(1.2, dist / 8))
+            ))
+            fflush(stdout)
+        }
         var anim = WalkAnim(fromX: from, toX: to, dur: min(12.0, max(1.2, dist / 8)))
         // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 20종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
@@ -602,6 +654,25 @@ final class GameScene: SKScene {
         lastTime = currentTime
         guard !isGamePaused else { return }
 
+        if demoMode {
+            if mode == .aim {
+                demoWait += dt
+                if demoWait > 1.2 {
+                    demoWait = 0
+                    heightPct = min(Double.random(in: 0.5 ... 0.85), wallSwingCap)
+                    startSwing()
+                }
+            } else if mode == .end {
+                demoWait += dt
+                if demoWait > 3 {
+                    demoWait = 0
+                    newRound()
+                }
+            } else {
+                demoWait = 0
+            }
+        }
+
         if mode == .aim {
             let rate = club.isPutter ? 0.4 : 0.85
             if heldKeys.contains(126) {
@@ -635,7 +706,10 @@ final class GameScene: SKScene {
             if tw >= 0 {
                 let u = min(1, tw / w.dur)
                 stickX = w.fromX + (w.toX - w.fromX) * smootherstep(u) // 최소 저크 (가속도도 0에서 시작)
-                let vInst = abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
+                // 게이트 속도 = 몸 전진과 같은 smootherstep 도함수 — 구 smoothstep 도함수(6u(1-u))를
+                // 쓰면 위상이 실제 속도와 어긋나 걸음 절반이 과신장 강제 리프트오프가 된다
+                // (다리 따로 몸 따로, 2026-08-14 실플레이·시뮬레이션 재현: 60m 강제 45%→0%)
+                let vInst = abs(w.toX - w.fromX) * 30 * u * u * (1 - u) * (1 - u) / w.dur
                 w.vPx = vInst * Double(pxPerM)
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
                 w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot()))
@@ -851,15 +925,8 @@ final class GameScene: SKScene {
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
             gaitFeet = (targetRig.foot1, targetRig.foot2, targetRig.knee1, targetRig.knee2)
-            // 도착 위상: 진입(relax)의 원점 블렌드와 대칭 — 마지막 0.6s 동안 걷기 원점(0)에서
-            // 어드레스 스탠스(-ballFwd)로 흘려보내 24~51px 스케이팅 제거 (상체만 — 발은 접지 유지)
-            let arriveU = smootherstep(min(1, max(0, (w.t - (w.relax + w.dur - 0.6)) / 0.6)))
-            if arriveU > 0 {
-                let standRig = RigBuilder.fromPose(
-                    Poses.upright, ballFwd: renderBallFwd * arriveU, clubLen: renderLen
-                )
-                targetRig = Rig.lerp(targetRig, standRig, arriveU)
-            }
+            // 도착 블렌드 없음 — 걷기 목표가 곧 스탠스 지점이라 도착 위치가 이미 어드레스 자리다.
+            // 어드레스 포즈로의 정리는 조준 진입 크로스페이드가 맡는다
             rigRate = 14 // 상체는 부드럽게 — 발·무릎은 아래 footRate로 고속 추적
             branch = 1
         } else if mode == .aim {
@@ -870,10 +937,9 @@ final class GameScene: SKScene {
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
             branch = 2
-        } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
-            // 스탠스 원점(-ballFwd)을 걷기 원점(0)으로 흘려보내 걷기 시작 순간의 스텝 밀림 제거
-            let ru = walkAnim.map { smoothstep(min(1, $0.t / $0.relax)) } ?? 1
-            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd * (1 - ru), clubLen: renderLen)
+        } else if mode == .walking { // 피니시 여운 (relax) — 몸 원점에서 제자리 직립으로 느긋하게
+            // 원점 드리프트 없음 — startWalk가 원점을 이미 몸으로 재명명했다 (다리 벌어짐의 원인 제거)
+            targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: 0, clubLen: renderLen)
             rigRate = 5
             branch = 3
         } else {

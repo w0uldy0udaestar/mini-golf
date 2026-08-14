@@ -44,6 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         skView.allowsTransparency = true // ⚠️ skView.backgroundColor는 설정 금지
         scene = GameScene(size: screen.frame.size)
         scene.scaleMode = .resizeFill
+        // --demo: 자동 스윙 반복 (모션 전환 관찰·디버그 전용) — 사운드 끔
+        if ProcessInfo.processInfo.arguments.contains("--demo") {
+            scene.demoMode = true
+            SoundKit.shared.enabled = false
+        }
         panel.contentView = skView
         skView.presentScene(scene)
 
@@ -108,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func panelResignedKey() {
+        guard !scene.demoMode else { return } // 데모: 포커스와 무관하게 계속 돈다 (관찰용)
         lastAutoPause = Date()
         scene.setGamePaused(true)
     }
