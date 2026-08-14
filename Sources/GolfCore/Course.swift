@@ -176,13 +176,15 @@ public enum CourseGenerator {
         segments.append(Segment(from: greenStart, to: greenEnd, type: .green))
         segments.append(Segment(from: greenEnd, to: worldW, type: .rough))
 
-        // ── 지형 고저: 30~50m 간격 제어점에 완만한 언덕·계곡, 티는 평지 ──
-        var nodes: [(x: Double, e: Double)] = [(0, 0), (teeEnd + 8, 0)]
+        // ── 지형 고저: 25~45m 간격 제어점에 언덕·계곡 — 다이나믹하게 (2026-08-15 사용자 요청 3번) ──
+        // 내리막 티샷(30%): 티가 솟은 채 시작 — 드라이브가 시원하게 내려다보인다
+        let teeLift = rand.next() < 0.3 ? rand.next(3, 7) : 0
+        var nodes: [(x: Double, e: Double)] = [(0, teeLift), (teeEnd + 8, teeLift)]
         var nx = teeEnd + 8.0
-        var ne = 0.0
+        var ne = teeLift
         while nx < worldW {
-            nx += rand.next(30, 50)
-            ne = max(-5, min(7, ne + (rand.next() * 2 - 1) * 3.5))
+            nx += rand.next(25, 45)
+            ne = max(-7, min(11, ne + (rand.next() * 2 - 1) * 4.5))
             nodes.append((min(nx, worldW), ne))
         }
         var elev = [Double](repeating: 0, count: Int(ceil(worldW)) + 2)
@@ -273,6 +275,15 @@ public enum CourseGenerator {
         // ── 그린: 주변 지형 흐름을 따르는 미세 경사(브레이크) ──
         let gFrom = Int(apronStart - 2)
         let gTo = min(Int(ceil(greenEnd + 6)), elev.count - 1)
+        // 솟은 그린 (35%): 어프로치가 오르막이 된다 — 실코스의 elevated green
+        if rand.next() < 0.35 {
+            let lift = rand.next(2, 5.5)
+            let rampFrom = max(0, gFrom - 45)
+            for i in rampFrom ... gTo where i < elev.count {
+                let u = min(1, Double(i - rampFrom) / Double(max(1, gFrom - rampFrom)))
+                elev[i] += lift * (u * u * (3 - 2 * u)) // smoothstep 램프
+            }
+        }
         let trend: Double = elev[gTo] >= elev[gFrom] ? 1 : -1
         let gSlope = trend * rand.next(0.02, 0.06) // 2~6% 브레이크
         let gBase = elev[gFrom]

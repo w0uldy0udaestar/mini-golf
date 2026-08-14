@@ -245,7 +245,10 @@ final class GolfCoreTests: XCTestCase {
                 }
                 XCTAssertEqual(h.surface(at: h.teeX), .tee, "티 지점 라이가 티가 아님")
                 XCTAssertEqual(abs(h.holeX - h.teeX), h.dist, accuracy: 0.001, "티-홀 거리 보존 실패")
-                XCTAssertEqual(h.ground(at: h.teeX), 0, accuracy: 0.6, "티 주변은 평지여야 함")
+                XCTAssertEqual(
+                    h.ground(at: h.teeX + 3) - h.ground(at: h.teeX - 3), 0, accuracy: 0.4,
+                    "티 주변은 평평해야 함" // 절대 표고는 내리막 티샷(teeLift)으로 0이 아닐 수 있다
+                )
             }
         }
         XCTAssertTrue(sawLeftToRight, "왼→오 홀이 하나도 없음")
@@ -352,6 +355,22 @@ final class GolfCoreTests: XCTestCase {
             Double(inBand) / Double(par45), 0.45,
             "낙하 지대 해저드 비율이 너무 낮음 (\(inBand)/\(par45))"
         )
+    }
+
+    // ── 지형 다이나믹 ──
+
+    func testTerrainDynamicButBounded() {
+        var maxRange = 0.0
+        for seed in 1 ... 30 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
+                let lo = h.elevation.min() ?? 0
+                let hi = h.elevation.max() ?? 0
+                XCTAssertGreaterThan(lo, -10, "표고 하한 초과 (\(lo))")
+                XCTAssertLessThan(hi, 18, "표고 상한 초과 (\(hi))")
+                maxRange = max(maxRange, hi - lo)
+            }
+        }
+        XCTAssertGreaterThan(maxRange, 9, "지형 기복이 심심함 (최대 낙차 \(maxRange)m)")
     }
 
     // ── 장애물 (나무·바위) ──

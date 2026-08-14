@@ -89,7 +89,7 @@ final class GameScene: SKScene {
         size.width / hole.worldW
     }
 
-    private let groundBase: CGFloat = 96
+    private var groundBase: CGFloat = 96 // 홀 최저 표고에 맞춰 rebuildTerrain에서 보정 (HUD 침범 방지)
     /// 경사 라이: 스탠스 기울기 = 로프트 전달 비율 (같은 상수를 공유해야 물리·애니메이션이 정합)
     private let slopeTiltRatio = 0.7
     private var renderSlopeTilt = 0.0 // 경사 스탠스 기울기 (스무딩)
@@ -615,6 +615,9 @@ final class GameScene: SKScene {
     /// ── 지형: 균일한 헤어라인 + 라이별 미세 질감 ──
     private func rebuildTerrain() {
         terrainNode.removeAllChildren()
+        // 깊은 계곡·워터가 하단 HUD 스트립을 침범하지 않게 바닥선을 홀 최저 표고 기준으로 (리뷰 S-3)
+        let minElev = hole.elevation.min() ?? 0
+        groundBase = max(96, 84 - CGFloat(minElev) * pxPerM)
         let cupHalfM = max(Phys.cupHalfWidth, 4.5 / Double(pxPerM))
         let cupL = hole.holeX - cupHalfM
         let cupR = hole.holeX + cupHalfM
