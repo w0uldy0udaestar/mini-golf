@@ -215,6 +215,9 @@ final class GameScene: SKScene {
 
     private func startHole() {
         strokes = 0
+        // 티샷 기본 클럽: 파4·5 드라이버, 파3 7번 아이언 (관례 — 2026-08-15 사용자 요청. ←→ 변경 자유)
+        let teeClub = hole.par == 3 ? "7I" : "DR"
+        clubIdx = ClubTable.all.firstIndex { $0.id == teeClub } ?? 0
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
         if demoWallForce { // 벽 스탠스 관찰: 릴리프 하한(46px) 직후의 최소 이격 케이스로 시작
             let m = 48 / Double(pxPerM)
@@ -237,6 +240,10 @@ final class GameScene: SKScene {
         walkAnim = nil
         stickX = ball.x
         dir = hole.holeX >= ball.x ? 1 : -1
+        // 그린에 올라오면 퍼터로 자동 전환 (관례 — 이후 ←→로 자유 변경 가능)
+        if strokes > 0, hole.surface(at: ball.x) == .green, !club.isPutter {
+            clubIdx = ClubTable.all.firstIndex { $0.isPutter } ?? clubIdx
+        }
         presetPutterHeight()
         updateHUD()
     }
