@@ -312,21 +312,24 @@ public enum CourseGenerator {
             }
         }
         if par >= 4, rand.next() < 0.4 {
+            let size = rand.next(3.2, 5.0)
             let t = landing + (greenStart - landing) * rand.next(0.3, 0.65)
-            if t > teeEnd + 30, t < apronStart - 18, hazardFree(t, margin: 5) {
-                obstacles.append(Obstacle(kind: .tree, x: t, size: rand.next(2.6, 4.2)))
+            // 마진은 캐노피 반지름 연동 — 큰 나무가 해저드 렌더와 겹쳐 보이지 않게 (리뷰 지적)
+            if t > teeEnd + 30, t < apronStart - 18, hazardFree(t, margin: size + 1) {
+                obstacles.append(Obstacle(kind: .tree, x: t, size: size))
             }
         }
         if par == 3, rand.next() < 0.25 {
+            let size = rand.next(2.8, 3.8)
             let t = teeX + dist * rand.next(0.45, 0.7)
-            if t < apronStart - 15, hazardFree(t, margin: 5) {
-                obstacles.append(Obstacle(kind: .tree, x: t, size: rand.next(2.2, 3.2)))
+            if t < apronStart - 15, hazardFree(t, margin: size + 1) {
+                obstacles.append(Obstacle(kind: .tree, x: t, size: size))
             }
         }
         if rand.next() < 0.3 {
             let rx = teeEnd + 35 + rand.next() * (apronStart - teeEnd - 70)
             if hazardFree(rx, margin: 3) {
-                obstacles.append(Obstacle(kind: .rock, x: rx, size: rand.next(0.8, 1.4)))
+                obstacles.append(Obstacle(kind: .rock, x: rx, size: rand.next(1.2, 2.0)))
             }
         }
 

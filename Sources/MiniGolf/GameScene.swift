@@ -25,6 +25,7 @@ final class GameScene: SKScene {
     var demoWallForce = false // --demo-wall: 매 홀을 벽 옆에서 시작 — 벽 스탠스 관찰용
     var demoCardPreview = false // --demo-card: 스코어카드 레이아웃 즉시 표시 (디버그 전용)
     var demoNoClamp = false // --no-wall-clamp: 벽 경성 클램프 끄기 — 침범 재현·검증 전용
+    var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
     private var demoWait = 0.0
 
     /// 연출 상태
@@ -209,7 +210,8 @@ final class GameScene: SKScene {
 
     func newRound() {
         course = CourseGenerator.makeCourse(
-            seed: UInt32(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 2_000_000_000))
+            seed: demoSeed
+                ?? UInt32(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 2_000_000_000))
         )
         holeIdx = 0
         results = []
@@ -250,6 +252,15 @@ final class GameScene: SKScene {
         }
         presetPutterHeight()
         updateHUD()
+        if demoMode { // 프레임 캡처와 대조할 스탠스 계측 (관찰용): 경사·라이·근처 장애물
+            let s = hole.slope(at: ball.x)
+            print(String(
+                format: "AIM x %.1f lie %@ slope %+.3f tilt %+.1f° obs %d",
+                ball.x, hole.surface(at: ball.x).label,
+                s, slopeTiltRatio * atan(s) * 180 / .pi, hole.obstacles.count
+            ))
+            fflush(stdout)
+        }
     }
 
     /// 퍼터를 잡으면 남은 거리에 맞는 백스윙에서 시작한다 — 평지 기준 계산이라
@@ -394,6 +405,36 @@ final class GameScene: SKScene {
             rig.hip.y -= 2.5 * renderTreeT
             rig.shoulder.y -= 3.5 * renderTreeT
         }
+    }
+
+    /// 경사 라이 스탠스 — 발·무릎이 실제 지면 높이를 정확히 딛고(zRotation 잔차 보정),
+    /// 체중이 내리막 발로 흘러 오르막/내리막 라이가 실루엣으로 읽힌다 (2026-08-15 사용자 요청 3번).
+    /// zRotation(경사×0.7)은 몸 전체 기울기만 담당 — 여기서 발 접지·체중 배분을 더한다.
+    /// 벽 스탠스와는 상충(벽 클램프가 무회전 평면 가정)이라 renderWallT만큼 약해진다
+    private func applySlopeStance(_ rig: inout Rig) {
+        let strength = 1 - renderWallT
+        guard strength > 0.001 else { return }
+        let sinT = sin(renderSlopeTilt)
+        /// 회전이 만든 발 높이와 실제 지형 높이의 잔차 — 벙커 턱·경사 꼭대기에서도 발이 뜨지 않는다
+        func groundResidual(_ localX: Double) -> Double {
+            let screenDx = localX * dir
+            let xm = stickX + screenDx / Double(pxPerM)
+            let delta = Double(groundY(xm) - groundY(stickX))
+            return (delta - screenDx * sinT) * strength
+        }
+        let r1 = groundResidual(Double(rig.foot1.x))
+        let r2 = groundResidual(Double(rig.foot2.x))
+        rig.foot1.y += r1
+        rig.foot2.y += r2
+        rig.knee1.y += r1 * 0.55
+        rig.knee2.y += r2 * 0.55
+        // 체중 배분: 오르막 라이 = 뒷발(내리막 쪽), 내리막 라이 = 앞발 (실제 골프 셋업 관례)
+        let slopeFacing = atan(hole.slope(at: stickX)) * dir // + = 타깃 쪽 오르막
+        let shift = min(1, max(-1, slopeFacing / 0.18)) * strength
+        rig.hip.x -= 5 * shift
+        rig.shoulder.x -= 2.5 * shift
+        rig.knee1.x -= 3 * shift
+        rig.knee2.x -= 3 * shift
     }
 
     /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
@@ -612,6 +653,11 @@ final class GameScene: SKScene {
         }
     }
 
+    /// 포커스 상실 시 홀드만 해제 — 게임은 계속 흐른다 (일시정지는 ⛳️ 수동 토글만)
+    func releaseHeldInput() {
+        heldKeys.removeAll()
+    }
+
     /// ── 지형: 균일한 헤어라인 + 라이별 미세 질감 ──
     private func rebuildTerrain() {
         terrainNode.removeAllChildren()
@@ -639,43 +685,76 @@ final class GameScene: SKScene {
             let node = SKShapeNode()
             let base = linePath(from: from, to: to)
             switch surface {
-            case .water: // 잔잔한 대시 라인
+            case .water: // 대시 수면 + 수면 아래 은은한 면 채움 — 해저드가 멀리서도 '물'로 읽힌다
                 node.path = base.copy(dashingWithPhase: 0, lengths: [5, 4])
-                node.strokeColor = Palette.waterBlue.withAlphaComponent(0.75)
-                node.lineWidth = 1.6
+                node.strokeColor = Palette.waterBlue.withAlphaComponent(0.9)
+                node.lineWidth = 1.8
+                let depth: CGFloat = 12
+                let fill = CGMutablePath()
+                fill.move(to: CGPoint(x: px(from), y: groundY(from)))
+                fill.addLine(to: CGPoint(x: px(to), y: groundY(to))) // 수면은 평평 (생성기가 보장)
+                fill.addLine(to: CGPoint(x: px(to), y: groundY(to) - depth))
+                fill.addLine(to: CGPoint(x: px(from), y: groundY(from) - depth))
+                fill.closeSubpath()
+                let fillNode = SKShapeNode(path: fill)
+                fillNode.fillColor = Palette.waterBlue.withAlphaComponent(0.2)
+                fillNode.strokeColor = .clear
+                terrainNode.addChild(fillNode)
             case .green: // 살짝 도드라진 순백
                 node.path = base
                 node.strokeColor = NSColor(white: 1, alpha: 0.95)
                 node.lineWidth = 2.6
-            case .rough: // 어둡게 가라앉힘 + 잔디 틱
+            case .rough: // 어둡게 가라앉힘 + 길고 촘촘한 잔디 틱 (좌우 교차로 '풀숲' 질감)
                 node.path = base
-                node.strokeColor = Palette.roughGray.withAlphaComponent(0.42)
+                node.strokeColor = Palette.roughGray.withAlphaComponent(0.5)
                 node.lineWidth = 1.8
                 let grass = CGMutablePath()
-                var gx = from + 1.2
+                var gx = from + 0.9
+                var lean = false
                 while gx < to - 0.5 {
                     let gy = groundY(gx)
                     grass.move(to: CGPoint(x: px(gx), y: gy))
-                    grass.addLine(to: CGPoint(x: px(gx) + 0.6, y: gy + 3.6))
-                    gx += 2.4
+                    grass.addLine(to: CGPoint(x: px(gx) + (lean ? -0.8 : 0.9), y: gy + (lean ? 4.2 : 5.4)))
+                    lean.toggle()
+                    gx += 1.5
                 }
                 let grassNode = SKShapeNode(path: grass)
-                grassNode.strokeColor = Palette.roughGray.withAlphaComponent(0.3)
+                grassNode.strokeColor = Palette.roughGray.withAlphaComponent(0.45)
                 grassNode.lineWidth = 1
                 terrainNode.addChild(grassNode)
-            case .bunker: // 모래 스티플
+            case .bunker: // 모래 웅덩이 면 채움 + 스티플 — 파인 단면이 통째로 모래색
                 node.path = base
-                node.strokeColor = Palette.bunkerSand.withAlphaComponent(0.8)
-                node.lineWidth = 1.8
+                node.strokeColor = Palette.bunkerSand.withAlphaComponent(0.9)
+                node.lineWidth = 2.0
+                let fill = CGMutablePath() // 지면선 아래 6px 모래 밴드 — 딥(≈3px)보다 안정적인 두께
+                fill.move(to: CGPoint(x: px(from), y: groundY(from)))
+                var fx = from + 1
+                while fx < to {
+                    fill.addLine(to: CGPoint(x: px(fx), y: groundY(fx)))
+                    fx += 1
+                }
+                fill.addLine(to: CGPoint(x: px(to), y: groundY(to)))
+                fill.addLine(to: CGPoint(x: px(to), y: groundY(to) - 6))
+                var rx = to - 1
+                while rx > from {
+                    fill.addLine(to: CGPoint(x: px(rx), y: groundY(rx) - 6))
+                    rx -= 1
+                }
+                fill.addLine(to: CGPoint(x: px(from), y: groundY(from) - 6))
+                fill.closeSubpath()
+                let fillNode = SKShapeNode(path: fill)
+                fillNode.fillColor = Palette.bunkerSand.withAlphaComponent(0.3)
+                fillNode.strokeColor = .clear
+                terrainNode.addChild(fillNode)
                 let dots = CGMutablePath()
                 var bx = from + 0.8
                 while bx < to - 0.5 {
                     let cy = groundY(bx) - 3.2
                     dots.addEllipse(in: CGRect(x: px(bx) - 0.7, y: cy - 0.7, width: 1.4, height: 1.4))
-                    bx += 1.5
+                    bx += 1.2
                 }
                 let dotNode = SKShapeNode(path: dots)
-                dotNode.fillColor = Palette.bunkerSand.withAlphaComponent(0.45)
+                dotNode.fillColor = Palette.bunkerSand.withAlphaComponent(0.55)
                 dotNode.strokeColor = .clear
                 terrainNode.addChild(dotNode)
             default: // 티·페어웨이·에이프런: 조용한 헤어라인
@@ -741,27 +820,41 @@ final class GameScene: SKScene {
                 let trunkPath = CGMutablePath()
                 trunkPath.move(to: CGPoint(x: gx, y: gy))
                 trunkPath.addLine(to: CGPoint(x: gx, y: trunkTop))
-                // 나무는 화면 뒤편(캐노피만 충돌) — 살짝 흐린 획으로 깊이를 암시한다
+                // 나무는 화면 뒤편(캐노피만 충돌) — 굵은 획으로 존재감, 채움은 옅게 유지해 깊이 암시
                 let trunk = SKShapeNode(path: trunkPath)
-                trunk.strokeColor = Palette.hairline.withAlphaComponent(0.55)
-                trunk.lineWidth = 2.2
+                trunk.strokeColor = Palette.hairline.withAlphaComponent(0.8)
+                trunk.lineWidth = 3.5
                 trunk.lineCap = .round
-                let canopy = SKShapeNode(circleOfRadius: CGFloat(ob.size) * pxPerM)
+                let r = CGFloat(ob.size) * pxPerM
+                let canopy = SKShapeNode(circleOfRadius: r)
                 // above: 0 = 지면 기준 오프셋만 취한다 (gy에 이미 표고 포함 — 리뷰 S-5)
                 canopy.position = CGPoint(x: gx, y: gy + CGFloat(ob.canopyCenterY(above: 0)) * pxPerM)
-                canopy.strokeColor = Palette.hairline.withAlphaComponent(0.55)
-                canopy.lineWidth = 1.6
-                canopy.fillColor = NSColor(white: 1, alpha: 0.04)
+                canopy.strokeColor = Palette.hairline.withAlphaComponent(0.85)
+                canopy.lineWidth = 2.2
+                canopy.fillColor = NSColor(white: 1, alpha: 0.12)
+                // 잎 틱: 캐노피 안쪽 동심 호 하나 — '잎 뭉치'로 읽히는 최소 질감
+                let leaf = SKShapeNode(path: {
+                    let p = CGMutablePath()
+                    p.addArc(
+                        center: canopy.position, radius: r * 0.62,
+                        startAngle: 0.6, endAngle: 2.5, clockwise: false
+                    )
+                    return p
+                }())
+                leaf.strokeColor = Palette.hairline.withAlphaComponent(0.4)
+                leaf.lineWidth = 1.4
+                leaf.lineCap = .round
                 if Theme.highContrast {
-                    let under = SKShapeNode(circleOfRadius: CGFloat(ob.size) * pxPerM + 1.2)
+                    let under = SKShapeNode(circleOfRadius: r + 1.2)
                     under.position = canopy.position
                     under.strokeColor = NSColor(white: 0, alpha: 0.32)
-                    under.lineWidth = 3.4
+                    under.lineWidth = 4.4
                     under.fillColor = .clear
                     terrainNode.addChild(under)
                 }
                 terrainNode.addChild(trunk)
                 terrainNode.addChild(canopy)
+                terrainNode.addChild(leaf)
             case .rock:
                 let r = CGFloat(ob.size) * pxPerM
                 let cy = gy + CGFloat(ob.rockCenterY(above: 0)) * pxPerM
@@ -772,13 +865,14 @@ final class GameScene: SKScene {
                     startAngle: -0.31, endAngle: .pi + 0.31, clockwise: false
                 )
                 let rock = SKShapeNode(path: arc)
-                rock.strokeColor = Palette.hairline.withAlphaComponent(0.7)
-                rock.lineWidth = 1.8
+                rock.strokeColor = Palette.hairline.withAlphaComponent(0.85)
+                rock.fillColor = NSColor(white: 1, alpha: 0.12) // 채움 — 작아도 덩어리로 보인다
+                rock.lineWidth = 2.2
                 rock.lineCap = .round
                 if Theme.highContrast {
                     let under = SKShapeNode(path: arc)
                     under.strokeColor = NSColor(white: 0, alpha: 0.32)
-                    under.lineWidth = 4
+                    under.lineWidth = 4.4
                     under.lineCap = .round
                     terrainNode.addChild(under)
                 }
@@ -1030,6 +1124,7 @@ final class GameScene: SKScene {
             let wallSwingT = anim.t < anim.prof.down
                 ? renderWallT
                 : renderWallT * max(0, 1 - (anim.t - anim.prof.down) / 0.25)
+            applySlopeStance(&targetRig)
             applyWallStance(&targetRig, t: wallSwingT)
             applyLieStance(&targetRig)
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
@@ -1103,6 +1198,7 @@ final class GameScene: SKScene {
                 backswingPose(heightPct: heightPct, profile: profile, topScale: wallTopScale),
                 ballFwd: wallBallFwd, clubLen: renderLen
             )
+            applySlopeStance(&targetRig)
             applyWallStance(&targetRig, t: renderWallT)
             applyLieStance(&targetRig)
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
@@ -1112,6 +1208,7 @@ final class GameScene: SKScene {
             rigRate = 5
         } else {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
+            applySlopeStance(&targetRig) // 피니시 홀드 중에도 발은 경사를 딛는다 (리뷰 지적)
             rigRate = 5
         }
         // 피니시 무빙 홀드: 완전 정지 대신 클럽이 관성으로 미세하게 흔들리다 잦아든다 (리서치 P6)
