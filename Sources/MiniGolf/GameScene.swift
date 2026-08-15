@@ -28,6 +28,8 @@ final class GameScene: SKScene {
     var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
     var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
     var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
+    var demoMotionShowcase = false // --demo-motions: 모션 100종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
+    private var motionCursor = 0
     private var demoWait = 0.0
 
     /// 연출 상태
@@ -588,6 +590,22 @@ final class GameScene: SKScene {
             }
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
             t += dur + Double.random(in: 0.8 ... 2.2)
+        }
+        if demoMotionShowcase { // 카탈로그 캡처: 랜덤 대신 100종을 커서 순서로, 트립·어깨 캐리 없이
+            anim.flavorEvents = []
+            anim.shoulderRange = nil
+            anim.tripAt = nil
+            var st = anim.relax + 0.8
+            while st < anim.relax + anim.dur - 1.5, motionCursor < WalkFlavorKind.allCases.count {
+                let kind = WalkFlavorKind.allCases[motionCursor]
+                anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: st, dur: kind.duration))
+                motionCursor += 1
+                st += kind.duration + 1.3
+            }
+            if motionCursor >= WalkFlavorKind.allCases.count, anim.flavorEvents.isEmpty {
+                print("MOTIONS DONE")
+                fflush(stdout)
+            }
         }
         if demoMode, !anim.flavorEvents.isEmpty || anim.tripAt != nil { // 캡처 대조용 계측 (관찰용)
             let list = anim.flavorEvents
@@ -1353,6 +1371,12 @@ final class GameScene: SKScene {
             for e in w.flavorEvents {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
+                if demoMotionShowcase, w.t - dt < e.t0 { // 시작 프레임 — 캡처 워처에 위치 통지
+                    let info = "\(e.kind) \(Int(px(stickX))) \(Int(groundY(stickX)))"
+                    try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
+                    print("MOTION \(info)")
+                    fflush(stdout)
+                }
                 e.kind.apply(u: u, into: &flavor)
             }
             // 지형 적응 자세 (2026-08-15 요청): 오르막은 상체를 앞으로(등산),
