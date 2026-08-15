@@ -45,7 +45,7 @@ enum Poses {
     static let ptA = Pose(hipDx: 0, tilt: -3, handA: 10, handD: 30, clubA: 8, heel: 0, headDx: 7)
     static let ptTop = Pose(hipDx: 0, tilt: -4, handA: -22, handD: 30, clubA: -30, heel: 0, headDx: 7)
     static let ptImp = Pose(hipDx: 1, tilt: -3, handA: 12, handD: 30, clubA: 10, heel: 0, headDx: 7)
-    static let ptFin = Pose(hipDx: 2, tilt: -2, handA: 30, handD: 30, clubA: 38, heel: 0, headDx: 8)
+    static let ptFin = Pose(hipDx: 2, tilt: -2, handA: 34, handD: 30, clubA: 46, heel: 0, headDx: 8) // 팔로 ≥ 백 (대칭 이상)
     // 클럽을 옆에 들고 선 직립 — 걷기↔어드레스 전환 기준
     static let upright = Pose(hipDx: 0, tilt: 2, handA: -18, handD: 30, clubA: -35, heel: 0, headDx: 5)
 }
@@ -60,10 +60,16 @@ struct SwingProfile {
 
     static func profile(for cat: ClubCategory) -> SwingProfile {
         switch cat {
-        case .wood: SwingProfile(topScale: 1.0, ballFwd: 24, finishScale: 1.0, down: 0.13, isPutter: false)
-        case .iron: SwingProfile(topScale: 0.88, ballFwd: 20, finishScale: 0.9, down: 0.13, isPutter: false)
-        case .wedge: SwingProfile(topScale: 0.72, ballFwd: 17, finishScale: 0.72, down: 0.13, isPutter: false)
-        case .putter: SwingProfile(topScale: 1.0, ballFwd: 18, finishScale: 1.0, down: 0.2, isPutter: true)
+        case .wood: SwingProfile(topScale: 1.0, ballFwd: 24, finishScale: 1.0, down: 0.17, isPutter: false)
+        case .iron: SwingProfile(topScale: 0.88, ballFwd: 20, finishScale: 0.9, down: 0.17, isPutter: false)
+        case .wedge: SwingProfile(topScale: 0.72, ballFwd: 17, finishScale: 0.72, down: 0.17, isPutter: false)
+        case .putter: SwingProfile(
+                topScale: 1.0,
+                ballFwd: 18,
+                finishScale: 1.0,
+                down: 0.29,
+                isPutter: true
+            ) // PGA 실측 317±35ms
         }
     }
 }
@@ -71,7 +77,7 @@ struct SwingProfile {
 enum SwingTiming {
     static let follow = 0.14
     static let finish = 0.22
-    static let total = 0.5
+    static let total = 0.58 // 퍼터(0.29+0.25)·풀스윙(0.17+0.14+0.22) 모두 커버
 }
 
 func smoothstep(_ u: Double) -> Double {
@@ -79,11 +85,12 @@ func smoothstep(_ u: Double) -> Double {
 }
 
 /// 백스윙 궤적: ↑↓ 입력이 어드레스→테이크어웨이→톱 경로 위의 몸 전체 포즈를 움직인다
-func backswingPose(heightPct: Double, profile: SwingProfile) -> Pose {
+/// topScale: 카테고리 경계에서 움찔하지 않게 스무딩된 값을 넘길 수 있다 (기본은 프로파일 값)
+func backswingPose(heightPct: Double, profile: SwingProfile, topScale: Double? = nil) -> Pose {
     if profile.isPutter {
         return Pose.lerp(Poses.ptA, Poses.ptTop, heightPct)
     }
-    let s = 0.22 + 0.78 * heightPct * profile.topScale
+    let s = 0.22 + 0.78 * heightPct * (topScale ?? profile.topScale)
     return s < 0.35
         ? Pose.lerp(Poses.p1, Poses.p2, s / 0.35)
         : Pose.lerp(Poses.p2, Poses.p4, (s - 0.35) / 0.65)
@@ -95,10 +102,29 @@ func finishPose(profile: SwingProfile) -> Pose {
 
 /// 스윙 애니메이션 타임라인에서 포즈 샘플 (t: 스윙 시작 후 경과 초)
 func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct _: Double) -> Pose {
-    if t < profile.down { // 다운스윙: 급가속
+    if t < profile.down { // 다운스윙: 급가속 (퍼터는 펜듈럼 — 최하점=임팩트에서 속도 최대)
         let u = t / profile.down
-        let impact = profile.isPutter ? Poses.ptImp : Poses.p7
-        return Pose.lerp(fromPose, impact, profile.isPutter ? smoothstep(u) : u * u)
+        if profile.isPutter {
+            return Pose.lerp(fromPose, Poses.ptImp, u * u)
+        }
+        // 운동 사슬(kinematic sequence): 골반→몸통→팔→클럽 순차 도달.
+        // 클럽은 u³로 최후에 터진다 — 손목 래그 유지 후 late release (리서치 P2)
+        let impact = Poses.p7
+        let hipW = 1 - pow(1 - u, 2.2)
+        let heelW = 1 - pow(1 - u, 1.8)
+        let tiltW = 1 - pow(1 - u, 1.5)
+        let armW = pow(u, 1.6)
+        let extW = pow(u, 2.2)
+        let clubW = pow(u, 3.0)
+        return Pose(
+            hipDx: mix(fromPose.hipDx, impact.hipDx, hipW),
+            tilt: mix(fromPose.tilt, impact.tilt, tiltW),
+            handA: mix(fromPose.handA, impact.handA, armW),
+            handD: mix(fromPose.handD, impact.handD, extW),
+            clubA: mix(fromPose.clubA, impact.clubA, clubW),
+            heel: mix(fromPose.heel, impact.heel, heelW),
+            headDx: mix(fromPose.headDx, impact.headDx, tiltW)
+        )
     }
     let t2 = t - profile.down
     if profile.isPutter { // 퍼터: 임팩트 → 짧은 팔로만
