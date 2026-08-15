@@ -27,6 +27,7 @@ final class GameScene: SKScene {
     var demoNoClamp = false // --no-wall-clamp: 벽 경성 클램프 끄기 — 침범 재현·검증 전용
     var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
     var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
+    var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
     private var demoWait = 0.0
 
     /// 연출 상태
@@ -77,6 +78,14 @@ final class GameScene: SKScene {
     private var renderWallT = 0.0 // 벽 스탠스 근접도 (스무딩) — 뒷발 벽 딛기 자세 블렌드
     private var renderTreeT = 0.0 // 나무 캐노피 근접도 (스무딩) — 웅크린 펀치 자세 블렌드
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
+    /// 홀아웃 직후 스틱맨의 스코어 반응 (QA·Whimsy 리뷰 — 결과에 감정을 싣는다)
+    private enum ReactionKind { case none, rejoice, fistPump, nod, slump, dejected }
+    private var reactionKind = ReactionKind.none
+    private var reactionAt: TimeInterval = 0
+    /// 조준 방치 시 잔동작 (아이들) — 곁눈질했을 때도 스틱맨이 살아 있다
+    private var idleNextAt = 6.0
+    private var idleKind = 0
+    private var idleStart = 0.0
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
 
@@ -249,6 +258,9 @@ final class GameScene: SKScene {
     private func enterAim() {
         mode = .aim
         aimTime = 0
+        reactionKind = .none
+        idleKind = 0
+        idleNextAt = Double.random(in: 5 ... 9)
         walkAnim = nil
         stickX = ball.x
         dir = hole.holeX >= ball.x ? 1 : -1
@@ -443,6 +455,66 @@ final class GameScene: SKScene {
         rig.knee2.x -= 3 * shift
     }
 
+    /// 홀아웃 스코어 반응 — 피니시 홀드 위에 얹는 짧은 감정 표현 (0.15~1.5s).
+    /// 공이 컵에 들어가는 걸 '본 다음' 반응한다 (인과 — 드롭 연출 0.24s 이후 시작)
+    private func applyScoreReaction(_ rig: inout Rig, t: Double) {
+        guard t > 0.15, t < 1.5 else { return }
+        let u = (t - 0.15) / 1.35
+        let bell = smoothstep(min(1, min(u, 1 - u) / 0.25))
+        switch reactionKind {
+        case .rejoice: // 홀인원·이글: 만세 + 두 번 폴짝
+            let hop = abs(sin(2 * .pi * 2 * u)) * bell * 5
+            rig.hip.y += hop
+            rig.shoulder.y += hop + 2 * bell
+            rig.handTrail.x = mix(rig.handTrail.x, rig.shoulder.x + 6, bell)
+            rig.handTrail.y = mix(rig.handTrail.y, rig.shoulder.y + 18, bell)
+            rig.headDy += 2 * bell
+        case .fistPump: // 버디: 주먹 불끈
+            rig.handTrail.x += 4 * bell
+            rig.handTrail.y += 18 * bell
+            rig.shoulder.y += 1.5 * bell
+        case .nod: // 파: 만족의 끄덕
+            rig.headDy -= 1.5 * abs(sin(2 * .pi * 1.5 * u)) * bell
+        case .slump: // 보기 이상: 어깨가 살짝 처진다
+            rig.shoulder.y -= 3 * bell
+            rig.headDy -= 3 * bell
+        case .dejected: // 기권: 고개 푹
+            rig.shoulder.y -= 4 * bell
+            rig.headDy -= 4.5 * bell
+        case .none:
+            break
+        }
+    }
+
+    /// 조준 방치 잔동작: 상시 미세 호흡 + 5~9초마다 두리번·클럽 툭툭·발끝 까딱 중 하나.
+    /// 오버레이 게임의 '곁눈질' 순간에도 스틱맨이 살아 있게 (QA·Whimsy 리뷰)
+    private func applyIdleFidget(_ rig: inout Rig) {
+        rig.shoulder.y += 0.6 * sin(2 * .pi * 0.25 * aimTime) // 호흡
+        if idleKind == 0, aimTime > idleNextAt {
+            idleKind = Int.random(in: 1 ... 4)
+            idleStart = aimTime
+        }
+        guard idleKind > 0 else { return }
+        let u = (aimTime - idleStart) / 1.6
+        if u >= 1 {
+            idleKind = 0
+            idleNextAt = aimTime + Double.random(in: 5 ... 9)
+            return
+        }
+        let bell = smoothstep(min(1, min(u, 1 - u) / 0.3))
+        switch idleKind {
+        case 1: rig.headDx += 4 * bell // 홀 쪽 응시
+        case 2: // 두리번
+            rig.headDx -= 3 * bell
+            rig.headDy += bell
+        case 3: // 클럽 헤드 툭툭 — 그립 들썩 + 샤프트 까딱
+            rig.grip.y += 1.5 * abs(sin(3 * .pi * u)) * bell
+            rig.clubPhi += 0.06 * sin(3 * .pi * u) * bell
+        default: // 앞발 토탭
+            rig.foot2.y += 1.2 * abs(sin(2 * .pi * u)) * bell
+        }
+    }
+
     /// 벽 스탠스 자세 보정 — 뒷발을 벽에 올리고(가까울수록 높이), 체중은 앞발로,
     /// 그립은 초크다운. t: 벽 근접도 0~1 (renderWallT로 스무딩되어 들어온다)
     private func applyWallStance(_ rig: inout Rig, t: Double) {
@@ -486,10 +558,11 @@ final class GameScene: SKScene {
             fromX: from, toX: to,
             dur: min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness)))
         )
-        // 아주 가끔 넘어진다 (재미): 기본 3%, 험한 길 6% — 일어나 툭툭 털 시간이 있는 걸음만
-        if anim.dur > 4.5,
-           demoTripForce || Double.random(in: 0 ..< 1) < 0.03 + 0.03 * min(1, hardness * 2) {
-            anim.tripAt = anim.relax + Double.random(in: 1.0 ... (anim.dur - 3.0))
+        // 아주 가끔 넘어진다 (재미): 기본 1%, 험한 길 2% — 라운드에 한 번 볼까 말까
+        // (초기 3~6%는 실플레이에서 "너무 자주"로 판정 — 2026-08-15)
+        if anim.dur > 5.0,
+           demoTripForce || Double.random(in: 0 ..< 1) < 0.01 + 0.01 * min(1, hardness * 2) {
+            anim.tripAt = anim.relax + Double.random(in: 1.0 ... (anim.dur - 3.5))
         }
         // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 100종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
@@ -509,8 +582,8 @@ final class GameScene: SKScene {
                 continue
             }
             // 넘어지는 동안엔 다른 모션 금지 (트월하며 넘어지면 코미디가 아니라 버그로 보인다)
-            if let tr = anim.tripAt, ((tr - 0.3) ... (tr + 2.7)).overlaps(t ... (t + dur)) {
-                t = tr + 2.8
+            if let tr = anim.tripAt, ((tr - 0.3) ... (tr + 2.9)).overlaps(t ... (t + dur)) {
+                t = tr + 3.0
                 continue
             }
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
@@ -521,7 +594,7 @@ final class GameScene: SKScene {
                 .map { "\($0.kind)@\(String(format: "%.1f", $0.t0))" }
                 .joined(separator: " ")
             let trip = anim.tripAt.map { String(format: " TRIP@%.1f", $0) } ?? ""
-            print("FLAVOR \(list)\(trip)")
+            print(String(format: "FLAVOR[%.2f] ", Date().timeIntervalSince1970) + list + trip)
             fflush(stdout)
         }
         walkAnim = anim
@@ -613,10 +686,22 @@ final class GameScene: SKScene {
         endShotTrail()
         SoundKit.shared.holeIn()
         dropBallIntoCup()
+        // 스코어 감정 계층 (QA·Whimsy 리뷰): 좋은 결과일수록 토스트가 크고, 스틱맨이 반응한다
+        let diff = strokes == 1 ? -3 : strokes - hole.par // 홀인원은 최상급 취급
+        reactionKind = diff <= -2 ? .rejoice : diff == -1 ? .fistPump : diff == 0 ? .nod : .slump
+        reactionAt = lastTime
+        if diff <= -2 { // 이글·홀인원: 홀인음 뒤에 상승 차임이 얹힌다
+            run(.sequence([.wait(forDuration: 0.35), .run { SoundKit.shared.chime() }]))
+        }
+        if demoMode {
+            print("HOLED diff \(diff)")
+            fflush(stdout)
+        }
         toast(
             scoreName(strokes: strokes, par: hole.par),
             sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m",
-            overFlag: true
+            overFlag: true,
+            titleScale: diff <= -2 ? 1.3 : diff == -1 ? 1.12 : diff <= 0 ? 1.0 : 0.88
         )
         run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
     }
@@ -662,7 +747,9 @@ final class GameScene: SKScene {
         mode = .holed
         results.append((hole.par, Phys.maxStrokes, true))
         endShotTrail()
-        toast("기권", sub: "\(Phys.maxStrokes)타 초과")
+        reactionKind = .dejected
+        reactionAt = lastTime
+        toast("기권", sub: "\(Phys.maxStrokes)타 초과", titleScale: 0.88)
         run(.sequence([.wait(forDuration: 1.4), .run { [weak self] in self?.advanceHole() }]))
     }
 
@@ -684,7 +771,9 @@ final class GameScene: SKScene {
 
     /// 토스트 — 기본은 화면 중앙, overFlag는 깃발 위 (홀인 스코어는 사건 지점에서 읽힌다 —
     /// 2026-08-15 사용자 요청 3번). 깃발이 화면 끝이면 잘리지 않게 안쪽으로 당긴다
-    private func toast(_ main: String, sub: String? = nil, overFlag: Bool = false) {
+    private func toast(
+        _ main: String, sub: String? = nil, overFlag: Bool = false, titleScale: CGFloat = 1
+    ) {
         if overFlag {
             let x = min(size.width - 150, max(150, px(hole.holeX)))
             let baseY = groundY(hole.holeX) + 62 // 깃대 끝
@@ -694,6 +783,7 @@ final class GameScene: SKScene {
             toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
             toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
         }
+        toastTitle.setScale(titleScale) // 스코어 무게 = 크기 (이글 1.3 ~ 보기 0.88)
         toastTitle.setText(main)
         toastSub.setText(sub ?? "")
         for node in [toastTitle, toastSub] as [SKNode] {
@@ -1005,7 +1095,7 @@ final class GameScene: SKScene {
                     heightPct = 0.95 // 벽 관찰: 조준 내내 풀 백스윙 프리뷰 유지 (최악 케이스 상시 노출)
                 }
                 demoWait += dt
-                if demoWait > 1.2 {
+                if demoWait > (demoIdleForce ? 25 : 1.2) { // 아이들 관찰 모드는 조준을 길게 유지
                     demoWait = 0
                     // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
                     heightPct = demoWallForce ? Double.random(in: 0.9 ... 1.0) : Double.random(in: 0.5 ... 0.85)
@@ -1055,21 +1145,21 @@ final class GameScene: SKScene {
             var freeze = 0.0
             if let tr = w.tripAt {
                 let te = w.t - tr
-                if te > 0.3, te < 2.2 {
-                    let fall = smoothstep(min(1, (te - 0.3) / 0.3))
-                    let rise = smoothstep(min(1, max(0, (te - 1.5) / 0.7)))
+                if te > 0.25, te < 2.4 { // 걸림(0.25)→철푸덕(0.5)→홀드→일어나기(1.6~2.4)
+                    let fall = smoothstep(min(1, (te - 0.25) / 0.25))
+                    let rise = smoothstep(min(1, max(0, (te - 1.6) / 0.8)))
                     freeze = fall * (1 - rise * rise)
                     w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
                 }
-                if !w.tripFxDone, te > 0.45 { // 쿵 — 소리·먼지는 한 번만, 지물에 맞는 이펙트로
+                if !w.tripFxDone, te > 0.5 { // 철푸덕 — 소리·먼지는 한 번만, 지물에 맞는 이펙트로
                     w.tripFxDone = true
-                    SoundKit.shared.bounce(speed: 3.5, surface: .rough)
+                    SoundKit.shared.bounce(speed: 5, surface: .rough)
                     let at = CGPoint(x: px(stickX), y: groundY(stickX))
                     let s = hole.surface(at: stickX)
                     if s == .water {
                         FX.ripple(on: self, at: at)
                     } else {
-                        FX.dust(on: self, at: at, surface: s == .bunker ? .bunker : .rough, intensity: 0.5)
+                        FX.dust(on: self, at: at, surface: s == .bunker ? .bunker : .rough, intensity: 0.7)
                     }
                 }
             }
@@ -1280,22 +1370,26 @@ final class GameScene: SKScene {
                 flavor.hipYOff -= 1.2
                 flavor.shoulderXOff += 1.0
             }
-            // 넘어지기 연출: 휘청 → 쿵(손 짚고 웅크림) → 코미디 홀드 → 일어나기.
+            // 넘어지기 연출: 발이 걸려(lurch) 앞으로 쏠리다 몸이 쭉 뻗어 철푸덕 엎어진다(프론).
+            // 웅크림이 아니라 배로 엎어지는 슬랩스틱 (2026-08-15 사용자 재판정).
             // 전진 동결은 게이트 쪽 pausedTime이 담당 — 여기는 몸짓만
             if let tr = w.tripAt {
                 let te = w.t - tr
-                if te > 0, te < 2.2 {
-                    let lurch = smoothstep(min(1, max(0, te / 0.3)))
-                    let fall = smoothstep(min(1, max(0, (te - 0.3) / 0.3)))
-                    let rise = smoothstep(min(1, max(0, (te - 1.5) / 0.7)))
+                if te > 0, te < 2.4 {
+                    let lurch = smoothstep(min(1, max(0, te / 0.25)))
+                    let fall = smoothstep(min(1, max(0, (te - 0.25) / 0.25)))
+                    let rise = smoothstep(min(1, max(0, (te - 1.6) / 0.8)))
                     let down = min(fall, 1 - rise)
-                    flavor.shoulderXOff += 6 * lurch * (1 - rise) + 5 * down
-                    flavor.hipXOff += 3 * lurch * (1 - rise)
-                    flavor.hipYOff -= 26 * down
-                    flavor.headDyOff -= 4 * down
-                    flavor.freeHandXOff += 11 * down // 손 짚기
-                    flavor.freeHandYOff -= 5 * down
-                    flavor.armAmpBoost -= 0.8 * down
+                    // 걸림: 상체가 급히 앞으로 → 엎어짐: 힙·어깨가 지면 높이로, 어깨는 훨씬 앞에
+                    flavor.shoulderXOff += 8 * lurch * (1 - rise) + 12 * down
+                    flavor.hipXOff += 3 * lurch * (1 - rise) + 3 * down
+                    flavor.hipYOff -= 34 * down // 몸통이 바닥에 (어깨 68.5-34-25 ≈ 힙 43.5-34)
+                    flavor.shoulderYOff -= 25 * down
+                    flavor.headDxOff += 5 * down // 얼굴이 앞바닥을 향한다
+                    flavor.headDyOff -= 8 * down
+                    flavor.freeHandXOff += 18 * down // 팔이 앞으로 뻗은 채
+                    flavor.freeHandYOff -= 6 * down
+                    flavor.armAmpBoost -= down
                 }
             }
             // 발 위치: 접지발 = 래치된 접지점 그대로, 스윙발 = 고정된 목표로 보간 (노슬립)
@@ -1334,6 +1428,7 @@ final class GameScene: SKScene {
             applySlopeStance(&targetRig)
             applyWallStance(&targetRig, t: renderWallT)
             applyLieStance(&targetRig)
+            applyIdleFidget(&targetRig)
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
@@ -1342,6 +1437,9 @@ final class GameScene: SKScene {
         } else {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
             applySlopeStance(&targetRig) // 피니시 홀드 중에도 발은 경사를 딛는다 (리뷰 지적)
+            if mode == .holed, reactionKind != .none {
+                applyScoreReaction(&targetRig, t: currentTime - reactionAt)
+            }
             rigRate = 5
         }
         // 피니시 무빙 홀드: 완전 정지 대신 클럽이 관성으로 미세하게 흔들리다 잦아든다 (리서치 P6)

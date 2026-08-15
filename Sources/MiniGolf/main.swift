@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scene.demoSeed = UInt32(args[i + 1])
         }
         scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
+        scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
         panel.contentView = skView
         skView.presentScene(scene)
 
