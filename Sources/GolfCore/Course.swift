@@ -176,15 +176,20 @@ public enum CourseGenerator {
         segments.append(Segment(from: greenStart, to: greenEnd, type: .green))
         segments.append(Segment(from: greenEnd, to: worldW, type: .rough))
 
-        // ── 지형 고저: 25~45m 간격 제어점에 언덕·계곡 — 다이나믹하게 (2026-08-15 사용자 요청 3번) ──
-        // 내리막 티샷(30%): 티가 솟은 채 시작 — 드라이브가 시원하게 내려다보인다
-        let teeLift = rand.next() < 0.3 ? rand.next(3, 7) : 0
+        // ── 지형 고저: 홀마다 성격(완만 링크스 ~ 험준 산악)을 뽑고 형상을 얹는다 ──
+        // (2026-08-15 사용자 요청: 더 다이나믹하게 — 기복 폭·제어점 간격·지형 형상 다양화)
+        let ruggedness = rand.next() // 0 = 완만, 1 = 험준
+        let stepAmp = 3.0 + 4.0 * ruggedness // 제어점당 표고 변화 (±3~7m)
+        let gapLo = 40.0 - 22 * ruggedness // 험준할수록 제어점이 촘촘 (18~40m)
+        let gapHi = 55.0 - 27 * ruggedness // (28~55m)
+        // 내리막 티샷(40%): 티가 솟은 채 시작 — 드라이브가 시원하게 내려다보인다
+        let teeLift = rand.next() < 0.4 ? rand.next(3, 9) : 0
         var nodes: [(x: Double, e: Double)] = [(0, teeLift), (teeEnd + 8, teeLift)]
         var nx = teeEnd + 8.0
         var ne = teeLift
         while nx < worldW {
-            nx += rand.next(25, 45)
-            ne = max(-7, min(11, ne + (rand.next() * 2 - 1) * 4.5))
+            nx += rand.next(gapLo, gapHi)
+            ne = max(-10, min(15, ne + (rand.next() * 2 - 1) * stepAmp))
             nodes.append((min(nx, worldW), ne))
         }
         var elev = [Double](repeating: 0, count: Int(ceil(worldW)) + 2)
@@ -197,6 +202,29 @@ public enum CourseGenerator {
             let b = nodes[min(ni + 1, nodes.count - 1)]
             let u = b.x == a.x ? 0 : min(1, max(0, (Double(i) - a.x) / (b.x - a.x)))
             elev[i] = a.e + (b.e - a.e) * (0.5 - 0.5 * cos(u * .pi))
+        }
+        // 지형 형상 오버레이 (55%): 능선·분지·플래토 하나를 중원에 — 홀마다 뚜렷한 얼굴을 만든다
+        let midLo = teeEnd + 30.0
+        let midHi = apronStart - 30.0
+        if rand.next() < 0.55, midHi > midLo + 40 {
+            let cx = rand.next(midLo + 15, midHi - 15)
+            let halfW = rand.next(14, 26)
+            let kindR = rand.next()
+            let amp = rand.next(3.5, 7.0)
+            for i in 0 ..< elev.count {
+                let d = (Double(i) - cx) / halfW
+                if kindR < 0.4 { // 능선 — 종 모양 봉우리: 넘길까, 앞에 끊을까
+                    elev[i] += amp * exp(-d * d)
+                } else if kindR < 0.75 { // 분지 — 공이 모여드는 움푹한 골
+                    elev[i] -= amp * 0.85 * exp(-d * d)
+                } else { // 플래토 — 램프로 올라서는 고원 (이후 지대가 한 단 높아진다)
+                    let u = min(1, max(0, (Double(i) - (cx - halfW)) / (halfW * 1.2)))
+                    elev[i] += amp * 0.8 * (u * u * (3 - 2 * u))
+                }
+            }
+            for i in 0 ..< elev.count { // 오버레이 합산 후 경계 재클램프
+                elev[i] = max(-10, min(15, elev[i]))
+            }
         }
 
         // ── 해저드 전략 배치: 클럽 실측 도달 거리를 앵커로 (2026-08-15 사용자 설계) ──
@@ -275,15 +303,28 @@ public enum CourseGenerator {
         // ── 그린: 주변 지형 흐름을 따르는 미세 경사(브레이크) ──
         let gFrom = Int(apronStart - 2)
         let gTo = min(Int(ceil(greenEnd + 6)), elev.count - 1)
-        // 솟은 그린 (35%): 어프로치가 오르막이 된다 — 실코스의 elevated green.
-        // 램프 발치에 워터가 있으면 생략 (수면이 주변보다 솟는 어색함 방지 — 리뷰 S-4)
+        // 솟은 그린(45%) 또는 낮은 그린(25%): 어프로치가 오르막/내려다보기가 된다.
+        // 램프 발치에 워터가 있으면 생략 (수면 주변 지형 왜곡 방지 — 리뷰 S-4)
+        // 표고 상·하한 대비 여유분으로 lift/drop을 제한해 경계 초과를 구조적으로 차단
         let rampFrom = max(0, gFrom - 45)
         let waterAtRampFoot = waterRange.map { $0.upperBound > Double(rampFrom) - 4 } ?? false
-        if rand.next() < 0.35, !waterAtRampFoot {
-            let lift = rand.next(2, 5.5)
-            for i in rampFrom ... gTo where i < elev.count {
-                let u = min(1, Double(i - rampFrom) / Double(max(1, gFrom - rampFrom)))
-                elev[i] += lift * (u * u * (3 - 2 * u)) // smoothstep 램프
+        let greenRoll = rand.next()
+        if !waterAtRampFoot, greenRoll < 0.7 {
+            let elevated = greenRoll < 0.45
+            let mag = elevated
+                ? min(rand.next(2, 7), 17 - elev[gFrom])
+                : min(rand.next(2, 5), elev[gFrom] + 9)
+            if mag > 0.5 {
+                for i in rampFrom ... gTo where i < elev.count {
+                    let u = min(1, Double(i - rampFrom) / Double(max(1, gFrom - rampFrom)))
+                    elev[i] += (elevated ? mag : -mag) * (u * u * (3 - 2 * u)) // smoothstep 램프
+                }
+                // 램프 구간 재클램프 — 분지 오버레이가 어프로치에 걸친 채 낮은 그린이 겹치면
+                // gFrom 기준 여유분만으로는 하한을 뚫을 수 있다 (리뷰 S-1). 상한 17은 그린
+                // 슬로프 추가분(≤2.4)까지 더해도 테스트 상한 20 안에 남는 값
+                for i in rampFrom ... gTo where i < elev.count {
+                    elev[i] = max(-10, min(17, elev[i]))
+                }
             }
         }
         let trend: Double = elev[gTo] >= elev[gFrom] ? 1 : -1

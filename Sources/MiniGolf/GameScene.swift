@@ -470,7 +470,7 @@ final class GameScene: SKScene {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
         var t = anim.relax + 0.7
-        while t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 4 {
+        while t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 5 {
             guard Double.random(in: 0 ..< 1) < 0.5 else {
                 t += 1.1
                 continue
@@ -484,6 +484,13 @@ final class GameScene: SKScene {
             }
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
             t += dur + Double.random(in: 0.8 ... 2.2)
+        }
+        if demoMode, !anim.flavorEvents.isEmpty { // 프레임 캡처와 대조할 모션 계측 (관찰용)
+            let list = anim.flavorEvents
+                .map { "\($0.kind)@\(String(format: "%.1f", $0.t0))" }
+                .joined(separator: " ")
+            print("FLAVOR \(list)")
+            fflush(stdout)
         }
         walkAnim = anim
         updateHUD()
@@ -570,7 +577,11 @@ final class GameScene: SKScene {
         endShotTrail()
         SoundKit.shared.holeIn()
         dropBallIntoCup()
-        toast(scoreName(strokes: strokes, par: hole.par), sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m")
+        toast(
+            scoreName(strokes: strokes, par: hole.par),
+            sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m",
+            overFlag: true
+        )
         run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
     }
 
@@ -635,7 +646,18 @@ final class GameScene: SKScene {
         }
     }
 
-    private func toast(_ main: String, sub: String? = nil) {
+    /// 토스트 — 기본은 화면 중앙, overFlag는 깃발 위 (홀인 스코어는 사건 지점에서 읽힌다 —
+    /// 2026-08-15 사용자 요청 3번). 깃발이 화면 끝이면 잘리지 않게 안쪽으로 당긴다
+    private func toast(_ main: String, sub: String? = nil, overFlag: Bool = false) {
+        if overFlag {
+            let x = min(size.width - 150, max(150, px(hole.holeX)))
+            let baseY = groundY(hole.holeX) + 62 // 깃대 끝
+            toastTitle.position = CGPoint(x: x, y: baseY + 64)
+            toastSub.position = CGPoint(x: x, y: baseY + 26)
+        } else {
+            toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
+            toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
+        }
         toastTitle.setText(main)
         toastSub.setText(sub ?? "")
         for node in [toastTitle, toastSub] as [SKNode] {
@@ -902,8 +924,9 @@ final class GameScene: SKScene {
         guard mode == .aim, !isGamePaused else { return }
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
-        case 123: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // ←
-        case 124: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // →
+        // → = 드라이버(긴 클럽) 쪽, ← = 퍼터 쪽 (2026-08-15 사용자 요청 — 오른쪽 = 멀리)
+        case 123: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // ←
+        case 124: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // →
         case 49: startSwing() // Space
         default: break
         }
@@ -1134,42 +1157,11 @@ final class GameScene: SKScene {
                 let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
                 flavor.shoulder = smoothstep(min(up, down))
             }
+            // 모션 레시피는 WalkFlavorKind.apply(100종 — WalkFlavors.swift)가 채널에 합산한다
             for e in w.flavorEvents {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
-                let ss = smoothstep(min(1, u))
-                switch e.kind {
-                // 트월 계열: 완료 후에도 누적각 유지 — 되감기 없음
-                case .twirl: flavor.twirlAngle += 2 * .pi * ss
-                case .twirlDouble: flavor.twirlAngle += 4 * .pi * ss
-                case .twirlReverse: flavor.twirlAngle -= 2 * .pi * ss
-                default:
-                    guard u < 1 else { continue }
-                    let bell = smoothstep(min(1, min(u, 1 - u) / 0.3)) // 부드러운 in-hold-out
-                    let wob2 = sin(4 * .pi * u) * bell // 2회 진동
-                    switch e.kind {
-                    case .lookBack: flavor.lookBack = max(flavor.lookBack, bell)
-                    case .lookSky: flavor.headDxOff += 2 * bell; flavor.headDyOff += 3 * bell
-                    case .lookHole: flavor.headDxOff += 3.5 * bell
-                    case .headBob: flavor.headDxOff += 1.5 * sin(6 * .pi * u) * bell
-                    case .headTilt: flavor.headDyOff -= 2.5 * bell
-                    case .hatTouch: flavor.hatTouch = max(flavor.hatTouch, bell)
-                    case .armSwing: flavor.armAmpBoost += 1.2 * bell
-                    case .shrug: flavor.shoulderYOff += 2.5 * bell
-                    case .slump: flavor.shoulderYOff -= 2 * bell
-                    case .stretch:
-                        flavor.shoulderYOff += 1.5 * bell
-                        flavor.headDyOff += 2 * bell
-                        flavor.gripLift += 0.4 * bell
-                    case .skip, .skipJoy: flavor.skip = max(flavor.skip, bell)
-                    case .hipSway: flavor.hipXOff += 2 * wob2
-                    case .shoulderRoll: flavor.shoulderYOff += 1.8 * wob2
-                    case .wristRoll: flavor.phiWobble += 0.25 * wob2
-                    case .clubRaise: flavor.gripLift += bell; flavor.phiWobble += 0.35 * bell
-                    case .clubTapShoulder: flavor.gripLift += 0.8 * bell; flavor.phiWobble += 0.3 * wob2
-                    case .twirl, .twirlDouble, .twirlReverse: break
-                    }
-                }
+                e.kind.apply(u: u, into: &flavor)
             }
             // 발 위치: 접지발 = 래치된 접지점 그대로, 스윙발 = 고정된 목표로 보간 (노슬립)
             let dPx = abs(stickX - w.fromX) * Double(pxPerM)

@@ -16,7 +16,8 @@ extension Club {
 }
 
 /// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감.
-/// 20종의 모션은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로 표현된다 (겹쳐도 안전)
+/// 100종의 모션(WalkFlavors.swift)은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로
+/// 표현된다 (겹쳐도 안전). 발 접지 게이트는 채널이 아니다 — 노슬립 불변식 보호
 struct WalkFlavor {
     var twirlAngle = 0.0 // 클럽 트월 누적 회전(rad) — 완료 후에도 유지 (되감기 없음)
     var shoulder = 0.0 // 어깨 캐리 블렌드
@@ -25,46 +26,17 @@ struct WalkFlavor {
     var skip = 0.0 // 폴짝 (발 들기·바운스 부스트)
     var headDxOff = 0.0 // 머리 수평 오프셋 (응시·까딱)
     var headDyOff = 0.0 // 머리 수직 오프셋 (하늘 보기·갸웃)
-    var shoulderYOff = 0.0 // 어깨 오프셋 (으쓱·처짐·기지개)
+    var shoulderYOff = 0.0 // 어깨 수직 오프셋 (으쓱·처짐·기지개)
+    var shoulderXOff = 0.0 // 어깨 수평 오프셋 (뒤로 젖히기·숙이기·비틀기)
     var hipXOff = 0.0 // 힙 흔들기
-    var armAmpBoost = 0.0 // 자유 팔 진폭 부스트
+    var hipYOff = 0.0 // 힙 수직 (스쿼트·바운스 — 어깨도 함께 내려간다)
+    var armAmpBoost = 0.0 // 자유 팔 진폭 부스트 (음수 = 차분)
+    var freeHandXOff = 0.0 // 자유 손 수평 오프셋 (지목·섀도복싱)
+    var freeHandYOff = 0.0 // 자유 손 수직 오프셋 (주먹 불끈·손 흔들기)
     var phiWobble = 0.0 // 클럽 각 진동(rad)
     var gripLift = 0.0 // 클럽 살짝 들기 (0~1)
-}
-
-/// 랜덤 모션 20종
-enum WalkFlavorKind: CaseIterable {
-    case twirl, twirlDouble, twirlReverse // 클럽 트월 3종
-    case lookBack, lookSky, lookHole, headBob, headTilt // 머리 5종
-    case hatTouch, armSwing, shrug, slump, stretch // 상체 5종
-    case skip, skipJoy, hipSway, shoulderRoll // 리듬 4종
-    case wristRoll, clubRaise, clubTapShoulder // 클럽 손짓 3종
-
-    /// 클럽이 손에 있어야 하는 모션 (어깨 캐리 중 금지)
-    var needsClub: Bool {
-        switch self {
-        case .twirl, .twirlDouble, .twirlReverse, .wristRoll, .clubRaise, .clubTapShoulder: true
-        default: false
-        }
-    }
-
-    var duration: Double {
-        switch self {
-        case .twirl, .twirlReverse: 1.0
-        case .twirlDouble: 1.5
-        case .lookBack: 1.3
-        case .lookSky: 1.4
-        case .lookHole, .headBob, .wristRoll: 1.2
-        case .headTilt: 1.0
-        case .hatTouch: 1.1
-        case .armSwing, .slump, .skipJoy: 1.6
-        case .shrug: 0.8
-        case .stretch: 1.5
-        case .skip: 0.7
-        case .hipSway, .clubTapShoulder: 1.4
-        case .shoulderRoll, .clubRaise: 1.3
-        }
-    }
+    var clubPointBlend = 0.0 // 클럽 전방 수평 지목 블렌드
+    var clubUpBlend = 0.0 // 클럽 수직 세워 균형 블렌드
 }
 
 struct WalkFlavorEvent {
@@ -164,10 +136,15 @@ enum RigBuilder {
         let bob = (1.6 * vAmp + 2.5 * flavor.skip) * (1 - cos(4 * .pi * gaitPhase)) / 2
 
         var r = Rig()
-        r.hip = CGPoint(x: flavor.hipXOff, y: 43.5 + bob)
-        r.shoulder = CGPoint(x: 2 + 2.5 * vAmp, y: 67 + bob + flavor.shoulderYOff)
-        r.headDx = mix(4, -7, flavor.lookBack) + flavor.headDxOff // 뒤돌아보기·응시·까딱
-        r.headDy = 12 + flavor.headDyOff
+        // 자세: 척추를 세우고 가슴을 편 당당한 걸음 — 전방 숙임(구 +2.5vAmp)이 '축 처짐'의
+        // 주범이었다 (2026-08-15 사용자 판정). 속도에 따른 자연스러운 미세 기울임만 남긴다
+        r.hip = CGPoint(x: flavor.hipXOff, y: 43.5 + bob + flavor.hipYOff)
+        r.shoulder = CGPoint(
+            x: 0.5 + 1.2 * vAmp + flavor.shoulderXOff,
+            y: 68.5 + bob + flavor.hipYOff + flavor.shoulderYOff // 스쿼트 시 상체가 함께 내려간다
+        )
+        r.headDx = mix(1.5, -7, flavor.lookBack) + flavor.headDxOff // 뒤돌아보기·응시·까딱
+        r.headDy = 13 + flavor.headDyOff // 머리를 들고 걷는다
         r.foot1 = CGPoint(x: f1.x, y: groundDelta(f1.x) + f1.lift)
         r.foot2 = CGPoint(x: f2.x, y: groundDelta(f2.x) + f2.lift)
         r.knee1 = CGPoint(
@@ -179,25 +156,38 @@ enum RigBuilder {
             y: (r.hip.y + r.foot2.y) / 2 + 3 + f2.lift * 0.5
         )
 
-        // 클럽 캐리: 기본은 옆에(gripLift로 살짝 들기), 어깨 캐리 블렌드 시 어깨 위로
+        // 클럽 캐리: 기본은 옆에 살짝 들어(당당함) gripLift로 더 들 수 있고, 어깨 캐리 블렌드 시 어깨 위로
         let s = clubLen / 38
-        var grip = CGPoint(x: -12, y: 47 + bob + 6 * flavor.gripLift)
-        var tip = CGPoint(x: grip.x - 16 * s, y: grip.y - 38 * s)
+        var grip = CGPoint(x: -12, y: 48.5 + bob + 6 * flavor.gripLift)
+        var tip = CGPoint(x: grip.x - 19 * s, y: grip.y - 33 * s)
         if flavor.shoulder > 0 {
             let sGrip = CGPoint(x: r.shoulder.x + 9, y: r.shoulder.y - 3)
             let sTip = CGPoint(x: r.shoulder.x - 26 * s, y: r.shoulder.y + 15 * s)
             grip = mix(grip, sGrip, flavor.shoulder)
             tip = mix(tip, sTip, flavor.shoulder)
         }
+        // 클럽 제스처 블렌드: 전방 지목(수평) / 수직 세워 균형 — 스케줄러가 동시 발동을 막는다
+        if flavor.clubPointBlend > 0 {
+            grip = mix(grip, CGPoint(x: 6, y: 52 + bob), flavor.clubPointBlend)
+        }
+        if flavor.clubUpBlend > 0 {
+            grip = mix(grip, CGPoint(x: 9, y: 49 + bob), flavor.clubUpBlend)
+        }
         r.grip = grip
-        r.clubPhi = atan2(tip.x - grip.x, grip.y - tip.y) + flavor.twirlAngle + flavor.phiWobble
+        var phi = atan2(tip.x - grip.x, grip.y - tip.y)
+        phi = mix(phi, .pi / 2, flavor.clubPointBlend) // 팁이 타깃 쪽 수평
+        phi = mix(phi, .pi - 0.05, flavor.clubUpBlend) // 팁이 하늘 (균형 잡기)
+        r.clubPhi = phi + flavor.twirlAngle + flavor.phiWobble
         r.clubLen = clubLen
 
-        // 자유 팔: 다리 반대 위상 스윙 — 느긋한 걸음일수록 팔은 거의 늘어진다 (저속 감쇠)
-        let armAmp = 8 * (1 + flavor.armAmpBoost) * vAmp * vAmp
-        let free = CGPoint(x: 5 - armAmp * sin(2 * .pi * gaitPhase), y: 47 + bob)
+        // 자유 팔: 다리 반대 위상 스윙 — 느린 걸음에도 최소 진폭을 보장해 생기를 유지
+        // (구 vAmp² 감쇠는 저속에서 팔이 완전히 죽어 '축 늘어짐'으로 읽혔다)
+        let armAmp = (3 + 5 * vAmp) * (1 + flavor.armAmpBoost)
+        let free = CGPoint(x: 5 - armAmp * sin(2 * .pi * gaitPhase), y: 48.5 + bob)
         let hat = CGPoint(x: r.shoulder.x + r.headDx + 3, y: r.shoulder.y + 9)
         r.handTrail = mix(free, hat, flavor.hatTouch)
+        r.handTrail.x += flavor.freeHandXOff
+        r.handTrail.y += flavor.freeHandYOff
         return r
     }
 }

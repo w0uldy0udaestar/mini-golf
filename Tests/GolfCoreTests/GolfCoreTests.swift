@@ -360,17 +360,18 @@ final class GolfCoreTests: XCTestCase {
     // ── 지형 다이나믹 ──
 
     func testTerrainDynamicButBounded() {
+        // 경계: 노드 클램프 -10~15 + 워터 딥(-1.2)·벙커 딥(-0.9)·그린 슬로프(±약 2.1) 여유분
         var maxRange = 0.0
         for seed in 1 ... 30 {
             for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
                 let lo = h.elevation.min() ?? 0
                 let hi = h.elevation.max() ?? 0
-                XCTAssertGreaterThan(lo, -10, "표고 하한 초과 (\(lo))")
-                XCTAssertLessThan(hi, 18, "표고 상한 초과 (\(hi))")
+                XCTAssertGreaterThan(lo, -13, "표고 하한 초과 (\(lo))")
+                XCTAssertLessThan(hi, 20, "표고 상한 초과 (\(hi))")
                 maxRange = max(maxRange, hi - lo)
             }
         }
-        XCTAssertGreaterThan(maxRange, 9, "지형 기복이 심심함 (최대 낙차 \(maxRange)m)")
+        XCTAssertGreaterThan(maxRange, 12, "지형 기복이 심심함 (최대 낙차 \(maxRange)m)")
     }
 
     // ── 장애물 (나무·바위) ──
