@@ -564,6 +564,10 @@ final class GameScene: SKScene {
             .run { [weak self] in
                 guard let self else { return }
                 trailPoints.removeAll()
+                // 알파 복원 전에 경로부터 비운다 — 액션 블록은 update 이후에 돌아서,
+                // 경로가 남은 채 알파만 1이 되면 그 프레임에 궤적이 번쩍 나타난다 (사용자 재현)
+                trailNode.path = nil
+                trailUnderNode.path = nil
                 trailNode.alpha = 1
                 trailUnderNode.alpha = 1
             },
@@ -838,67 +842,88 @@ final class GameScene: SKScene {
             let gy = groundY(ob.x)
             switch ob.kind {
             case .tree:
-                let trunkTop = gy + CGFloat(ob.trunkHeight) * pxPerM
-                let trunkPath = CGMutablePath()
-                trunkPath.move(to: CGPoint(x: gx, y: gy))
-                trunkPath.addLine(to: CGPoint(x: gx, y: trunkTop))
-                // 나무는 화면 뒤편(캐노피만 충돌) — 굵은 획으로 존재감, 채움은 옅게 유지해 깊이 암시
-                let trunk = SKShapeNode(path: trunkPath)
-                trunk.strokeColor = Palette.hairline.withAlphaComponent(0.8)
-                trunk.lineWidth = 3.5
-                trunk.lineCap = .round
+                // 초심플 귀여운 나무 (2026-08-15 사용자 요청): 통통한 트렁크 + 뭉게구름 캐노피.
+                // 퍼프 3원을 한 경로에 담으면 nonzero winding으로 겹침 없이 한 덩어리로 채워지고,
+                // 스트로크의 안쪽 교차 호는 잎 뭉치 스캘럽으로 읽힌다. 충돌은 여전히 반지름 r 원 하나
                 let r = CGFloat(ob.size) * pxPerM
-                let canopy = SKShapeNode(circleOfRadius: r)
                 // above: 0 = 지면 기준 오프셋만 취한다 (gy에 이미 표고 포함 — 리뷰 S-5)
-                canopy.position = CGPoint(x: gx, y: gy + CGFloat(ob.canopyCenterY(above: 0)) * pxPerM)
-                canopy.strokeColor = Palette.hairline.withAlphaComponent(0.85)
-                canopy.lineWidth = 2.2
-                canopy.fillColor = NSColor(white: 1, alpha: 0.12)
-                // 잎 틱: 캐노피 안쪽 동심 호 하나 — '잎 뭉치'로 읽히는 최소 질감
-                let leaf = SKShapeNode(path: {
-                    let p = CGMutablePath()
-                    p.addArc(
-                        center: canopy.position, radius: r * 0.62,
-                        startAngle: 0.6, endAngle: 2.5, clockwise: false
+                let cy = gy + CGFloat(ob.canopyCenterY(above: 0)) * pxPerM
+                let trunkPath = CGMutablePath()
+                trunkPath.move(to: CGPoint(x: gx, y: gy + 1))
+                trunkPath.addLine(to: CGPoint(x: gx, y: cy - r * 0.3)) // 캐노피 속까지 — 틈 없음
+                let trunk = SKShapeNode(path: trunkPath)
+                trunk.strokeColor = Palette.hairline.withAlphaComponent(0.75)
+                trunk.lineWidth = 4.5
+                trunk.lineCap = .round
+                // 캐노피 = 6스캘럽 뭉게구름 윤곽 하나: 링 위 여섯 원의 바깥 호만 이어붙인다.
+                // half(1.199rad)는 이웃 원과의 교점 반각 — 호 끝점이 정확히 만나 틈이 없다.
+                // 실루엣 0.89r~1.08r로 충돌원(r)과 거의 일치
+                let puffs = CGMutablePath()
+                let ringR = 0.6 * r
+                let bumpR = 0.48 * r
+                let half = 1.199
+                for k in 0 ..< 6 {
+                    let phi = Double.pi / 2 - Double(k) * .pi / 3
+                    let c = CGPoint(x: gx + ringR * cos(phi), y: cy + ringR * sin(phi))
+                    puffs.addArc(
+                        center: c, radius: bumpR,
+                        startAngle: phi + half, endAngle: phi - half, clockwise: true
                     )
-                    return p
-                }())
-                leaf.strokeColor = Palette.hairline.withAlphaComponent(0.4)
-                leaf.lineWidth = 1.4
-                leaf.lineCap = .round
+                }
+                puffs.closeSubpath()
+                let canopy = SKShapeNode(path: puffs)
+                canopy.strokeColor = Palette.hairline.withAlphaComponent(0.8)
+                canopy.lineWidth = 2.0
+                canopy.lineJoin = .round
+                canopy.fillColor = NSColor(white: 1, alpha: 0.16)
                 if Theme.highContrast {
-                    let under = SKShapeNode(circleOfRadius: r + 1.2)
-                    under.position = canopy.position
+                    let under = SKShapeNode(path: puffs)
                     under.strokeColor = NSColor(white: 0, alpha: 0.32)
-                    under.lineWidth = 4.4
+                    under.lineWidth = 4
                     under.fillColor = .clear
                     terrainNode.addChild(under)
                 }
                 terrainNode.addChild(trunk)
                 terrainNode.addChild(canopy)
-                terrainNode.addChild(leaf)
             case .rock:
+                // 귀여운 조약돌 무더기: 납작 둥근 큰 돌 + 곁의 아기 돌 (충돌은 큰 돌만).
+                // 공(순백 원)과 헷갈리지 않게 납작한 돔 + 진한 채움으로 '돌덩이'로 읽힌다
                 let r = CGFloat(ob.size) * pxPerM
-                let cy = gy + CGFloat(ob.rockCenterY(above: 0)) * pxPerM
-                let arc = CGMutablePath()
-                // 지면과 만나는 각도(sinθ = -0.3)에서 정수리를 넘는 호 — 묻힌 둔덕
-                arc.addArc(
-                    center: CGPoint(x: gx, y: cy), radius: r,
-                    startAngle: -0.31, endAngle: .pi + 0.31, clockwise: false
-                )
-                let rock = SKShapeNode(path: arc)
+                func pebbleDome(cxPx: CGFloat, baseY: CGFloat, radius: CGFloat) -> CGPath {
+                    let tf = CGAffineTransform(translationX: cxPx, y: baseY + radius * 0.22)
+                        .scaledBy(x: 1, y: 0.74)
+                    let p = CGMutablePath()
+                    p.addArc(
+                        center: .zero, radius: radius,
+                        startAngle: -0.31, endAngle: .pi + 0.31, clockwise: false,
+                        transform: tf
+                    )
+                    return p
+                }
+                let rock = SKShapeNode(path: pebbleDome(cxPx: gx, baseY: gy, radius: r))
                 rock.strokeColor = Palette.hairline.withAlphaComponent(0.85)
-                rock.fillColor = NSColor(white: 1, alpha: 0.12) // 채움 — 작아도 덩어리로 보인다
-                rock.lineWidth = 2.2
+                rock.fillColor = NSColor(white: 1, alpha: 0.28)
+                rock.lineWidth = 2.0
                 rock.lineCap = .round
+                let babyXm = ob.x - ob.size * 1.5 // 아기 돌은 왼쪽 곁에 (시각 전용, 비충돌)
+                let baby = SKShapeNode(
+                    path: pebbleDome(cxPx: px(babyXm), baseY: groundY(babyXm), radius: r * 0.45)
+                )
+                baby.strokeColor = Palette.hairline.withAlphaComponent(0.65)
+                baby.fillColor = NSColor(white: 1, alpha: 0.2)
+                baby.lineWidth = 1.5
+                baby.lineCap = .round
                 if Theme.highContrast {
-                    let under = SKShapeNode(path: arc)
-                    under.strokeColor = NSColor(white: 0, alpha: 0.32)
-                    under.lineWidth = 4.4
-                    under.lineCap = .round
-                    terrainNode.addChild(under)
+                    for path in [rock.path!, baby.path!] {
+                        let under = SKShapeNode(path: path)
+                        under.strokeColor = NSColor(white: 0, alpha: 0.32)
+                        under.lineWidth = 4
+                        under.lineCap = .round
+                        terrainNode.addChild(under)
+                    }
                 }
                 terrainNode.addChild(rock)
+                terrainNode.addChild(baby)
             }
         }
     }
