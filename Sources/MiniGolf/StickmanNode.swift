@@ -3,14 +3,16 @@ import SpriteKit
 
 /// 클럽별 렌더 속성 — 클럽만 보고도 무엇을 들었는지 알 수 있게 (물리와 무관, 연출 전용)
 extension Club {
-    /// 렌더 길이(px): 드라이버가 가장 길고 퍼터가 가장 짧다
+    /// 렌더 길이(px): 실클럽 비례 — 드라이버가 가장 길고 퍼터가 가장 짧다.
+    /// 상한은 어드레스 기하(handD 하한 16에서 헤드가 지면에 닿는 길이 ≈ 51)가 결정
+    /// (2026-08-15 사용자 판정: 전체가 짧고 클럽별 차이가 안 읽힘 → 길이·스프레드 확대)
     var renderLength: Double {
         switch id {
-        case "DR": 45
-        case "3W": 43.5
-        case "5W": 42
-        case "PT": 31
-        default: 41 - (loft - 21) * 6 / 35 // 아이언·웨지: 로프트가 클수록 짧게 (3I 41 → SW 35)
+        case "DR": 51
+        case "3W": 49
+        case "5W": 47.5
+        case "PT": 34
+        default: 46 - (loft - 21) * 8 / 35 // 아이언·웨지: 로프트가 클수록 짧게 (3I 46 → SW 38)
         }
     }
 }
@@ -198,13 +200,15 @@ enum RigBuilder {
 final class StickmanNode: SKNode {
     private let stickColor = NSColor(white: 0.88, alpha: 0.95)
     private let shaftColor = NSColor(white: 0.76, alpha: 0.9)
-    private let clubHeadColor = NSColor(white: 0.85, alpha: 0.95)
+    private let clubHeadColor = NSColor(white: 0.93, alpha: 0.95) // 헤드가 또렷이 도드라진다
+    private let gripColor = NSColor(white: 0.6, alpha: 0.9) // 그립 밴드 — 클럽다움의 디테일
     private let rimColor = NSColor(white: 0, alpha: 0.32) // 고대비 모드용 다크 림
     private let headShape = SKShapeNode(circleOfRadius: 10)
     private let bodyShape = SKShapeNode() // 척추+다리+리드 암 통합 경로
     private let trailArmShape = SKShapeNode() // 트레일 암 — 옅게 그려 원근을 만든다
     private let shaftShape = SKShapeNode()
     private let clubHeadShape = SKShapeNode()
+    private let gripShape = SKShapeNode()
     private let headRim = SKShapeNode(circleOfRadius: 11.2)
     private let bodyRim = SKShapeNode()
     private let trailArmRim = SKShapeNode()
@@ -240,11 +244,14 @@ final class StickmanNode: SKNode {
         clubHeadShape.strokeColor = clubHeadColor
         clubHeadShape.fillColor = clubHeadColor
         clubHeadShape.lineCap = .round
+        gripShape.strokeColor = gripColor
+        gripShape.lineWidth = 4.6
+        gripShape.lineCap = .round
         clubHeadRim.strokeColor = rimColor
         clubHeadRim.fillColor = rimColor
         clubHeadRim.lineCap = .round
         for n in [trailArmRim, bodyRim, shaftRim, clubHeadRim, headRim, trailArmShape, bodyShape,
-                  shaftShape, clubHeadShape, headShape] as [SKNode] {
+                  shaftShape, clubHeadShape, gripShape, headShape] as [SKNode] {
             addChild(n)
         }
         applyContrast()
@@ -341,6 +348,13 @@ final class StickmanNode: SKNode {
         shaft.addLine(to: tip)
         shaftShape.path = shaft
         shaftRim.path = shaft
+        // 그립 밴드: 손 쪽 8px만 진하게 — 클럽다움을 만드는 단 하나의 디테일
+        let gripBand = CGMutablePath()
+        gripBand.move(to: grip)
+        gripBand.addLine(to: CGPoint(
+            x: grip.x + sin(r.clubPhi) * 8 * dir, y: grip.y - cos(r.clubPhi) * 8
+        ))
+        gripShape.path = gripBand
 
         // 클럽 헤드 — 모든 종류를 '캡슐(둥근 굵은 선)' 하나로 표현해, 종류 전환도 기하 morph로 이어진다
         let now = headParams(club: club, loft: visualLoft, tip: tip, phi: r.clubPhi, dir: dir)
@@ -352,7 +366,7 @@ final class StickmanNode: SKNode {
         // 퍼터 얼라인먼트 점은 블렌드에 따라 자라거나 사라진다
         let dotBlend = (club.cat == .putter ? m : 0) + (prevClub.cat == .putter ? 1 - m : 0)
         if dotBlend > 0.05, let dot = club.cat == .putter ? now.dot : prev.dot {
-            let rr = 0.9 * dotBlend
+            let rr = 1.1 * dotBlend
             headPath.addEllipse(in: CGRect(x: dot.x - rr, y: dot.y - rr, width: rr * 2, height: rr * 2))
         }
         clubHeadShape.path = headPath
@@ -373,28 +387,28 @@ final class StickmanNode: SKNode {
         let along = CGVector(dx: sin(phi) * dir, dy: -cos(phi))
         let perp = CGVector(dx: cos(phi) * dir, dy: sin(phi))
         switch club.cat {
-        case .wood: // 둥근 덩어리 — 짧고 아주 굵은 캡슐 (드라이버가 가장 크다)
-            let w = 16 - (loft - 10.5) * 0.45 // DR 16 · 3W 14 · 5W 12.6
-            let h = w * 0.68
-            let c = CGPoint(x: tip.x + perp.dx * 4, y: tip.y + perp.dy * 4)
+        case .wood: // 동글동글한 볼 헤드 — 막대사탕처럼 통통하게 (드라이버가 가장 크다)
+            let w = 17 - (loft - 10.5) * 0.5 // DR 17 · 3W 14.8 · 5W 13
+            let h = w * 0.8 // 거의 원형 (구 0.68 — 납작한 스머지로 읽혔다)
+            let c = CGPoint(x: tip.x + perp.dx * 4.5, y: tip.y + perp.dy * 4.5)
             let half = (w - h) / 2
             return (
                 CGPoint(x: c.x - perp.dx * half, y: c.y - perp.dy * half),
                 CGPoint(x: c.x + perp.dx * half, y: c.y + perp.dy * half),
                 h, nil
             )
-        case .iron, .wedge: // 블레이드 — 로프트만큼 젖혀지고 웨지로 갈수록 길고 굵다
-            let len = 9 + max(0, loft - 42) * 0.107
+        case .iron, .wedge: // 통통한 둥근 패들 — 짧고 두껍게, 웨지로 갈수록 조금 더
+            let len = 8.5 + max(0, loft - 42) * 0.11
             let lo = loft * 0.9 * .pi / 180
             let bx = (perp.dx * cos(lo) - along.dx * sin(lo)) * len
             let by = (perp.dy * cos(lo) - along.dy * sin(lo)) * len
-            return (tip, CGPoint(x: tip.x + bx, y: tip.y + by), 4 + max(0, loft - 42) * 0.0714, nil)
-        case .putter: // 납작한 블록 + 얼라인먼트 점
+            return (tip, CGPoint(x: tip.x + bx, y: tip.y + by), 5 + max(0, loft - 42) * 0.055, nil)
+        case .putter: // 미니 망치 — 짧고 도톰한 블록 + 얼라인먼트 점
             return (
-                CGPoint(x: tip.x - perp.dx * 3, y: tip.y - perp.dy * 3),
-                CGPoint(x: tip.x + perp.dx * 7, y: tip.y + perp.dy * 7),
-                5,
-                CGPoint(x: tip.x + perp.dx * 2 - along.dx * 5, y: tip.y + perp.dy * 2 - along.dy * 5)
+                CGPoint(x: tip.x - perp.dx * 2.5, y: tip.y - perp.dy * 2.5),
+                CGPoint(x: tip.x + perp.dx * 6.5, y: tip.y + perp.dy * 6.5),
+                6.5,
+                CGPoint(x: tip.x + perp.dx * 2 - along.dx * 5.5, y: tip.y + perp.dy * 2 - along.dy * 5.5)
             )
         }
     }
