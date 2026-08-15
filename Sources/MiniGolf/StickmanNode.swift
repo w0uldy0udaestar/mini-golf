@@ -156,9 +156,10 @@ enum RigBuilder {
             y: (r.hip.y + r.foot2.y) / 2 + 3 + f2.lift * 0.5
         )
 
-        // 클럽 캐리: 기본은 옆에 살짝 들어(당당함) gripLift로 더 들 수 있고, 어깨 캐리 블렌드 시 어깨 위로
+        // 클럽 캐리: 기본은 옆에 살짝 들어(당당함) gripLift로 더 들 수 있고, 어깨 캐리 블렌드 시 어깨 위로.
+        // hipYOff(스쿼트·넘어짐)를 따라 내려간다 — 몸만 떨어지고 클럽이 공중에 뜨지 않게
         let s = clubLen / 38
-        var grip = CGPoint(x: -12, y: 48.5 + bob + 6 * flavor.gripLift)
+        var grip = CGPoint(x: -12, y: 48.5 + bob + flavor.hipYOff + 6 * flavor.gripLift)
         var tip = CGPoint(x: grip.x - 19 * s, y: grip.y - 33 * s)
         if flavor.shoulder > 0 {
             let sGrip = CGPoint(x: r.shoulder.x + 9, y: r.shoulder.y - 3)
@@ -182,8 +183,8 @@ enum RigBuilder {
 
         // 자유 팔: 다리 반대 위상 스윙 — 느린 걸음에도 최소 진폭을 보장해 생기를 유지
         // (구 vAmp² 감쇠는 저속에서 팔이 완전히 죽어 '축 늘어짐'으로 읽혔다)
-        let armAmp = (3 + 5 * vAmp) * (1 + flavor.armAmpBoost)
-        let free = CGPoint(x: 5 - armAmp * sin(2 * .pi * gaitPhase), y: 48.5 + bob)
+        let armAmp = (3 + 5 * vAmp) * max(0, 1 + flavor.armAmpBoost)
+        let free = CGPoint(x: 5 - armAmp * sin(2 * .pi * gaitPhase), y: 48.5 + bob + flavor.hipYOff)
         let hat = CGPoint(x: r.shoulder.x + r.headDx + 3, y: r.shoulder.y + 9)
         r.handTrail = mix(free, hat, flavor.hatTouch)
         r.handTrail.x += flavor.freeHandXOff

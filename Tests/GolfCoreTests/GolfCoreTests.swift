@@ -465,6 +465,29 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertLessThan(hypot(up.vx, up.vy), hypot(flat.vx, flat.vy), "경사 라이 스피드 손실 없음")
     }
 
+    // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──
+
+    func testBallRestsInSteepValley() {
+        var elev = [Double](repeating: 0, count: 102)
+        for i in 0 ..< elev.count { // 40% 경사 V자 — 정지 조건(마찰 ≥ 경사 중력)이 성립 불가
+            elev[i] = abs(Double(i) - 50) * 0.4
+        }
+        let h = Hole(
+            par: 4, dist: 70, holeX: 95, worldW: 100,
+            greenStart: 90, greenEnd: 98, apronStart: 88,
+            segments: [Segment(from: 0, to: 100, type: .fairway)], elevation: elev,
+            waterRange: nil, greenSlope: 0
+        )
+        var b = BallState(x: 45, y: h.ground(at: 45), vx: 5, phase: .roll)
+        var t = 0.0
+        while b.phase != .rest, t < 60 {
+            _ = Ballistics.step(&b, hole: h)
+            t += Phys.dt
+        }
+        XCTAssertEqual(b.phase, .rest, "가파른 골짜기에서 공이 영원히 진동함 (저속 정지 가드 회귀)")
+        XCTAssertLessThan(abs(b.x - 50), 6, "골짜기 바닥 근처에서 멈추지 않음 (x \(b.x))")
+    }
+
     // ── 펀치샷 (벽 백스윙 제한) ──
 
     func testPunchLowersTrajectoryAndSpin() {

@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let i = args.firstIndex(of: "--seed"), i + 1 < args.count { // 코스 시드 고정 (시각 검증 전용)
             scene.demoSeed = UInt32(args[i + 1])
         }
+        scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
         panel.contentView = skView
         skView.presentScene(scene)
 

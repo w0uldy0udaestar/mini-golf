@@ -26,6 +26,7 @@ final class GameScene: SKScene {
     var demoCardPreview = false // --demo-card: 스코어카드 레이아웃 즉시 표시 (디버그 전용)
     var demoNoClamp = false // --no-wall-clamp: 벽 경성 클램프 끄기 — 침범 재현·검증 전용
     var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
+    var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
     private var demoWait = 0.0
 
     /// 연출 상태
@@ -52,6 +53,11 @@ final class GameScene: SKScene {
         // 랜덤 잉여 동작 (생명감): 어깨 캐리 구간 + 짧은 모션 이벤트들 (walk 시작 기준 초)
         var shoulderRange: ClosedRange<Double>?
         var flavorEvents: [WalkFlavorEvent] = []
+        // 아주 가끔 넘어지기 (2026-08-15 사용자 요청 — 재미): t0는 walk 시계(초), 총 2.2s
+        var tripAt: Double?
+        var tripFxDone = false
+        var pausedTime = 0.0 // 넘어져 있는 동안 전진이 멈춘 시간 — 걸음 시계에서 빼서 위치를 동결
+        var stepFxParity = false // 스텝 먼지는 한 걸음 걸러 — 과하지 않게
     }
 
     private var swingAnim: SwingAnim?
@@ -463,9 +469,29 @@ final class GameScene: SKScene {
         if dist > 0.5 { // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
             dir = to >= from ? 1 : -1
         }
-        // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다
-        var anim = WalkAnim(fromX: from, toX: to, dur: min(12.0, max(1.2, dist / 10)))
-        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 20종 모션을 겹치지 않게 흩뿌린다
+        // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다.
+        // 험한 길(경사·러프·벙커)은 더 오래 걸린다 (지형 적응 — 2026-08-15 사용자 요청)
+        var hardness = 0.0
+        if dist > 1 {
+            let n = 12
+            for k in 0 ... n {
+                let xm = from + (to - from) * Double(k) / Double(n)
+                let s = hole.surface(at: xm)
+                hardness += min(1, abs(hole.slope(at: xm)) / 0.3) * 0.5
+                    + (s == .rough || s == .bunker ? 0.5 : 0)
+            }
+            hardness /= Double(n + 1)
+        }
+        var anim = WalkAnim(
+            fromX: from, toX: to,
+            dur: min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness)))
+        )
+        // 아주 가끔 넘어진다 (재미): 기본 3%, 험한 길 6% — 일어나 툭툭 털 시간이 있는 걸음만
+        if anim.dur > 4.5,
+           demoTripForce || Double.random(in: 0 ..< 1) < 0.03 + 0.03 * min(1, hardness * 2) {
+            anim.tripAt = anim.relax + Double.random(in: 1.0 ... (anim.dur - 3.0))
+        }
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 100종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
@@ -482,14 +508,20 @@ final class GameScene: SKScene {
                 t += 1.0
                 continue
             }
+            // 넘어지는 동안엔 다른 모션 금지 (트월하며 넘어지면 코미디가 아니라 버그로 보인다)
+            if let tr = anim.tripAt, ((tr - 0.3) ... (tr + 2.7)).overlaps(t ... (t + dur)) {
+                t = tr + 2.8
+                continue
+            }
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
             t += dur + Double.random(in: 0.8 ... 2.2)
         }
-        if demoMode, !anim.flavorEvents.isEmpty { // 프레임 캡처와 대조할 모션 계측 (관찰용)
+        if demoMode, !anim.flavorEvents.isEmpty || anim.tripAt != nil { // 캡처 대조용 계측 (관찰용)
             let list = anim.flavorEvents
                 .map { "\($0.kind)@\(String(format: "%.1f", $0.t0))" }
                 .joined(separator: " ")
-            print("FLAVOR \(list)")
+            let trip = anim.tripAt.map { String(format: " TRIP@%.1f", $0) } ?? ""
+            print("FLAVOR \(list)\(trip)")
             fflush(stdout)
         }
         walkAnim = anim
@@ -1018,14 +1050,46 @@ final class GameScene: SKScene {
 
         if mode == .walking, var w = walkAnim {
             w.t += dt
-            let tw = w.t - w.relax
+            // 넘어짐: 전진 동결을 연속 램프로 — 쓰러지며(0.3~0.6) 멈추고, 일어난 만큼(1.5~2.2)
+            // 다시 가속한다. 이진 동결은 엎어진 채 슬라이드(리뷰 S1)와 duty 점프 스냅(S3)을 만든다
+            var freeze = 0.0
+            if let tr = w.tripAt {
+                let te = w.t - tr
+                if te > 0.3, te < 2.2 {
+                    let fall = smoothstep(min(1, (te - 0.3) / 0.3))
+                    let rise = smoothstep(min(1, max(0, (te - 1.5) / 0.7)))
+                    freeze = fall * (1 - rise * rise)
+                    w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
+                }
+                if !w.tripFxDone, te > 0.45 { // 쿵 — 소리·먼지는 한 번만, 지물에 맞는 이펙트로
+                    w.tripFxDone = true
+                    SoundKit.shared.bounce(speed: 3.5, surface: .rough)
+                    let at = CGPoint(x: px(stickX), y: groundY(stickX))
+                    let s = hole.surface(at: stickX)
+                    if s == .water {
+                        FX.ripple(on: self, at: at)
+                    } else {
+                        FX.dust(on: self, at: at, surface: s == .bunker ? .bunker : .rough, intensity: 0.5)
+                    }
+                }
+            }
+            let tw = w.t - w.relax - w.pausedTime
             if tw >= 0 {
                 let u = min(1, tw / w.dur)
                 stickX = w.fromX + (w.toX - w.fromX) * smoothstep(u)
-                let vInst = abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
+                // 유효 속도 = 해석 미분 × (1 - freeze) — 위치와 게이트가 같은 비율로 감속·재가속
+                let vInst = (1 - freeze) * abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
                 w.vPx = vInst * Double(pxPerM)
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
                 w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot()))
+                // 지형 적응 (2026-08-15 요청): 경사에선 보폭을 줄이고, 러프·벙커는 무거운 걸음
+                let walkSurf = hole.surface(at: stickX)
+                w.stepL *= 1 - 0.3 * min(1, abs(atan(hole.slope(at: stickX))) / 0.35)
+                if walkSurf == .rough {
+                    w.stepL *= 0.85
+                } else if walkSurf == .bunker {
+                    w.stepL *= 0.75
+                }
                 w.duty = 0.68 - 0.08 * min(1, w.vPx / 30)
                 let dNow = abs(stickX - w.fromX) * Double(pxPerM)
                 if !w.gaitReady {
@@ -1040,6 +1104,19 @@ final class GameScene: SKScene {
                         if w.feet[i].inSwing { // 착지 — 목표점에 래치
                             w.feet[i].inSwing = false
                             w.feet[i].plant = w.feet[i].swingTo
+                            // 지물 반응 (재미): 러프·벙커 스텝 먼지, 물 위는 파문 — 한 걸음 걸러
+                            w.stepFxParity.toggle()
+                            if w.stepFxParity, w.vPx > 8 {
+                                let sgn: Double = w.toX >= w.fromX ? 1 : -1
+                                let footXm = w.fromX + sgn * w.feet[i].plant / Double(pxPerM)
+                                let fs = hole.surface(at: footXm)
+                                let at = CGPoint(x: px(footXm), y: groundY(footXm))
+                                if fs == .rough || fs == .bunker {
+                                    FX.dust(on: self, at: at, surface: fs, intensity: 0.18)
+                                } else if fs == .water {
+                                    FX.ripple(on: self, at: at)
+                                }
+                            }
                         }
                     } else if !w.feet[i].inSwing { // 리프트오프 — 다음 착지점을 지금 고정
                         w.feet[i].inSwing = true
@@ -1188,25 +1265,64 @@ final class GameScene: SKScene {
                 guard u > 0 else { continue }
                 e.kind.apply(u: u, into: &flavor)
             }
+            // 지형 적응 자세 (2026-08-15 요청): 오르막은 상체를 앞으로(등산),
+            // 내리막은 뒤로 젖히고 무릎을 굽혀 조심조심 — 보폭 축소는 게이트 쪽에서
+            let sFace = atan(hole.slope(at: stickX)) * dir
+            let leanT = min(1, abs(sFace) / 0.3)
+            if sFace > 0 {
+                flavor.shoulderXOff += 3.5 * leanT
+                flavor.headDyOff -= 0.5 * leanT
+            } else {
+                flavor.shoulderXOff -= 3.0 * leanT
+                flavor.hipYOff -= 1.5 * leanT
+            }
+            if hole.surface(at: stickX) == .bunker { // 모래에 발이 잠긴 무거운 걸음
+                flavor.hipYOff -= 1.2
+                flavor.shoulderXOff += 1.0
+            }
+            // 넘어지기 연출: 휘청 → 쿵(손 짚고 웅크림) → 코미디 홀드 → 일어나기.
+            // 전진 동결은 게이트 쪽 pausedTime이 담당 — 여기는 몸짓만
+            if let tr = w.tripAt {
+                let te = w.t - tr
+                if te > 0, te < 2.2 {
+                    let lurch = smoothstep(min(1, max(0, te / 0.3)))
+                    let fall = smoothstep(min(1, max(0, (te - 0.3) / 0.3)))
+                    let rise = smoothstep(min(1, max(0, (te - 1.5) / 0.7)))
+                    let down = min(fall, 1 - rise)
+                    flavor.shoulderXOff += 6 * lurch * (1 - rise) + 5 * down
+                    flavor.hipXOff += 3 * lurch * (1 - rise)
+                    flavor.hipYOff -= 26 * down
+                    flavor.headDyOff -= 4 * down
+                    flavor.freeHandXOff += 11 * down // 손 짚기
+                    flavor.freeHandYOff -= 5 * down
+                    flavor.armAmpBoost -= 0.8 * down
+                }
+            }
             // 발 위치: 접지발 = 래치된 접지점 그대로, 스윙발 = 고정된 목표로 보간 (노슬립)
             let dPx = abs(stickX - w.fromX) * Double(pxPerM)
             let vAmp = min(1, w.vPx / 30)
+            // 지물 적응: 러프는 풀을 넘는 하이스텝, 벙커는 발이 모래에 잠긴다
+            let surfHere = hole.surface(at: stickX)
+            let liftBoost = surfHere == .rough ? 1.5 : 1.0
             func footPose(_ i: Int) -> (x: Double, lift: Double) {
                 let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
                 let g = w.feet[i]
                 if !g.inSwing {
-                    return (g.plant - dPx, 0)
+                    let xm = stickX + (g.plant - dPx) * dir / Double(pxPerM)
+                    return (g.plant - dPx, hole.surface(at: xm) == .bunker ? -1.8 : 0)
                 }
                 let sw = max(0, (f - w.duty) / (1 - w.duty))
                 // sin² 프로파일: 이륙·착지 모두 속도 0 (발 '찍기' 제거)
-                let lift = sin(.pi * sw) * sin(.pi * sw) * (3 + 5 * vAmp + 6 * flavor.skip)
+                let lift = sin(.pi * sw) * sin(.pi * sw) * (3 + 5 * vAmp + 6 * flavor.skip) * liftBoost
                 return (mix(g.swingFrom, g.swingTo, smoothstep(sw)) - dPx, lift)
             }
             targetRig = RigBuilder.walking(
                 f1: footPose(0), f2: footPose(1), gaitPhase: w.gaitPhase,
                 vPx: w.vPx, clubLen: renderLen, flavor: flavor
             ) { dx in
-                let xm = self.stickX + dx / Double(self.pxPerM)
+                // dx는 facing 로컬(px) — 렌더가 dir로 미러하므로 지면 샘플도 dir을 곱해야
+                // 미러 홀에서 앞뒤 발 높이가 뒤바뀌지 않는다 (2026-08-15 수정)
+                let xm = self.stickX + dx * self.dir / Double(self.pxPerM)
                 return Double(self.groundY(xm) - self.groundY(self.stickX))
             }
             rigRate = 14 // 상체는 부드럽게 — 발·무릎은 아래 footRate로 고속 추적

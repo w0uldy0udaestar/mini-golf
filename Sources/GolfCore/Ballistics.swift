@@ -36,6 +36,7 @@ public struct BallState: Sendable {
     public var spinSign: Double
     public var phase: Phase
     public var lipped: Bool
+    public var lowSpeedTime = 0.0 // 저속 굴림 지속 시간 — V자 골짜기 미세 진동 정지 가드용
 
     public init(
         x: Double,
@@ -101,6 +102,7 @@ public enum Ballistics {
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly
         b.lipped = false
+        b.lowSpeedTime = 0
     }
 
     /// 장애물 충돌 — 캐노피는 비행을 삼키고(잎 스침 = rough 바운스 이벤트 재활용),
@@ -140,6 +142,7 @@ public enum Ballistics {
                         if b.phase == .roll {
                             if b.vy > 0.8 {
                                 b.phase = .fly // 바위를 타고 튀어오른다
+                                b.lowSpeedTime = 0
                             } else {
                                 b.vy = 0 // roll 불변식: 수직 속도 없음 (리뷰 S-3)
                             }
@@ -249,6 +252,25 @@ public enum Ballistics {
                 b.vx -= (b.vx > 0 ? 1 : -1) * dv
             }
             b.y = hole.ground(at: b.x)
+            // V자 골짜기 미세 진동 가드: 저속(<1.2)이 2.5s 지속되면 그 자리에 멈춘다 —
+            // 실제 공은 정지 마찰·잔디 눌림으로 경사에서도 멈춘다. 다이나믹 지형(급경사 골)에서
+            // 아래 정지 조건이 영원히 성립하지 않는 비종결 굴림 6/3206을 QA 소크로 재현·수정.
+            // 컵 반경 안에서 발동하면 가장자리로 밀어낸다 (립아웃 잔존 처리와 동일 규칙 —
+            // 리뷰 S-2: 컵 주변에 가드 사각 고리를 남기지 않는다)
+            if abs(b.vx) < 1.2 {
+                b.lowSpeedTime += dt
+                if b.lowSpeedTime > 2.5 {
+                    b.vx = 0
+                    b.phase = .rest
+                    if abs(b.x - hole.holeX) < Phys.cupHalfWidth + 0.05 {
+                        b.x = hole.holeX + (b.x >= hole.holeX ? 1 : -1) * (Phys.cupHalfWidth + 0.05)
+                        b.y = hole.ground(at: b.x)
+                    }
+                    b.lipped = false
+                }
+            } else {
+                b.lowSpeedTime = 0
+            }
             // 정지: 마찰이 경사 중력을 이길 때만
             if abs(b.vx) < Phys.stopSpeed, surfType.roll >= Phys.g * abs(s) * 0.85 {
                 b.vx = 0
@@ -291,6 +313,7 @@ public enum Ballistics {
                     b.lipped = true
                     let over = (abs(b.vx) - Phys.captureRoll) / (Phys.lipOutSpeed - Phys.captureRoll)
                     b.phase = .fly
+                    b.lowSpeedTime = 0
                     b.vy = 0.8 + over * 0.7 // 톡 튀어오르는 연출
                     b.vx = (b.vx > 0 ? 1 : -1) * (0.5 + over * 1.2)
                     b.spin = 0
