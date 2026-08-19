@@ -1,9 +1,23 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-08-15 세션 종료)
+## 현재 상태 (2026-08-19 세션 종료)
 
-**M3 + 폴리시 전부 main에 머지 완료 (207af95), 테스트 32개 통과, 저장소 정돈됨.**
-LICENSE(MIT)·README(데모 GIF·모션 카탈로그 링크 포함)·CHANGELOG 완비. 사용자 실플레이
+**저장소 PUBLIC 전환 완료** — https://github.com/w0uldy0udaestar/mini-golf (설명·토픽 10종 설정됨).
+main 단일 브랜치(97커밋)·태그 `exp-transition-lab-20260814`(스프링 전환 실험 박제)·테스트 32개 통과.
+README 전면 리뉴얼(SVG 배너 docs/banner.svg·물리 엔진 표·클럽 테이블·모션 그리드) +
+모션 100종 GIF 카탈로그(docs/motions/*.gif, --demo-motions 캡처 → 스틱맨 추적 크롭) 완료.
+
+### ⚠️ 공개 과정에서 있었던 일 (반드시 알 것)
+- 과거 커밋의 데스크탑 캡처(motions/*.png 100장·구 demo.gif)에 로컬 경로·Claude 사용량/비용·
+  Dock이 찍혀 있어 **히스토리를 재작성**(filter-branch, 5커밋)했다. 커밋 SHA가 전부 바뀜.
+- force push 후에도 GitHub 서버가 구 객체를 회수하지 않아 구 SHA로 접근이 가능했음 →
+  기존 저장소를 **`mini-golf-archive-private`로 이름 변경(private 보관)**하고 `mini-golf`를
+  새 public 저장소로 재생성해 정리된 히스토리만 푸시. 구 SHA 404 검증 완료.
+- 재작성 전 전체 백업: `~/Project/mini-golf-backup-20260816-135637.bundle` (무결성 검증됨).
+  archive 저장소는 오염 캡처를 품고 있으니 **절대 public 전환 금지**. 필요 없으면 웹에서 삭제.
+- 교훈: 캡처물은 처음부터 검정 배경막(스크래치패드 backdrop 도구) 위에서 찍을 것.
+
+이전 상태: M3 + 폴리시 전부 main 머지, LICENSE(MIT)·CHANGELOG 완비. 사용자 실플레이
 판정 완료: 사운드·라이 구분·경사 스탠스·장애물·클럽 디자인·넘어지기(1~2% 철푸덕)·모션
 100종 모두 승인됨.
 
@@ -24,7 +38,7 @@ AskUserQuestion으로 방향 결정 권장.
 
 ## 남은 백로그 (우선순위 낮음, docs/qa-report-2026-08-15.md 참조)
 
-- GitHub public 전환 — 차단 요소 전부 해소됨. **사용자 명시 확인 후에만 실행**
+- ~~GitHub public 전환~~ 완료 (2026-08-19). GitHub Release 태깅(v0.1.0)은 아직 — 원하면 다음에
 - 밝은 배경 기본 가독성(사용자 결정: 현행 유지 — README에 고대비 안내로 갈음)
 - HUD 표고차 표시·파3/파4 난이도 격차(사용자 결정: 현행 유지)
 - QA 잔여 P1 일부: 립아웃/워터 좌절 반응, 연속 버디 스트릭, 포커스 복귀 인사
