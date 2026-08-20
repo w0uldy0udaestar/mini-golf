@@ -33,10 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
 
-    /// 저장된 선택 > 주 모니터 (선택한 모니터가 분리됐으면 주 모니터로 폴백)
+    /// 저장된 선택 > 주 디스플레이 (선택한 모니터가 분리됐으면 주 디스플레이로 폴백).
+    /// NSScreen.main은 '키 윈도의 화면'이라 실행 순간의 포커스를 따라간다 — 폴백으로 부적합
     private var preferredScreen: NSScreen? {
         let saved = UInt32(UserDefaults.standard.integer(forKey: screenPrefKey))
-        return NSScreen.screens.first { displayID($0) == saved } ?? NSScreen.main
+        return NSScreen.screens.first { displayID($0) == saved } ?? NSScreen.screens.first
     }
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -80,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
         scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
         scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 100종 순서 시연 (카탈로그)
+        scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
         panel.contentView = skView
         skView.presentScene(scene)
 

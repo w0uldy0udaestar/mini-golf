@@ -9,6 +9,28 @@
 발동 규칙: 걷기당 최대 5개, 겹치지 않게 스케줄. 어깨 캐리 중엔 클럽 모션 금지.
 별개로 아주 가끔(1~2%) [철푸덕 넘어지기](qa-report-2026-08-15.md)가 있다.
 
+## 쇼피스 밈 모션 (12) — 걷기를 멈추고 춘다
+
+잔동작과 달리 **걸음을 서서히 멈추고**(트립과 같은 연속 동결 램프) 2~3초 크게 추는
+희귀 이벤트. 걷기가 넉넉할 때 8%, 걷기당 최대 1개, 트립·잔동작과 겹치지 않는다.
+밈 리서치(2026-08) 기반 — 실루엣 판독성과 골프 클럽 시너지 우선, 동작은 오마주 수준으로
+추상화(특정 게임 이모트 명칭 미사용). 시연: `--demo-memes`(12종 순환).
+
+| 모션 | 설명 | 모습 |
+|---|---|---|
+| whiffSpin | 헛스윙 개그 — 진지한 어드레스, 헛스윙, 아무렇지 않게 잔댄스 | <img src="motions/whiffSpin.gif" width="240"> |
+| auraFarm | 아우라 파밍 — 클럽 짚고 낮게, 스윕마다 정지 홀드 | <img src="motions/auraFarm.gif" width="240"> |
+| siuJump | 도약 세리머니 — 웅크림, 점프, 양팔 뒤로 착지 홀드 | <img src="motions/siuJump.gif" width="240"> |
+| tripleBeat | 퉁퉁퉁 — 클럽 수직 3연타 찍기, 마무리는 어깨에 척 | <img src="motions/tripleBeat.gif" width="240"> |
+| scubaDance | 스쿠버 — 한 손 코 막고 바운스, 클럽 부채질 | <img src="motions/scubaDance.gif" width="240"> |
+| heelGroove | 힐 그루브 — 뒤꿈치 바운스 8박 + 자유팔 루프 | <img src="motions/heelGroove.gif" width="240"> |
+| dabPose | 댑 — 스냅으로 고개 파묻고 클럽 팔 사선 홀드 | <img src="motions/dabPose.gif" width="240"> |
+| horseDance | 말춤 — 양손 고삐 바운스 + 올가미 (K-클래식) | <img src="motions/horseDance.gif" width="240"> |
+| coffinMarch | 관짝 행진 — 클럽 어깨에 메고 제자리 바운스 | <img src="motions/coffinMarch.gif" width="240"> |
+| clubFlip | 클럽 플립 — 던져서 수직 착지, 짜잔 | <img src="motions/clubFlip.gif" width="240"> |
+| freezeFrame | 마네킹 — 걷다가 완전 정지 3초, 끝에 두리번 | <img src="motions/freezeFrame.gif" width="240"> |
+| cheerSeesaw | 응원 시소 — 양손 교대 상하 + 힙 리듬 (삐끼삐끼풍) | <img src="motions/cheerSeesaw.gif" width="240"> |
+
 ## 클럽 트월·곡예 (14)
 
 | 모션 | 설명 | 모습 |
