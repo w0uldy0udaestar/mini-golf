@@ -38,7 +38,11 @@ AskUserQuestion으로 방향 결정 권장.
 
 ## 남은 백로그 (우선순위 낮음, docs/qa-report-2026-08-15.md 참조)
 
-- ~~GitHub public 전환~~ 완료 (2026-08-19). GitHub Release 태깅(v0.1.0)은 아직 — 원하면 다음에
+- ~~GitHub public 전환~~ 완료 (2026-08-19)
+- ~~배포~~ 완료 (2026-08-20): Release v0.1.0(유니버설 .app zip 440KB, `make zip`으로 조립) +
+  Homebrew tap(`w0uldy0udaestar/homebrew-tap` 저장소, `brew install --cask w0uldy0udaestar/tap/mini-golf`
+  실설치 검증 후 정리). 다음 릴리스 절차: Makefile VERSION 올리기 → `make zip` → `gh release create` →
+  tap의 cask version·sha256 갱신. 남은 옵션: Apple 공증(연 $99, 경고 없는 실행)
 - 밝은 배경 기본 가독성(사용자 결정: 현행 유지 — README에 고대비 안내로 갈음)
 - HUD 표고차 표시·파3/파4 난이도 격차(사용자 결정: 현행 유지)
 - QA 잔여 P1 일부: 립아웃/워터 좌절 반응, 연속 버디 스트릭, 포커스 복귀 인사
