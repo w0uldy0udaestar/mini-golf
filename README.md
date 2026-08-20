@@ -24,18 +24,39 @@
 
 <br>
 
-## 30초 만에 시작
+## 설치
+
+### A. 다운로드 — 가장 쉬움
+
+1. **[최신 릴리스](https://github.com/w0uldy0udaestar/mini-golf/releases/latest)**에서 `MiniGolf-*.zip` 다운로드
+2. 압축을 풀고 `MiniGolf.app`을 **응용 프로그램** 폴더로 이동
+3. 첫 실행은 **우클릭 → 열기** (서명되지 않은 앱이라 한 번은 확인이 필요합니다)
+
+> "손상되었기 때문에 열 수 없습니다"가 뜨면 터미널에서 한 줄:
+> `xattr -cr /Applications/MiniGolf.app`
+
+### B. Homebrew
+
+```sh
+brew install --cask w0uldy0udaestar/tap/mini-golf
+```
+
+격리 경고 없이 바로 실행하려면 `--no-quarantine`을 붙이세요.
+
+### C. 소스 빌드 (Swift 5.9+)
 
 ```sh
 git clone https://github.com/w0uldy0udaestar/mini-golf.git
 cd mini-golf
-swift build -c release
-.build/release/MiniGolf
+make app          # → dist/MiniGolf.app (유니버설 바이너리)
+open dist/MiniGolf.app
 ```
 
-메뉴바에 **⛳️** 가 뜨면 끝. 게임 화면은 데스크탑 맨 아래 띠입니다.
+---
 
-> 서명되지 않은 바이너리라 macOS가 막으면 → `xattr -cr .build/release/MiniGolf` 후 재실행.
+실행하면 메뉴바에 **⛳️** 가 뜨고 게임은 데스크탑 맨 아래 띠에서 시작됩니다.
+Dock 아이콘은 없습니다(메뉴바 전용). 종료는 <kbd>Esc</kbd> 또는 ⛳️ 우클릭 → 종료 —
+백그라운드에 아무것도 남지 않고, 다시 켜면 새 라운드입니다.
 
 <br>
 
