@@ -20,7 +20,7 @@ let ctx = CGContext(
 ctx.translateBy(x: 0, y: CGFloat(S))
 ctx.scaleBy(x: 1, y: -1)
 
-// 라운드 카드 (macOS 아이콘 관례 비율 rx≈230/1024)
+/// 라운드 카드 (macOS 아이콘 관례 비율 rx≈230/1024)
 let card = CGPath(
     roundedRect: CGRect(x: 0, y: 0, width: S, height: S),
     cornerWidth: 230, cornerHeight: 230, transform: nil
@@ -31,12 +31,13 @@ ctx.fillPath()
 ctx.addPath(card)
 ctx.clip()
 
-// 지면 곡선 (완만한 능선 → 그린)
+/// 지면 곡선 (완만한 능선 → 그린)
 func groundY(_ x: CGFloat) -> CGFloat {
     // 두 코사인 합성 — x∈[0,1024], y≈660~710
     let t = x / 1024
     return 690 + 26 * cos(t * 4.2 + 0.8) - 10 * cos(t * 1.7)
 }
+
 let ground = CGMutablePath()
 ground.move(to: CGPoint(x: -20, y: groundY(-20)))
 var gx: CGFloat = -20
@@ -44,6 +45,7 @@ while gx <= 1044 {
     ground.addLine(to: CGPoint(x: gx, y: groundY(gx)))
     gx += 8
 }
+
 ctx.addPath(ground)
 ctx.setStrokeColor(line)
 ctx.setLineWidth(10)
@@ -68,6 +70,7 @@ func stroke(_ a: CGPoint, _ b: CGPoint, _ w: CGFloat, _ c: CGColor) {
     ctx.addLine(to: b)
     ctx.strokePath()
 }
+
 stroke(hip, CGPoint(x: sx - 54, y: groundY(sx - 54)), 27, ink) // 뒷다리
 stroke(hip, CGPoint(x: sx + 47, y: groundY(sx + 47)), 27, ink) // 앞다리
 stroke(hip, sh, 31, ink) // 몸통

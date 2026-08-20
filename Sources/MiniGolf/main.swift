@@ -23,10 +23,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: NSMenu!
     private var soundMenuItem: NSMenuItem!
     private var contrastMenuItem: NSMenuItem!
+    private var monitorMenu: NSMenu!
     private var lastResignKey = Date.distantPast
 
+    /// ── 모니터 선택 (2026-08-20 듀얼 모니터 요청): ⛳️ 메뉴에서 선택, 세션 간 기억 ──
+    private let screenPrefKey = "preferredDisplayID"
+
+    private func displayID(_ s: NSScreen) -> UInt32 {
+        (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+    }
+
+    /// 저장된 선택 > 주 모니터 (선택한 모니터가 분리됐으면 주 모니터로 폴백)
+    private var preferredScreen: NSScreen? {
+        let saved = UInt32(UserDefaults.standard.integer(forKey: screenPrefKey))
+        return NSScreen.screens.first { displayID($0) == saved } ?? NSScreen.main
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
-        guard let screen = NSScreen.main else { NSApp.terminate(nil); return }
+        let launchArgs = ProcessInfo.processInfo.arguments
+        // --screen N: 실행 시 모니터 지정 (0부터, 검증·프리셋용 — 저장하지 않음)
+        var flagScreen: NSScreen?
+        if let i = launchArgs.firstIndex(of: "--screen"), i + 1 < launchArgs.count,
+           let n = Int(launchArgs[i + 1]), NSScreen.screens.indices.contains(n) {
+            flagScreen = NSScreen.screens[n]
+        }
+        guard let screen = flagScreen ?? preferredScreen else { NSApp.terminate(nil); return }
 
         panel = OverlayPanel(
             contentRect: screen.frame,
@@ -62,6 +83,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.contentView = skView
         skView.presentScene(scene)
 
+        // --demo-switch T: T초 후 다음 모니터로 이동 — 런타임 전환 관찰용 (메뉴 선택과 동일 경로)
+        if let i = args.firstIndex(of: "--demo-switch"), i + 1 < args.count, let t = Double(args[i + 1]) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + t) { [weak self] in
+                guard let self, let cur = panel.screen,
+                      let idx = NSScreen.screens.firstIndex(of: cur) else { return }
+                move(to: NSScreen.screens[(idx + 1) % NSScreen.screens.count])
+            }
+        }
+
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(scene)
         NSApp.activate(ignoringOtherApps: true)
@@ -71,8 +101,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(panelResignedKey),
             name: NSWindow.didResignKeyNotification, object: panel
         )
+        // 모니터 구성 변화(분리·해상도 변경) → 선호 화면으로 재정렬
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
 
         setupStatusItem()
+    }
+
+    // ── 모니터 전환 ──
+
+    private func move(to screen: NSScreen) {
+        guard panel.frame != screen.frame else { return }
+        panel.setFrame(screen.frame, display: true) // contentView(SKView)가 따라 리사이즈 → 씬 didChangeSize
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(scene)
+    }
+
+    @objc private func selectMonitor(_ sender: NSMenuItem) {
+        guard let id = (sender.representedObject as? NSNumber)?.uint32Value,
+              let screen = NSScreen.screens.first(where: { displayID($0) == id }) else { return }
+        UserDefaults.standard.set(Int(id), forKey: screenPrefKey)
+        move(to: screen)
+    }
+
+    @objc private func screensChanged() {
+        if let s = preferredScreen {
+            move(to: s)
+        }
+    }
+
+    private func rebuildMonitorMenu() {
+        monitorMenu.removeAllItems()
+        for s in NSScreen.screens {
+            let item = monitorMenu.addItem(
+                withTitle: s.localizedName,
+                action: #selector(selectMonitor(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = NSNumber(value: displayID(s))
+            item.state = panel.screen == s ? .on : .off
+        }
     }
 
     /// 메뉴바 ⛳️ = 활성화 버튼 — 좌클릭이 곧 재개/일시정지 토글, 메뉴는 우클릭으로
@@ -97,6 +168,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         contrastMenuItem.target = self
         contrastMenuItem.state = Theme.highContrast ? .on : .off
+        let monitorItem = statusMenu.addItem(withTitle: "모니터", action: nil, keyEquivalent: "")
+        monitorMenu = NSMenu()
+        monitorItem.submenu = monitorMenu // 항목은 열 때마다 재구성 (연결 상태 반영)
         statusMenu.addItem(.separator())
         statusMenu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
         // statusItem.menu는 비워둔다 — 지정하면 좌클릭이 메뉴를 열어 버튼 동작을 삼킨다
@@ -104,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
+            rebuildMonitorMenu()
             statusItem.menu = statusMenu
             statusItem.button?.performClick(nil) // 메뉴 추적은 이 안에서 동기 실행됨
             statusItem.menu = nil
