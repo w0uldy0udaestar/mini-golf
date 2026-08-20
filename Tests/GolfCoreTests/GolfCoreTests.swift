@@ -386,7 +386,10 @@ final class GolfCoreTests: XCTestCase {
             let course = CourseGenerator.makeCourse(seed: UInt32(seed))
             let sigs = course.filter { $0.signature != nil }
             perRoundCounts.append(sigs.count)
-            XCTAssertLessThanOrEqual(sigs.count, 2, "시그니처 홀은 라운드당 최대 2개")
+            // 시그니처 위주 구성 (2026-08-20 사용자 판정: "화면 전체 맵 위주로")
+            XCTAssertTrue((6 ... 9).contains(sigs.count), "시그니처 홀은 라운드당 6~9개 (\(sigs.count))")
+            let roundKinds = Set(sigs.compactMap(\.signature))
+            XCTAssertGreaterThanOrEqual(roundKinds.count, 3, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
             for h in sigs {
                 try kindsSeen.insert(XCTUnwrap(h.signature))
                 let budget = 0.34 * h.worldW
@@ -408,21 +411,19 @@ final class GolfCoreTests: XCTestCase {
                 XCTAssertLessThan(abs(h.slope(at: h.teeX)), 0.06, "\(h.signature!): 티가 가파름")
             }
         }
-        let total = perRoundCounts.reduce(0, +)
-        XCTAssertGreaterThan(total, 20, "시그니처 홀이 너무 드묾 (\(total)/60라운드)")
-        XCTAssertGreaterThan(perRoundCounts.filter { $0 == 0 }.count, 3, "0개 라운드도 있어야 희소성 유지")
+        // 평지(브리더) 홀도 가끔 나온다 — 9/9 풀 다이나믹 라운드는 10%뿐
+        XCTAssertGreaterThan(perRoundCounts.filter { $0 < 9 }.count, 40, "브리더 홀이 있는 라운드가 다수여야 함")
         XCTAssertEqual(kindsSeen, Set(SignatureKind.allCases), "일부 아키타입이 안 나옴: \(kindsSeen)")
         XCTAssertGreaterThan(maxRelRange, 0.6, "최대 낙차가 예산 대비 작음 (\(maxRelRange))")
     }
 
-    /// 관찰 도구: 1번 홀이 시그니처인 시드 목록 출력 — --demo --seed N 시각 검증용
+    /// 관찰 도구: 시드별 라운드 구성 출력 — --demo --seed N 시각 검증용
     func testSignatureSeedDiscovery() {
         var found: [String] = []
-        for seed in 1 ... 120 {
+        for seed in 1 ... 12 {
             let c = CourseGenerator.makeCourse(seed: UInt32(seed))
-            if let k = c[0].signature {
-                found.append("seed \(seed) → \(k.rawValue) (par \(c[0].par))")
-            }
+            let row = c.map { h in h.signature.map { "\($0.rawValue)(파\(h.par))" } ?? "평지(파\(h.par))" }
+            found.append("seed \(seed): " + row.joined(separator: " · "))
         }
         print("SIGNATURE-SEEDS:\n" + found.joined(separator: "\n"))
         XCTAssertFalse(found.isEmpty)
