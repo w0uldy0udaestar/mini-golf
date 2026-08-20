@@ -1,6 +1,14 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-08-19 세션 종료)
+## 현재 상태 (2026-08-20)
+
+**v0.2.0 릴리스 완료** — 전 홀 다이나믹 코스(시그니처 4종 아키타입, 9/9) + 밈 쇼피스 12종
+(--demo-memes) + 잔동작 1.7× 부스트(boostMotion). 릴리스 절차 검증 완료(공개 sha 일치·brew
+0.2.0 설치 확인 후 정리). 다음 조정 포인트: 진폭 1.7 상수(GameScene, boostMotion 호출부)·
+쇼피스 확률 8%(scheduleWalkFlavors)·시그니처 예산 0.34×worldW(Course.swift).
+사용자 실플레이 판정 대기: 전 홀 다이나믹 난이도(파 대비 타수 인플레 가능성)·부스트 과부족.
+
+## 이전 상태 (2026-08-19 세션 종료)
 
 **저장소 PUBLIC 전환 완료** — https://github.com/w0uldy0udaestar/mini-golf (설명·토픽 10종 설정됨).
 main 단일 브랜치(97커밋)·태그 `exp-transition-lab-20260814`(스프링 전환 실험 박제)·테스트 32개 통과.
