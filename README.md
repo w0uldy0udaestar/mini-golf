@@ -41,8 +41,6 @@
 brew install --cask w0uldy0udaestar/tap/mini-golf
 ```
 
-격리 경고 없이 바로 실행하려면 `--no-quarantine`을 붙이세요.
-
 ### C. 소스 빌드 (Swift 5.9+)
 
 ```sh
