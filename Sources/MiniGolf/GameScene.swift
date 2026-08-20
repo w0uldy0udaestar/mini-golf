@@ -270,6 +270,10 @@ final class GameScene: SKScene {
         ballNode.alpha = 1
         ballNode.setScale(1)
         rebuildTerrain()
+        if demoMode, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
+            print("SIGNATURE \(sig.rawValue)")
+            fflush(stdout)
+        }
         enterAim()
     }
 

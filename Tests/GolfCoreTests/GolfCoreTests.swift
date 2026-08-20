@@ -325,7 +325,8 @@ final class GolfCoreTests: XCTestCase {
         let dr = CourseStrategy.total(of: "DR")
         var inBand = 0, par45 = 0, layupViolations = 0
         for seed in 1 ... 30 {
-            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.par >= 4 {
+            // 시그니처 홀 제외 — 협곡 워터 등은 아키타입이 의도적으로 배치하는 시련
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.par >= 4 && h.signature == nil {
                 par45 += 1
                 func fromTee(_ x: Double) -> Double {
                     abs(x - h.teeX)
@@ -361,9 +362,10 @@ final class GolfCoreTests: XCTestCase {
 
     func testTerrainDynamicButBounded() {
         // 경계: 노드 클램프 -10~15 + 워터 딥(-1.2)·벙커 딥(-0.9)·그린 슬로프(±약 2.1) 여유분
+        // 시그니처 홀은 별도 예산(0.34×worldW) — testSignatureHoles에서 검증
         var maxRange = 0.0
         for seed in 1 ... 30 {
-            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.signature == nil {
                 let lo = h.elevation.min() ?? 0
                 let hi = h.elevation.max() ?? 0
                 XCTAssertGreaterThan(lo, -13, "표고 하한 초과 (\(lo))")
@@ -372,6 +374,77 @@ final class GolfCoreTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(maxRange, 12, "지형 기복이 심심함 (최대 낙차 \(maxRange)m)")
+    }
+
+    // ── 시그니처 홀 (화면 세로 전체를 쓰는 다이나믹 코스) ──
+
+    func testSignatureHoles() throws {
+        var perRoundCounts: [Int] = []
+        var kindsSeen = Set<SignatureKind>()
+        var maxRelRange = 0.0
+        for seed in 1 ... 60 {
+            let course = CourseGenerator.makeCourse(seed: UInt32(seed))
+            let sigs = course.filter { $0.signature != nil }
+            perRoundCounts.append(sigs.count)
+            XCTAssertLessThanOrEqual(sigs.count, 2, "시그니처 홀은 라운드당 최대 2개")
+            for h in sigs {
+                try kindsSeen.insert(XCTUnwrap(h.signature))
+                let budget = 0.34 * h.worldW
+                let lo = h.elevation.min() ?? 0
+                let hi = h.elevation.max() ?? 0
+                // 예산 내 (워터 딥 -1.2·벙커 딥 -0.9 여유 +3)
+                XCTAssertGreaterThan(lo, -budget - 3, "\(h.signature!): 하한 초과 (\(lo))")
+                XCTAssertLessThan(hi, budget + 5, "\(h.signature!): 상한 초과 (\(hi))")
+                // 실제로 다이나믹한지 — 낙차가 예산의 40% 이상
+                maxRelRange = max(maxRelRange, (hi - lo) / budget)
+                XCTAssertGreaterThan(hi - lo, budget * 0.30, "\(h.signature!): 낙차가 심심함 (\(hi - lo))")
+                // 경사 상한: cos 보간 라이저 최대 ≈0.95 + 보간 여유
+                for x in stride(from: 2.0, to: h.worldW - 2, by: 1.0) {
+                    XCTAssertLessThan(abs(h.slope(at: x)), 1.15, "\(h.signature!): 경사 초과 @\(x)")
+                }
+                // 그린은 설 수 있어야 함 (브레이크 2~6%만)
+                XCTAssertLessThan(abs(h.slope(at: h.holeX - 2)), 0.09, "\(h.signature!): 그린이 가파름")
+                // 티 주변 평탄 (티샷 스탠스)
+                XCTAssertLessThan(abs(h.slope(at: h.teeX)), 0.06, "\(h.signature!): 티가 가파름")
+            }
+        }
+        let total = perRoundCounts.reduce(0, +)
+        XCTAssertGreaterThan(total, 20, "시그니처 홀이 너무 드묾 (\(total)/60라운드)")
+        XCTAssertGreaterThan(perRoundCounts.filter { $0 == 0 }.count, 3, "0개 라운드도 있어야 희소성 유지")
+        XCTAssertEqual(kindsSeen, Set(SignatureKind.allCases), "일부 아키타입이 안 나옴: \(kindsSeen)")
+        XCTAssertGreaterThan(maxRelRange, 0.6, "최대 낙차가 예산 대비 작음 (\(maxRelRange))")
+    }
+
+    /// 관찰 도구: 1번 홀이 시그니처인 시드 목록 출력 — --demo --seed N 시각 검증용
+    func testSignatureSeedDiscovery() {
+        var found: [String] = []
+        for seed in 1 ... 120 {
+            let c = CourseGenerator.makeCourse(seed: UInt32(seed))
+            if let k = c[0].signature {
+                found.append("seed \(seed) → \(k.rawValue) (par \(c[0].par))")
+            }
+        }
+        print("SIGNATURE-SEEDS:\n" + found.joined(separator: "\n"))
+        XCTAssertFalse(found.isEmpty)
+    }
+
+    func testSignatureHoleRisersAreRough() {
+        // 라이저(급경사면)는 러프여야 공이 굴러 내려와 트레드에 선다
+        // (미러 홀은 teeX가 오른쪽 — 방향 무관하게 전 구간 스캔)
+        for seed in 1 ... 30 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.signature != nil {
+                var checked = 0
+                for x in stride(from: 2.0, to: h.worldW - 2, by: 2.0) where abs(h.slope(at: x)) > 0.5 {
+                    let s = h.surface(at: x)
+                    XCTAssertTrue(
+                        s == .rough || s == .water,
+                        "\(h.signature!): 급경사(\(h.slope(at: x)))가 \(s) @\(x)"
+                    )
+                    checked += 1
+                }
+                XCTAssertGreaterThan(checked, 0, "\(h.signature!): 급경사 구간이 없음")
+            }
+        }
     }
 
     // ── 장애물 (나무·바위) ──
