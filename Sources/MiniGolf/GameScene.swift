@@ -29,7 +29,9 @@ final class GameScene: SKScene {
     var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
     var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
     var demoMotionShowcase = false // --demo-motions: 모션 100종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
+    var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     private var motionCursor = 0
+    private var showpieceCursor = 0
     private var demoWait = 0.0
 
     /// 연출 상태
@@ -59,6 +61,9 @@ final class GameScene: SKScene {
         // 아주 가끔 넘어지기 (2026-08-15 사용자 요청 — 재미): t0는 walk 시계(초), 총 2.2s
         var tripAt: Double?
         var tripFxDone = false
+        // 쇼피스 밈 모션 (2026-08-20): 걷기를 멈추고 크게 추는 희귀 이벤트 — 걷기당 최대 1개
+        var showAt: Double?
+        var showKind: ShowpieceKind?
         var pausedTime = 0.0 // 넘어져 있는 동안 전진이 멈춘 시간 — 걸음 시계에서 빼서 위치를 동결
         var stepFxParity = false // 스텝 먼지는 한 걸음 걸러 — 과하지 않게
     }
@@ -586,6 +591,21 @@ final class GameScene: SKScene {
            demoTripForce || Double.random(in: 0 ..< 1) < 0.01 + 0.01 * min(1, hardness * 2) {
             anim.tripAt = anim.relax + Double.random(in: 1.0 ... (anim.dur - 3.5))
         }
+        // 쇼피스 밈 모션 (2026-08-20): 걷기가 넉넉할 때 8% — 트립과 겹치지 않게 (개그 과밀 방지)
+        if anim.tripAt == nil, anim.dur > 6.0,
+           demoShowpieceForce || Double.random(in: 0 ..< 1) < 0.08 {
+            let kind = demoShowpieceForce
+                ? ShowpieceKind.allCases[showpieceCursor % ShowpieceKind.allCases.count]
+                : ShowpieceKind.allCases.randomElement()!
+            if demoShowpieceForce {
+                showpieceCursor += 1
+            }
+            let latest = anim.relax + anim.dur - kind.duration - 1.2
+            if latest > anim.relax + 1.2 {
+                anim.showKind = kind
+                anim.showAt = anim.relax + Double.random(in: 1.2 ... latest)
+            }
+        }
         // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 100종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
@@ -606,6 +626,12 @@ final class GameScene: SKScene {
             // 넘어지는 동안엔 다른 모션 금지 (트월하며 넘어지면 코미디가 아니라 버그로 보인다)
             if let tr = anim.tripAt, ((tr - 0.3) ... (tr + 2.9)).overlaps(t ... (t + dur)) {
                 t = tr + 3.0
+                continue
+            }
+            // 쇼피스 무대는 비워둔다 — 잔동작이 겹치면 큰 동작이 묻힌다
+            if let sa = anim.showAt, let sk = anim.showKind,
+               ((sa - 0.4) ... (sa + sk.duration + 0.5)).overlaps(t ... (t + dur)) {
+                t = sa + sk.duration + 0.6
                 continue
             }
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
@@ -632,7 +658,8 @@ final class GameScene: SKScene {
                 .map { "\($0.kind)@\(String(format: "%.1f", $0.t0))" }
                 .joined(separator: " ")
             let trip = anim.tripAt.map { String(format: " TRIP@%.1f", $0) } ?? ""
-            print(String(format: "FLAVOR[%.2f] ", Date().timeIntervalSince1970) + list + trip)
+            let show = anim.showAt.map { String(format: " SHOW:%@@%.1f", anim.showKind!.rawValue, $0) } ?? ""
+            print(String(format: "FLAVOR[%.2f] ", Date().timeIntervalSince1970) + list + trip + show)
             fflush(stdout)
         }
         walkAnim = anim
@@ -1187,7 +1214,6 @@ final class GameScene: SKScene {
                     let fall = smoothstep(min(1, (te - 0.25) / 0.25))
                     let rise = smoothstep(min(1, max(0, (te - 1.6) / 0.8)))
                     freeze = fall * (1 - rise * rise)
-                    w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
                 }
                 if !w.tripFxDone, te > 0.5 { // 철푸덕 — 소리·먼지는 한 번만, 지물에 맞는 이펙트로
                     w.tripFxDone = true
@@ -1200,6 +1226,18 @@ final class GameScene: SKScene {
                         FX.dust(on: self, at: at, surface: s == .bunker ? .bunker : .rough, intensity: 0.7)
                     }
                 }
+            }
+            // 쇼피스: 트립과 같은 연속 램프 — 서서히 멈춰 서서 추고, 끝나면 다시 걷는다
+            if let sa = w.showAt, let sk = w.showKind {
+                let te = w.t - sa
+                if te > 0, te < sk.duration {
+                    let inR = smoothstep(min(1, te / 0.35))
+                    let outR = smoothstep(min(1, max(0, (te - (sk.duration - 0.5)) / 0.5)))
+                    freeze = max(freeze, inR * (1 - outR * outR))
+                }
+            }
+            if freeze > 0 {
+                w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
             }
             let tw = w.t - w.relax - w.pausedTime
             if tw >= 0 {
@@ -1398,6 +1436,19 @@ final class GameScene: SKScene {
                     fflush(stdout)
                 }
                 e.kind.apply(u: u, into: &flavor)
+            }
+            // 쇼피스 밈 모션 — 동결된 무대 위에 크게 얹는다 (WalkFlavors.swift ShowpieceKind)
+            if let sa = w.showAt, let sk = w.showKind {
+                let su = (w.t - sa) / sk.duration
+                if su > 0, su < 1 {
+                    if demoMode, w.t - dt < sa { // 시작 프레임 — 캡처 워처에 위치 통지
+                        let info = "\(sk.rawValue) \(Int(px(stickX))) \(Int(groundY(stickX)))"
+                        try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
+                        print("SHOWPIECE \(info)")
+                        fflush(stdout)
+                    }
+                    sk.apply(u: su, into: &flavor)
+                }
             }
             // 지형 적응 자세 (2026-08-15 요청): 오르막은 상체를 앞으로(등산),
             // 내리막은 뒤로 젖히고 무릎을 굽혀 조심조심 — 보폭 축소는 게이트 쪽에서

@@ -81,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
         scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
         scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 100종 순서 시연 (카탈로그)
+        scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
         panel.contentView = skView
         skView.presentScene(scene)
 
