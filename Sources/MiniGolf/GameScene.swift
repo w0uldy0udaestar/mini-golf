@@ -90,6 +90,7 @@ final class GameScene: SKScene {
     private var idleStart = 0.0
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
+    private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
 
     private var hole: Hole {
         course[holeIdx]
@@ -156,21 +157,12 @@ final class GameScene: SKScene {
         trailUnderNode.lineWidth = 2.8
         trailUnderNode.lineCap = .round
 
-        // HUD는 지면 아래 스트립(0~96px 빈 띠) — 시선이 플레이 지점을 떠나지 않는다 (2026-08-14 사용자 결정)
-        scoreTitle.position = CGPoint(x: size.width - 24, y: 66)
-        scoreSub.position = CGPoint(x: size.width - 24, y: 40)
-        clubTitle.position = CGPoint(x: 24, y: 66)
-        clubSub.position = CGPoint(x: 24, y: 40)
-        hintLabel.position = CGPoint(x: size.width / 2, y: 60)
+        layoutHUD()
         hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료")
-        pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46) // 일시정지 배너만 상단(⛳️ 버튼 곁)
         pauseLabel.setText("일시정지 — 메뉴바 ⛳️ 클릭으로 재개")
         pauseLabel.isHidden = true
-        toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
-        toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
         toastTitle.alpha = 0
         toastSub.alpha = 0
-        scorecard.position = CGPoint(x: size.width / 2, y: size.height / 2)
         scorecard.hide()
 
         for n in [terrainNode, trailUnderNode, trailNode, stickman, shadowNode, ballNode, flagNode] as [SKNode] {
@@ -196,6 +188,7 @@ final class GameScene: SKScene {
 
         applyContrastMode()
         newRound()
+        didSetUp = true
         if demoCardPreview { // 스코어카드 레이아웃 검증용 고정 샘플 (이글·버디·파·보기·더블·기권 포함)
             let sample: [(par: Int, strokes: Int, gaveUp: Bool)] = [
                 (4, 4, false), (3, 2, false), (4, 5, false), (5, 3, false), (4, 4, false),
@@ -203,6 +196,29 @@ final class GameScene: SKScene {
             ]
             scorecard.show(results: sample, title: "라운드 종료", footer: "합계 +7 · 흐린 숫자 = 기권  —  R로 새 라운드")
         }
+    }
+
+    /// HUD는 지면 아래 스트립(0~96px 빈 띠) — 시선이 플레이 지점을 떠나지 않는다 (2026-08-14 사용자 결정)
+    private func layoutHUD() {
+        scoreTitle.position = CGPoint(x: size.width - 24, y: 66)
+        scoreSub.position = CGPoint(x: size.width - 24, y: 40)
+        clubTitle.position = CGPoint(x: 24, y: 66)
+        clubSub.position = CGPoint(x: 24, y: 40)
+        hintLabel.position = CGPoint(x: size.width / 2, y: 60)
+        pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46) // 일시정지 배너만 상단(⛳️ 버튼 곁)
+        toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
+        toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
+        scorecard.position = CGPoint(x: size.width / 2, y: size.height / 2)
+    }
+
+    /// 모니터 전환(2026-08-20): 월드는 미터 단위라 홀 진행은 그대로 — px 파생물만 재계산
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        guard didSetUp, oldSize != size else { return }
+        layoutHUD()
+        trailPoints = [] // px 캐시 — 화면 폭이 바뀌면 무효
+        rebuildTerrain()
+        updateHUD()
     }
 
     /// ── 고대비 모드 (밝은 배경 opt-in) ──
