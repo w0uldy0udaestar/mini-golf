@@ -265,9 +265,12 @@ public enum CourseGenerator {
             func span(_ rise: Double) -> Double {
                 rise * riserRatio + Double(max(1, Int(ceil(rise / 34)))) * treadW
             }
-            while span(totalRise) > available, totalRise > 20 {
+            while span(totalRise) > available, totalRise > 22 {
                 totalRise *= 0.87
             }
+            // 파3 최소 상승 보장 — 티런을 조금 내주더라도 다이나믹은 지킨다
+            // (climbStart는 최악에도 teeEnd+8보다 한참 오른쪽 — 기하 검산 2026-08-20)
+            totalRise = max(totalRise, 22)
             let n = max(1, Int(ceil(totalRise / 34))) // 라이저당 ≤34m — 웨지 캐리로 오를 수 있는 상한
             let step = totalRise / Double(n)
             var x = climbEnd - span(totalRise)
@@ -355,21 +358,40 @@ public enum CourseGenerator {
             let j = Int(rand.next() * Double(i + 1))
             pars.swapAt(i, j)
         }
-        // 시그니처 홀 (2026-08-20): 라운드당 0~2홀 — 희소성이 "오늘 이 홀 나왔다!" 재미를 만든다
+        // 시그니처 위주 구성 (2026-08-20 사용자 판정: "화면 전체 맵이 더 재밌다 — 그걸 위주로"):
+        // 라운드당 6~9홀이 다이나믹, 평지 홀이 오히려 쉬어가는 희귀 홀이 된다
         let sigRoll = rand.next()
-        let sigCount = sigRoll < 0.25 ? 0 : (sigRoll < 0.78 ? 1 : 2)
+        let sigCount = sigRoll < 0.30 ? 6 : (sigRoll < 0.70 ? 7 : (sigRoll < 0.90 ? 8 : 9))
         var order = Array(0 ..< pars.count)
         for i in stride(from: order.count - 1, through: 1, by: -1) {
             let j = Int(rand.next() * Double(i + 1))
             order.swapAt(i, j)
         }
         let sigSet = Set(order.prefix(sigCount))
+        // 아키타입 덱: 다 뽑을 때까지 중복 없이 — 한 라운드 안에서 4종이 골고루 나온다
+        // (파3는 지형 제약이 있어 덱을 소비하지 않고 자체 규칙으로 뽑는다)
+        var deck: [SignatureKind] = []
+        func drawKind() -> SignatureKind {
+            if deck.isEmpty {
+                deck = SignatureKind.allCases
+                for i in stride(from: deck.count - 1, through: 1, by: -1) {
+                    let j = Int(rand.next() * Double(i + 1))
+                    deck.swapAt(i, j)
+                }
+            }
+            return deck.removeLast()
+        }
         return pars.enumerated().map { i, par in
-            makeHole(par: par, rand: &rand, signatureRoll: sigSet.contains(i))
+            let sig = sigSet.contains(i)
+            let preferred: SignatureKind? = sig && par >= 4 ? drawKind() : nil
+            return makeHole(par: par, rand: &rand, signatureRoll: sig, preferredKind: preferred)
         }
     }
 
-    static func makeHole(par: Int, rand: inout SeededRandom, signatureRoll: Bool = false) -> Hole {
+    static func makeHole(
+        par: Int, rand: inout SeededRandom,
+        signatureRoll: Bool = false, preferredKind: SignatureKind? = nil
+    ) -> Hole {
         let range = distRange[par]!
         let dist = rand.next(range.lowerBound, range.upperBound)
         let holeX = teeX + dist
@@ -395,8 +417,9 @@ public enum CourseGenerator {
         segments.append(Segment(from: greenEnd, to: worldW, type: .rough))
 
         // ── 시그니처 홀: 표준 지형·클램프를 통째로 대체하는 대낙차 계단 프로파일 ──
+        // 아키타입: 덱 우선(라운드 내 4종 골고루), 파3는 지형 제약 자체 규칙
         let signature: SignatureKind? = signatureRoll
-            ? pickSignatureKind(par: par, dist: dist, rand: &rand)
+            ? (preferredKind ?? pickSignatureKind(par: par, dist: dist, rand: &rand))
             : nil
         var sigWater: ClosedRange<Double>? = nil
         var sigRisers: [ClosedRange<Double>] = []
@@ -487,10 +510,13 @@ public enum CourseGenerator {
                 return false
             }
             // 시그니처 홀: 라이저(급경사면) 위 벙커 금지 — 트레드에만 판다
+            // (중앙만 검사하면 폭이 라이저에 '걸친' 벙커가 통과한다 — 양끝+중앙 3점)
             if signature != nil {
-                let mid = max(1, min(elev.count - 2, Int((bFrom + bTo) / 2)))
-                if abs(elev[mid + 1] - elev[mid - 1]) / 2 > 0.15 {
-                    return false
+                for sx in [bFrom, (bFrom + bTo) / 2, bTo] {
+                    let i = max(1, min(elev.count - 2, Int(sx)))
+                    if abs(elev[i + 1] - elev[i - 1]) / 2 > 0.15 {
+                        return false
+                    }
                 }
             }
             segments = carve(segments, from: bFrom, to: bTo, type: .bunker)
