@@ -358,16 +358,8 @@ public enum CourseGenerator {
             let j = Int(rand.next() * Double(i + 1))
             pars.swapAt(i, j)
         }
-        // 시그니처 위주 구성 (2026-08-20 사용자 판정: "화면 전체 맵이 더 재밌다 — 그걸 위주로"):
-        // 라운드당 6~9홀이 다이나믹, 평지 홀이 오히려 쉬어가는 희귀 홀이 된다
-        let sigRoll = rand.next()
-        let sigCount = sigRoll < 0.30 ? 6 : (sigRoll < 0.70 ? 7 : (sigRoll < 0.90 ? 8 : 9))
-        var order = Array(0 ..< pars.count)
-        for i in stride(from: order.count - 1, through: 1, by: -1) {
-            let j = Int(rand.next() * Double(i + 1))
-            order.swapAt(i, j)
-        }
-        let sigSet = Set(order.prefix(sigCount))
+        // 전 홀 다이나믹 (2026-08-20 사용자 판정 2차: "모든 홀 전부 다이나믹하게") —
+        // 평지 브리더 없음. 표준 지형 경로(baseElevation)는 향후 클래식 모드용으로 보존
         // 아키타입 덱: 다 뽑을 때까지 중복 없이 — 한 라운드 안에서 4종이 골고루 나온다
         // (파3는 지형 제약이 있어 덱을 소비하지 않고 자체 규칙으로 뽑는다)
         var deck: [SignatureKind] = []
@@ -381,10 +373,9 @@ public enum CourseGenerator {
             }
             return deck.removeLast()
         }
-        return pars.enumerated().map { i, par in
-            let sig = sigSet.contains(i)
-            let preferred: SignatureKind? = sig && par >= 4 ? drawKind() : nil
-            return makeHole(par: par, rand: &rand, signatureRoll: sig, preferredKind: preferred)
+        return pars.map { par in
+            let preferred: SignatureKind? = par >= 4 ? drawKind() : nil
+            return makeHole(par: par, rand: &rand, signatureRoll: true, preferredKind: preferred)
         }
     }
 

@@ -39,6 +39,28 @@ struct WalkFlavor {
     var gripLift = 0.0 // 클럽 살짝 들기 (0~1)
     var clubPointBlend = 0.0 // 클럽 전방 수평 지목 블렌드
     var clubUpBlend = 0.0 // 클럽 수직 세워 균형 블렌드
+
+    /// 잔동작 진폭 부스트 (2026-08-20 사용자: "동작이 완전 커야") — 오프셋 채널만 스케일.
+    /// twirlAngle은 회전수 의미(스케일하면 클럽이 거꾸로 선 채 끝남), shoulder는 기능 포즈라 제외.
+    /// 팔 오프셋은 리그의 팔 길이에서 자연 포화 — 큰 값은 '팔을 끝까지 뻗음'이 된다.
+    mutating func boostMotion(_ k: Double) {
+        headDxOff *= k
+        headDyOff *= k
+        shoulderXOff *= k
+        shoulderYOff *= k
+        hipXOff *= k
+        hipYOff *= k
+        armAmpBoost *= k
+        freeHandXOff *= k
+        freeHandYOff *= k
+        phiWobble *= k
+        gripLift = min(1, gripLift * k)
+        skip = min(1, skip * k)
+        lookBack = min(1, lookBack * k)
+        hatTouch = min(1, hatTouch * k)
+        clubPointBlend = min(1, clubPointBlend * k)
+        clubUpBlend = min(1, clubUpBlend * k)
+    }
 }
 
 struct WalkFlavorEvent {

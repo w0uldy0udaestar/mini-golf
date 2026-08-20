@@ -1437,6 +1437,9 @@ final class GameScene: SKScene {
                 }
                 e.kind.apply(u: u, into: &flavor)
             }
+            // 잔동작 진폭 부스트 (2026-08-20 사용자: "동작이 완전 커야") — 잔동작만.
+            // 쇼피스·트립·지형 적응은 이 뒤에 얹혀 원설계 크기 유지
+            flavor.boostMotion(1.7)
             // 쇼피스 밈 모션 — 동결된 무대 위에 크게 얹는다 (WalkFlavors.swift ShowpieceKind)
             if let sa = w.showAt, let sk = w.showKind {
                 let su = (w.t - sa) / sk.duration
