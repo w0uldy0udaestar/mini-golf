@@ -325,8 +325,10 @@ final class GolfCoreTests: XCTestCase {
         let dr = CourseStrategy.total(of: "DR")
         var inBand = 0, par45 = 0, layupViolations = 0
         for seed in 1 ... 30 {
-            // 시그니처 홀 제외 — 협곡 워터 등은 아키타입이 의도적으로 배치하는 시련
-            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.par >= 4 && h.signature == nil {
+            // 표준 지형 경로 회귀 (클래식 모드용 보존) — 시그니처는 아키타입이 시련을 직접 배치
+            var rand = SeededRandom(seed: UInt32(seed))
+            let holes = [4, 4, 4, 4, 5, 5].map { CourseGenerator.makeHole(par: $0, rand: &rand) }
+            for h in holes {
                 par45 += 1
                 func fromTee(_ x: Double) -> Double {
                     abs(x - h.teeX)
@@ -361,11 +363,13 @@ final class GolfCoreTests: XCTestCase {
     // ── 지형 다이나믹 ──
 
     func testTerrainDynamicButBounded() {
+        // 표준 지형 경로 회귀 (전 홀 다이나믹 전환 후 프로덕션 미사용 — 클래식 모드용 보존).
         // 경계: 노드 클램프 -10~15 + 워터 딥(-1.2)·벙커 딥(-0.9)·그린 슬로프(±약 2.1) 여유분
-        // 시그니처 홀은 별도 예산(0.34×worldW) — testSignatureHoles에서 검증
         var maxRange = 0.0
         for seed in 1 ... 30 {
-            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) where h.signature == nil {
+            var rand = SeededRandom(seed: UInt32(seed))
+            let holes = [3, 4, 4, 4, 5].map { CourseGenerator.makeHole(par: $0, rand: &rand) }
+            for h in holes {
                 let lo = h.elevation.min() ?? 0
                 let hi = h.elevation.max() ?? 0
                 XCTAssertGreaterThan(lo, -13, "표고 하한 초과 (\(lo))")
@@ -386,8 +390,8 @@ final class GolfCoreTests: XCTestCase {
             let course = CourseGenerator.makeCourse(seed: UInt32(seed))
             let sigs = course.filter { $0.signature != nil }
             perRoundCounts.append(sigs.count)
-            // 시그니처 위주 구성 (2026-08-20 사용자 판정: "화면 전체 맵 위주로")
-            XCTAssertTrue((6 ... 9).contains(sigs.count), "시그니처 홀은 라운드당 6~9개 (\(sigs.count))")
+            // 전 홀 다이나믹 (2026-08-20 사용자 판정 2차: "모든 홀 전부")
+            XCTAssertEqual(sigs.count, 9, "모든 홀이 시그니처여야 함 (\(sigs.count))")
             let roundKinds = Set(sigs.compactMap(\.signature))
             XCTAssertGreaterThanOrEqual(roundKinds.count, 3, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
             for h in sigs {
@@ -411,8 +415,6 @@ final class GolfCoreTests: XCTestCase {
                 XCTAssertLessThan(abs(h.slope(at: h.teeX)), 0.06, "\(h.signature!): 티가 가파름")
             }
         }
-        // 평지(브리더) 홀도 가끔 나온다 — 9/9 풀 다이나믹 라운드는 10%뿐
-        XCTAssertGreaterThan(perRoundCounts.filter { $0 < 9 }.count, 40, "브리더 홀이 있는 라운드가 다수여야 함")
         XCTAssertEqual(kindsSeen, Set(SignatureKind.allCases), "일부 아키타입이 안 나옴: \(kindsSeen)")
         XCTAssertGreaterThan(maxRelRange, 0.6, "최대 낙차가 예산 대비 작음 (\(maxRelRange))")
     }
