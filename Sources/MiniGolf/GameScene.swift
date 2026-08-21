@@ -13,7 +13,7 @@ final class GameScene: SKScene {
     private var clubIdx = 0
     private var heightPct = 0.6
     private var results: [(par: Int, strokes: Int, gaveUp: Bool)] = []
-    private enum Mode { case aim, swinging, motion, walking, holed, end }
+    private enum Mode { case aim, swinging, motion, walking, holed, end, surprise }
     private var mode = Mode.aim
     private var dir = 1.0
     private var heldKeys = Set<UInt16>()
@@ -30,6 +30,8 @@ final class GameScene: SKScene {
     var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
     var demoMotionShowcase = false // --demo-motions: 모션 100종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
+    var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
+    var surpriseCursor = 0
     private var motionCursor = 0
     private var showpieceCursor = 0
     private var demoWait = 0.0
@@ -1515,6 +1517,8 @@ final class GameScene: SKScene {
                     }
                     if strokes >= Phys.maxStrokes {
                         giveUp()
+                    } else if let kind = rollSurprise() {
+                        playSurprise(kind)
                     } else {
                         startWalk()
                     }
@@ -1734,7 +1738,7 @@ final class GameScene: SKScene {
             headMorph: headMorph, visualLoft: renderLoft, dir: dir
         )
 
-        if mode != .holed { // 홀인 드롭 연출 중에는 SKAction이 공 위치를 갖는다
+        if mode != .holed, mode != .surprise { // 홀인 드롭·서프라이즈 연출 중에는 SKAction이 공 위치를 갖는다
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
             let heightAbove = ball.y - hole.ground(at: ball.x)
             shadowNode.isHidden = heightAbove <= 0.2
@@ -1761,5 +1765,196 @@ final class GameScene: SKScene {
             x: min(size.width - 54, max(54, px(stickX) - CGFloat(dir) * 20)), // 벽 옆에서도 잘리지 않게
             y: groundY(stickX) + 112
         )
+    }
+}
+
+enum SurpriseKind: String, CaseIterable {
+    case birdSteal // 새가 공을 물고 날아가 랜덤 지점에 드롭
+    case moleNudge // 두더지가 쏙 나와 공을 톡 밀고 사라진다
+}
+
+extension GameScene {
+    /// 샷 종료 시 호출 — 발동이면 종류 반환. 홀인 직전(그린 위)은 제외 (부당함 방지)
+    func rollSurprise() -> SurpriseKind? {
+        guard hole.surface(at: ball.x) != .green else { return nil }
+        if demoSurpriseForce {
+            surpriseCursor += 1
+            return SurpriseKind.allCases[surpriseCursor % SurpriseKind.allCases.count]
+        }
+        guard Double.random(in: 0 ..< 1) < 0.025 else { return nil } // 라운드에 한 번 볼까 말까
+        return SurpriseKind.allCases.randomElement()
+    }
+
+    func playSurprise(_ kind: SurpriseKind) {
+        mode = .surprise
+        if demoMode {
+            print("SURPRISE \(kind.rawValue) @\(Int(ball.x))")
+            fflush(stdout)
+        }
+        switch kind {
+        case .birdSteal: playBirdSteal()
+        case .moleNudge: playMoleNudge()
+        }
+    }
+
+    /// ── 새 도둑: 유불리 랜덤 드롭 (골프 규칙 18-1 '외부 요인' — 놓인 자리에서 플레이) ──
+    private func playBirdSteal() {
+        let bird = makeBird()
+        let ballPos = CGPoint(x: px(ball.x), y: groundY(ball.x) + 5.5)
+        // 드롭 지점: 홀 방향 ±35m 랜덤 — 도움일 수도, 배신일 수도
+        let delta = Double.random(in: -35 ... 35)
+        var dropX = ball.x + delta
+        dropX = min(max(dropX, 8), hole.worldW - 8)
+        if hole.surface(at: dropX) == .water { // 물에는 안 떨어뜨린다 (벌타 사건은 과함)
+            dropX = ball.x - delta.magnitude * 0.4
+        }
+        let dropPos = CGPoint(x: px(dropX), y: groundY(dropX) + 5.5)
+        let entryY = size.height * 0.86
+        bird.position = CGPoint(x: ballPos.x < size.width / 2 ? size.width + 40 : -40, y: entryY)
+        addChild(bird)
+
+        let swoopIn = SKAction.move(to: ballPos, duration: 0.9)
+        swoopIn.timingMode = .easeInEaseOut
+        let carry = SKAction.move(to: CGPoint(x: dropPos.x, y: dropPos.y + 130), duration: 1.1)
+        carry.timingMode = .easeInEaseOut
+        let exitX = bird.position.x // 들어온 쪽으로 되돌아 나간다
+        let leave = SKAction.move(to: CGPoint(x: exitX, y: size.height * 0.95), duration: 0.9)
+        leave.timingMode = .easeIn
+
+        reactionKind = .dejected // 스틱맨: 아니 내 공…
+        reactionAt = lastTime
+        toast("새가 공을 물어갔다!", sub: nil)
+        bird.run(.sequence([
+            swoopIn,
+            .run { [weak self] in // 낚아채기 — 공이 새를 따라간다
+                guard let self else { return }
+                SoundKit.shared.wall(speed: 3)
+                ballNode.removeAllActions()
+                ballNode.run(SKAction.customAction(withDuration: 2.0) { [weak self, weak bird] node, _ in
+                    guard let bird else { return }
+                    node.position = CGPoint(x: bird.position.x, y: bird.position.y - 9)
+                    self?.shadowNode.isHidden = true
+                })
+            },
+            carry,
+            .run { [weak self] in // 드롭
+                guard let self else { return }
+                ball = BallState(x: dropX, y: hole.ground(at: dropX))
+                ballNode.removeAllActions()
+                let fall = SKAction.move(to: dropPos, duration: 0.42)
+                fall.timingMode = .easeIn
+                ballNode.run(.sequence([fall, .run { [weak self] in
+                    guard let self else { return }
+                    SoundKit.shared.bounce(speed: 3, surface: hole.surface(at: dropX))
+                    FX.dust(on: self, at: dropPos, surface: hole.surface(at: dropX), intensity: 0.4)
+                }]))
+            },
+            leave,
+            .removeFromParent(),
+            .run { [weak self] in self?.finishSurprise() },
+        ]))
+        // 날갯짓 — 위아래 파닥임
+        bird.run(.repeatForever(.sequence([
+            .scaleY(to: 0.55, duration: 0.12), .scaleY(to: 1.0, duration: 0.12),
+        ])))
+    }
+
+    /// ── 두더지: 공을 1~3m 톡 — 사소한 참견 ──
+    private func playMoleNudge() {
+        let mole = makeMole()
+        let side: Double = Bool.random() ? 1 : -1
+        let moleX = ball.x - side * 1.2
+        mole.position = CGPoint(x: px(moleX), y: groundY(moleX) - 14)
+        mole.setScale(0.1)
+        addChild(mole)
+        let popUp = SKAction.group([
+            SKAction.move(to: CGPoint(x: px(moleX), y: groundY(moleX) + 4), duration: 0.3),
+            SKAction.scale(to: 1, duration: 0.3),
+        ])
+        popUp.timingMode = .easeOut
+        let nudgeDist = side * Double.random(in: 1.2 ... 3.0)
+        let newX = min(max(ball.x + nudgeDist, 6), hole.worldW - 6)
+        let sink = SKAction.group([
+            SKAction.move(to: CGPoint(x: px(moleX), y: groundY(moleX) - 14), duration: 0.25),
+            SKAction.scale(to: 0.1, duration: 0.25),
+        ])
+        sink.timingMode = .easeIn
+
+        toast("두더지!", sub: nil)
+        mole.run(.sequence([
+            popUp,
+            .wait(forDuration: 0.35),
+            .run { [weak self] in // 톡 — 공이 짧게 굴러간다
+                guard let self else { return }
+                SoundKit.shared.bounce(speed: 2, surface: hole.surface(at: ball.x))
+                ball = BallState(x: newX, y: hole.ground(at: newX))
+                let roll = SKAction.move(
+                    to: CGPoint(x: px(newX), y: groundY(newX) + 5.5), duration: 0.5
+                )
+                roll.timingMode = .easeOut
+                ballNode.run(roll)
+            },
+            .wait(forDuration: 0.5),
+            sink,
+            .removeFromParent(),
+            .run { [weak self] in self?.finishSurprise() },
+        ]))
+    }
+
+    private func finishSurprise() {
+        guard mode == .surprise else { return } // 새 라운드 등으로 이미 전환됐으면 무시
+        startWalk()
+    }
+
+    /// ── 생물 셰이프: 게임 회색 실루엣 문법 ──
+    private func makeBird() -> SKNode {
+        let bird = SKNode()
+        let body = SKShapeNode(ellipseOf: CGSize(width: 16, height: 9))
+        body.fillColor = NSColor(white: 0.82, alpha: 0.95)
+        body.strokeColor = .clear
+        let wing = SKShapeNode()
+        let wp = CGMutablePath()
+        wp.move(to: CGPoint(x: -10, y: 6))
+        wp.addLine(to: CGPoint(x: -1, y: 1))
+        wp.addLine(to: CGPoint(x: 8, y: 6))
+        wing.path = wp
+        wing.strokeColor = NSColor(white: 0.82, alpha: 0.95)
+        wing.lineWidth = 2.4
+        wing.lineCap = .round
+        let beak = SKShapeNode()
+        let bp = CGMutablePath()
+        bp.move(to: CGPoint(x: 8, y: 1))
+        bp.addLine(to: CGPoint(x: 13, y: -1))
+        beak.path = bp
+        beak.strokeColor = NSColor(white: 0.7, alpha: 0.95)
+        beak.lineWidth = 2
+        beak.lineCap = .round
+        bird.addChild(body)
+        bird.addChild(wing)
+        bird.addChild(beak)
+        bird.zPosition = 5
+        return bird
+    }
+
+    private func makeMole() -> SKNode {
+        let mole = SKNode()
+        let head = SKShapeNode()
+        let hp = CGMutablePath()
+        hp.addArc(
+            center: .zero, radius: 9,
+            startAngle: 0, endAngle: .pi, clockwise: false
+        )
+        hp.closeSubpath()
+        head.path = hp
+        head.fillColor = NSColor(white: 0.55, alpha: 0.95)
+        head.strokeColor = .clear
+        let nose = SKShapeNode(circleOfRadius: 2.2)
+        nose.position = CGPoint(x: 0, y: 8)
+        nose.fillColor = NSColor(white: 0.35, alpha: 0.95)
+        nose.strokeColor = .clear
+        mole.addChild(head)
+        mole.addChild(nose)
+        mole.zPosition = 4
+        return mole
     }
 }
