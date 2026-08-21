@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var contrastMenuItem: NSMenuItem!
     private var bumperMenuItem: NSMenuItem!
     private var monitorMenu: NSMenu!
+    private var hatMenu: NSMenu!
     private var lastResignKey = Date.distantPast
 
     /// ── 모니터 선택 (2026-08-20 듀얼 모니터 요청): ⛳️ 메뉴에서 선택, 세션 간 기억 ──
@@ -83,6 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
         scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 100종 순서 시연 (카탈로그)
         scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
+        if let i = args.firstIndex(of: "--hat"), i + 1 < args.count, let h = Hat(rawValue: args[i + 1]) {
+            scene.applyHat(h) // 모자 시각 검증용 (저장 안 함)
+        }
+        if args.contains("--demo-records") { // 기록 카드 레이아웃 검증용
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak scene] in scene?.showRecordsCard() }
+        }
         panel.contentView = skView
         skView.presentScene(scene)
 
@@ -178,6 +185,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         bumperMenuItem.target = self
         bumperMenuItem.state = Theme.windowBumpers ? .on : .off
+        let hatItem = statusMenu.addItem(withTitle: "모자", action: nil, keyEquivalent: "")
+        hatMenu = NSMenu()
+        hatItem.submenu = hatMenu // 항목은 열 때마다 재구성 (해금 반영)
+        statusMenu.addItem(withTitle: "기록", action: #selector(showRecords), keyEquivalent: "").target = self
         let monitorItem = statusMenu.addItem(withTitle: "모니터", action: nil, keyEquivalent: "")
         monitorMenu = NSMenu()
         monitorItem.submenu = monitorMenu // 항목은 열 때마다 재구성 (연결 상태 반영)
@@ -189,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
             rebuildMonitorMenu()
+            rebuildHatMenu()
             statusItem.menu = statusMenu
             statusItem.button?.performClick(nil) // 메뉴 추적은 이 안에서 동기 실행됨
             statusItem.menu = nil
@@ -200,6 +212,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleSound() {
         SoundKit.shared.enabled.toggle()
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
+    }
+
+    /// 모자 서브메뉴 — 해금된 것만 선택 가능, 잠긴 것은 필요 배지 수 안내
+    private func rebuildHatMenu() {
+        hatMenu.removeAllItems()
+        let unlocked = Records.shared.unlockedHats
+        for hat in Hat.allCases {
+            let locked = !unlocked.contains(hat)
+            let title = locked ? "\(hat.title) — 잠김 (배지 \(hat.need)개)" : hat.title
+            let item = hatMenu.addItem(withTitle: title, action: #selector(selectHat(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = hat.rawValue
+            item.isEnabled = !locked
+            item.state = Records.shared.hat == hat ? .on : .off
+        }
+    }
+
+    @objc private func selectHat(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let hat = Hat(rawValue: raw) else { return }
+        Records.shared.hat = hat
+        Records.shared.save()
+        scene.applyHat(hat)
+    }
+
+    @objc private func showRecords() {
+        scene.showRecordsCard()
     }
 
     @objc private func toggleBumpers() {

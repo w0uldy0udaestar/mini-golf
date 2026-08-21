@@ -97,6 +97,8 @@ final class GameScene: SKScene {
     private var trailPoints: [CGPoint] = []
     private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
     private var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정
+    private var shotHitBumper = false // 이 샷에서 범퍼를 맞았나 — 뱅크샷 홀인 배지 판정
+    private var roundHadWater = false // 무입수 라운드 배지 판정
 
     private var hole: Hole {
         course[holeIdx]
@@ -254,6 +256,7 @@ final class GameScene: SKScene {
         )
         holeIdx = 0
         results = []
+        roundHadWater = false
         scorecard.hide()
         startHole()
     }
@@ -693,6 +696,7 @@ final class GameScene: SKScene {
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope
         )
+        shotHitBumper = false
         // 창 범퍼 모드: 샷 순간의 창 배치를 스냅샷 — 이 샷의 비행 동안 고정 범퍼
         if Theme.windowBumpers, let screen = view?.window?.screen {
             shotBumpers = WindowBumpers.snapshot(
@@ -784,7 +788,116 @@ final class GameScene: SKScene {
             overFlag: true,
             titleScale: diff <= -2 ? 1.3 : diff == -1 ? 1.12 : diff <= 0 ? 1.0 : 0.88
         )
+        recordHoleOut(diff: diff)
         run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
+    }
+
+    // ── 기록·배지 (2026-08-21 재미 확장 2번) ──
+
+    /// 새 배지는 홀 토스트가 걷힌 뒤에 알린다 (연출 겹침 방지)
+    private func announceBadges(_ earned: [Badge]) {
+        guard !earned.isEmpty else { return }
+        let names = earned.map(\.title).joined(separator: " · ")
+        run(.sequence([.wait(forDuration: 2.2), .run { [weak self] in
+            guard let self else { return }
+            toast("배지 획득", sub: names, titleScale: 1.1)
+            SoundKit.shared.chime()
+            let hats = Records.shared.unlockedHats
+            if let newest = hats.last, newest != .none, Records.shared.hat == .none {
+                // 첫 해금은 자동 착용 — 메뉴를 몰라도 보상이 눈에 보인다
+                Records.shared.hat = newest
+                Records.shared.save()
+                stickman.setHat(newest)
+            }
+        }]))
+    }
+
+    private func recordHoleOut(diff: Int) {
+        guard !demoMode else { return } // 기록은 실플레이 전용
+        var r = Records.shared
+        var earned: [Badge] = []
+        r.holesPlayed += 1
+        r.totalStrokes += strokes
+        if strokes == 1 {
+            r.holeInOnes += 1
+            if r.award(.holeInOne) {
+                earned.append(.holeInOne)
+            }
+        }
+        if diff <= -2 {
+            r.eagles += 1
+            if r.award(.firstEagle) {
+                earned.append(.firstEagle)
+            }
+        } else if diff == -1 {
+            r.birdies += 1
+            if r.award(.firstBirdie) {
+                earned.append(.firstBirdie)
+            }
+        }
+        if diff <= 0, let sig = hole.signature {
+            if sig == .canyon, r.award(.canyonTamer) {
+                earned.append(.canyonTamer)
+            }
+            if sig == .summitGreen, r.award(.summiteer) {
+                earned.append(.summiteer)
+            }
+        }
+        if shotHitBumper, r.award(.bumperBank) {
+            earned.append(.bumperBank)
+        }
+        if r.holesPlayed >= 100, r.award(.century) {
+            earned.append(.century)
+        }
+        Records.shared = r
+        r.save()
+        announceBadges(earned)
+    }
+
+    private func recordRoundEnd(total: Int) {
+        guard !demoMode else { return } // 기록은 실플레이 전용
+        var r = Records.shared
+        var earned: [Badge] = []
+        r.roundsCompleted += 1
+        if r.bestRound.map({ total < $0 }) ?? true {
+            r.bestRound = total
+        }
+        if r.award(.firstRound) {
+            earned.append(.firstRound)
+        }
+        if total < 0, r.award(.underPar) {
+            earned.append(.underPar)
+        }
+        if !roundHadWater, !results.contains(where: \.gaveUp), r.award(.dryRound) {
+            earned.append(.dryRound)
+        }
+        if r.roundsCompleted >= 10, r.award(.marathoner) {
+            earned.append(.marathoner)
+        }
+        Records.shared = r
+        r.save()
+        announceBadges(earned)
+    }
+
+    /// 모자 착용 (메뉴 선택·해금 자동 착용 공용)
+    func applyHat(_ hat: Hat) {
+        stickman.setHat(hat)
+    }
+
+    /// 메뉴 → 기록: 조용한 계기판 스타일 텍스트 카드
+    func showRecordsCard() {
+        let r = Records.shared
+        scorecard.hide()
+        toastTitle.removeAllActions()
+        toastSub.removeAllActions()
+        toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.72)
+        toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.72 - 46)
+        toastTitle.setScale(1.1)
+        toastTitle.setText("기록")
+        toastSub.setText(r.summaryLines.joined(separator: "\n"))
+        for node in [toastTitle, toastSub] as [SKNode] {
+            node.run(.sequence([.fadeIn(withDuration: 0.18), .wait(forDuration: 6), .fadeOut(withDuration: 0.6)]))
+        }
     }
 
     /// 공이 컵 속으로 굴러떨어지는 연출 — 렌더 루프는 .holed 동안 공 위치를 덮지 않는다
@@ -810,6 +923,11 @@ final class GameScene: SKScene {
 
     private func onWater() {
         strokes += 1
+        roundHadWater = true
+        if !demoMode {
+            Records.shared.waterBalls += 1
+            Records.shared.save()
+        }
         endShotTrail()
         SoundKit.shared.splash()
         FX.ripple(on: self, at: CGPoint(x: px(ball.x), y: groundY(ball.x)))
@@ -847,6 +965,7 @@ final class GameScene: SKScene {
                 : "합계 \(totalStr)  —  R로 새 라운드"
             scorecard.show(results: results, title: "라운드 종료", footer: footer)
             SoundKit.shared.chime()
+            recordRoundEnd(total: total)
         }
     }
 
@@ -1362,6 +1481,11 @@ final class GameScene: SKScene {
                 SoundKit.shared.wall(speed: w.speed)
             }
             if let bh = bumperHit, bh.speed > 0.8 { // 창 범퍼 — 벽 반사음 + 임팩트 링
+                shotHitBumper = true
+                if !demoMode {
+                    Records.shared.bumperHits += 1
+                    Records.shared.save()
+                }
                 SoundKit.shared.wall(speed: bh.speed)
                 FX.ripple(on: self, at: CGPoint(x: px(bh.x), y: py(bh.y)))
                 if demoMode {
@@ -1473,11 +1597,20 @@ final class GameScene: SKScene {
             if let sa = w.showAt, let sk = w.showKind {
                 let su = (w.t - sa) / sk.duration
                 if su > 0, su < 1 {
-                    if demoMode, w.t - dt < sa { // 시작 프레임 — 캡처 워처에 위치 통지
-                        let info = "\(sk.rawValue) \(Int(px(stickX))) \(Int(groundY(stickX)))"
-                        try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
-                        print("SHOWPIECE \(info)")
-                        fflush(stdout)
+                    if w.t - dt < sa { // 시작 프레임
+                        if !demoMode { // 기록은 실플레이 전용
+                            Records.shared.showpiecesSeen += 1
+                            if Records.shared.showpiecesSeen >= 10 {
+                                Records.shared.award(.memeWitness) // 연출은 기록 카드에서
+                            }
+                            Records.shared.save()
+                        }
+                        if demoMode { // 캡처 워처에 위치 통지
+                            let info = "\(sk.rawValue) \(Int(px(stickX))) \(Int(groundY(stickX)))"
+                            try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
+                            print("SHOWPIECE \(info)")
+                            fflush(stdout)
+                        }
                     }
                     sk.apply(u: su, into: &flavor)
                 }

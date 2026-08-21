@@ -226,6 +226,7 @@ final class StickmanNode: SKNode {
     private let gripColor = NSColor(white: 0.6, alpha: 0.9) // 그립 밴드 — 클럽다움의 디테일
     private let rimColor = NSColor(white: 0, alpha: 0.32) // 고대비 모드용 다크 림
     private let headShape = SKShapeNode(circleOfRadius: 10)
+    private let hatNode = SKShapeNode() // 해금 모자 (기록·도전과제 보상) — 머리 자식이라 자동 추종
     private let bodyShape = SKShapeNode() // 척추+다리+리드 암 통합 경로
     private let trailArmShape = SKShapeNode() // 트레일 암 — 옅게 그려 원근을 만든다
     private let shaftShape = SKShapeNode()
@@ -276,7 +277,50 @@ final class StickmanNode: SKNode {
                   shaftShape, clubHeadShape, gripShape, headShape] as [SKNode] {
             addChild(n)
         }
+        headShape.addChild(hatNode) // 머리를 따라다닌다
+        setHat(Records.shared.hat)
         applyContrast()
+    }
+
+    /// 해금 모자 착용 — 게임 회색 베이스 유지, 왕관만 포인트 (보상의 특별함)
+    func setHat(_ hat: Hat) {
+        hatNode.removeAllChildren()
+        let path = CGMutablePath()
+        var fill = NSColor(white: 0.82, alpha: 0.95)
+        switch hat {
+        case .none:
+            hatNode.path = nil
+            return
+        case .straw: // 챙 넓은 밀짚 — 납작 타원 챙 + 낮은 크라운
+            path.addEllipse(in: CGRect(x: -14, y: 6.5, width: 28, height: 4.5))
+            path.addRect(CGRect(x: -6.5, y: 8, width: 13, height: 5.5))
+            fill = NSColor(white: 0.86, alpha: 0.95)
+        case .propeller: // 반구 캡 + 꼭지 프로펠러
+            path.addArc(
+                center: CGPoint(x: 0, y: 6), radius: 9.5,
+                startAngle: 0, endAngle: .pi, clockwise: false
+            )
+            path.closeSubpath()
+            path.addEllipse(in: CGRect(x: -8, y: 15.5, width: 16, height: 2.6)) // 날개
+            path.addRect(CGRect(x: -0.9, y: 13.5, width: 1.8, height: 3))
+        case .top: // 실크햇 — 챙 + 높은 원통
+            path.addRect(CGRect(x: -11, y: 6.5, width: 22, height: 2.6))
+            path.addRect(CGRect(x: -6.5, y: 9, width: 13, height: 12))
+            fill = NSColor(white: 0.7, alpha: 0.95)
+        case .crown: // 왕관 — 삼각 스파이크 3개 (유일한 포인트: 깃발 레드)
+            path.move(to: CGPoint(x: -9, y: 7))
+            path.addLine(to: CGPoint(x: -9, y: 15))
+            path.addLine(to: CGPoint(x: -4.5, y: 10))
+            path.addLine(to: CGPoint(x: 0, y: 16))
+            path.addLine(to: CGPoint(x: 4.5, y: 10))
+            path.addLine(to: CGPoint(x: 9, y: 15))
+            path.addLine(to: CGPoint(x: 9, y: 7))
+            path.closeSubpath()
+            fill = NSColor(red: 0.894, green: 0.314, blue: 0.235, alpha: 0.95)
+        }
+        hatNode.path = path
+        hatNode.fillColor = fill
+        hatNode.strokeColor = .clear
     }
 
     @available(*, unavailable) required init?(coder _: NSCoder) {
