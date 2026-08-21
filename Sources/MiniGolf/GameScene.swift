@@ -1796,7 +1796,8 @@ extension GameScene {
             surpriseCursor += 1
             return SurpriseKind.allCases[surpriseCursor % SurpriseKind.allCases.count]
         }
-        guard Double.random(in: 0 ..< 1) < 0.025 else { return nil } // 라운드에 한 번 볼까 말까
+        // 8%: 라운드(≈25~35샷)에 2~3번 — "더 자주" (2026-08-21 실플레이 피드백, 초기 2.5%)
+        guard Double.random(in: 0 ..< 1) < 0.08 else { return nil }
         return SurpriseKind.allCases.randomElement()
     }
 
