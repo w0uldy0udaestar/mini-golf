@@ -73,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if args.contains("--demo") || args.contains("--demo-wall") {
             scene.demoMode = true
             scene.demoWallForce = args.contains("--demo-wall")
-            SoundKit.shared.enabled = false
+            SoundKit.shared.muted = true // 세션 한정 — 사용자 사운드 설정 보존
         }
         scene.demoCardPreview = args.contains("--demo-card")
         scene.demoNoClamp = args.contains("--no-wall-clamp") // 침범 재현·검증 전용
