@@ -219,13 +219,15 @@ public enum Ballistics {
             return .none
 
         case .fly:
-            let v = max(hypot(b.vx, b.vy), 1e-9)
+            // 바람: 공기력은 대기 상대속도 기준 — 뒷바람은 항력을 줄이고 맞바람은 키운다
+            let rvx = b.vx - hole.wind
+            let v = max(hypot(rvx, b.vy), 1e-9)
             let omega = b.spin * 2 * .pi / 60
             let spinRatio = min(Phys.ballRadius * omega / v, Phys.spinRatioMax)
             let cl = min(Phys.clMax, Phys.clBase + Phys.clSlope * spinRatio)
-            // 항력(속도 반대) + 마그누스 양력(속도 수직, 백스핀=위) + 중력
-            let ax = -Phys.q * Phys.cd * v * b.vx + Phys.q * cl * v * -b.vy * b.spinSign
-            let ay = -Phys.g - Phys.q * Phys.cd * v * b.vy + Phys.q * cl * v * b.vx * b.spinSign
+            // 항력(상대속도 반대) + 마그누스 양력(상대속도 수직, 백스핀=위) + 중력
+            let ax = -Phys.q * Phys.cd * v * rvx + Phys.q * cl * v * -b.vy * b.spinSign
+            let ay = -Phys.g - Phys.q * Phys.cd * v * b.vy + Phys.q * cl * v * rvx * b.spinSign
             let prevX = b.x, prevY = b.y
             b.vx += ax * dt
             b.vy += ay * dt

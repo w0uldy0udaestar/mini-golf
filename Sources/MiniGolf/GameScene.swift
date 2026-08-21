@@ -1156,6 +1156,17 @@ final class GameScene: SKScene {
         }())
         flag.fillColor = Palette.flagRed
         flag.strokeColor = .clear
+        // 바람 시각화 (2026-08-21): 깃발이 바람 부는 쪽을 향하고, 세기 비례로 펄럭인다
+        let w = hole.wind
+        if abs(w) > 0.3 {
+            flag.xScale = w < 0 ? -1 : 1 // 폴 기준 미러 (경로 원점이 폴)
+            let mag = min(1, abs(w) / 7)
+            let period = 0.5 - 0.3 * mag // 강할수록 빠르게
+            flag.run(.repeatForever(.sequence([
+                .scaleX(to: flag.xScale * (0.55 + 0.15 * (1 - mag)), duration: period),
+                .scaleX(to: flag.xScale, duration: period),
+            ])))
+        }
         flagNode.addChild(pole)
         flagNode.addChild(flag)
         flagNode.position = CGPoint(x: px(hole.holeX), y: cupY)
@@ -1260,7 +1271,11 @@ final class GameScene: SKScene {
         scoreTitle.setText("\(holeIdx + 1)번 홀 · 파 \(hole.par)")
         scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lie.label) · \(Int(remain))m")
         clubTitle.setText(club.name)
-        clubSub.setText(club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터")
+        let cat = club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터"
+        // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
+        let w = hole.wind
+        let windStr = abs(w) < 0.5 ? "" : " · 바람 \(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
+        clubSub.setText(cat + windStr)
     }
 
     /// ── 입력 ──
