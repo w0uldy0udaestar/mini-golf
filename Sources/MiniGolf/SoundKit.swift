@@ -6,6 +6,9 @@ import GolfCore
 final class SoundKit {
     static let shared = SoundKit()
 
+    /// 세션 한정 음소거 (데모·캡처용) — 사용자 설정(enabled)을 건드리지 않는다.
+    /// 데모가 enabled를 끄면 didSet이 영구 저장돼 실플레이까지 무음이 됐다 (2026-08-21 실플레이 발견)
+    var muted = false
     var enabled: Bool {
         didSet { UserDefaults.standard.set(enabled, forKey: "soundEnabled") }
     }
@@ -180,7 +183,7 @@ final class SoundKit {
     // ── 합성 ──
 
     private func play(duration: Double, _ sample: (Double) -> Double) {
-        guard enabled, ok else { return }
+        guard enabled, !muted, ok else { return }
         let n = Int(duration * sr)
         guard let fmt = AVAudioFormat(standardFormatWithSampleRate: sr, channels: 1),
               let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(n)),
