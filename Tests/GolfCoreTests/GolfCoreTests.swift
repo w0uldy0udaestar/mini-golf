@@ -450,6 +450,51 @@ final class GolfCoreTests: XCTestCase {
         }
     }
 
+    // ── 바람 (2026-08-21 재미 확장 4번) ──
+
+    private func carryWithWind(_ wind: Double) -> Double {
+        let hole = Hole.flatTest(wind: wind)
+        var b = BallState(x: 50, y: 0)
+        Ballistics.launch(&b, club: club("DR"), heightPct: 1, lie: .fairway, dir: 1)
+        var t = 0.0
+        while b.phase == .fly, t < 60 {
+            _ = Ballistics.step(&b, hole: hole)
+            t += Phys.dt
+        }
+        return b.x - 50
+    }
+
+    func testTailwindCarriesFartherHeadwindShorter() {
+        let calm = carryWithWind(0)
+        let tail = carryWithWind(6)
+        let head = carryWithWind(-6)
+        XCTAssertGreaterThan(tail, calm + 8, "뒷바람 6m/s는 캐리를 눈에 띄게 늘려야 함")
+        XCTAssertLessThan(head, calm - 8, "맞바람 6m/s는 캐리를 눈에 띄게 줄여야 함")
+    }
+
+    func testWindDoesNotAffectPutting() {
+        let calm = Hole.flatTest(worldW: 300, holeX: 290)
+        let windy = Hole.flatTest(worldW: 300, holeX: 290, wind: 7)
+        func rollDist(_ hole: Hole) -> Double {
+            var b = BallState(x: 50, y: 0, vx: 6, phase: .roll, lipped: true)
+            var t = 0.0
+            while b.phase != .rest, t < 30 {
+                _ = Ballistics.step(&b, hole: hole)
+                t += Phys.dt
+            }
+            return b.x - 50
+        }
+        XCTAssertEqual(rollDist(calm), rollDist(windy), accuracy: 0.001, "굴림(퍼팅)은 바람 무영향")
+    }
+
+    func testCourseWindWithinRange() {
+        for seed in 1 ... 30 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
+                XCTAssertLessThanOrEqual(abs(h.wind), 7.0, "바람 상한 초과 (\(h.wind))")
+            }
+        }
+    }
+
     // ── 창 범퍼 (2026-08-21 재미 확장 1번) ──
 
     /// 수평으로 나는 공이 범퍼 좌측면에 맞으면 반사되어 돌아온다 (터널링 없음)

@@ -71,6 +71,7 @@ public struct Hole: Sendable {
     public let greenSlope: Double // 그린 브레이크 (경사율)
     public let obstacles: [Obstacle]
     public let signature: SignatureKind? // 시그니처 홀이면 아키타입
+    public let wind: Double // 바람 (m/s, +x 방향 절대 좌표 — 비행 항력·양력의 상대속도 기준)
 
     public init(
         par: Int, dist: Double, holeX: Double, worldW: Double,
@@ -79,7 +80,8 @@ public struct Hole: Sendable {
         waterRange: ClosedRange<Double>?, greenSlope: Double,
         teeX: Double = CourseGenerator.teeX,
         obstacles: [Obstacle] = [],
-        signature: SignatureKind? = nil
+        signature: SignatureKind? = nil,
+        wind: Double = 0
     ) {
         self.par = par
         self.dist = dist
@@ -95,6 +97,7 @@ public struct Hole: Sendable {
         self.greenSlope = greenSlope
         self.obstacles = obstacles
         self.signature = signature
+        self.wind = wind
     }
 
     public func surface(at x: Double) -> Surface {
@@ -117,13 +120,14 @@ public struct Hole: Sendable {
     }
 
     /// 물리 테스트용 평지 홀
-    public static func flatTest(worldW: Double = 10000, holeX: Double = 9999) -> Hole {
+    public static func flatTest(worldW: Double = 10000, holeX: Double = 9999, wind: Double = 0) -> Hole {
         Hole(
             par: 4, dist: holeX - CourseGenerator.teeX, holeX: holeX, worldW: worldW,
             greenStart: holeX - 12, greenEnd: holeX + 8, apronStart: holeX - 17,
             segments: [Segment(from: 0, to: worldW, type: .fairway)],
             elevation: [Double](repeating: 0, count: Int(worldW) + 2),
-            waterRange: nil, greenSlope: 0
+            waterRange: nil, greenSlope: 0,
+            wind: wind
         )
     }
 }
@@ -621,13 +625,17 @@ public enum CourseGenerator {
             }
         }
 
+        // 바람 (2026-08-21 재미 확장 4번): 약풍이 흔하고 강풍은 드묾 — 매 샷의 판단 요소
+        let wr = rand.next()
+        let wind = (rand.next() < 0.5 ? -1.0 : 1.0) * wr * wr * 7.0
         let hole = Hole(
             par: par, dist: dist, holeX: holeX, worldW: worldW,
             greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
             segments: segments, elevation: elev,
             waterRange: waterRange, greenSlope: gSlope,
             obstacles: obstacles,
-            signature: signature
+            signature: signature,
+            wind: wind
         )
         // 진행 방향 좌우 랜덤: 절반은 미러 — 오른쪽 티에서 왼쪽 홀로 (2026-08-14 사용자 요청)
         return rand.next() < 0.5 ? mirrored(hole) : hole
@@ -653,7 +661,8 @@ public enum CourseGenerator {
             greenSlope: -h.greenSlope,
             teeX: w - h.teeX, // 인스턴스 teeX (static 상수 아님 — 리뷰 S-1)
             obstacles: h.obstacles.map { Obstacle(kind: $0.kind, x: w - $0.x, size: $0.size) },
-            signature: h.signature
+            signature: h.signature,
+            wind: h.wind // 바람은 세계 절대 좌표 — 미러와 무관
         )
     }
 }
