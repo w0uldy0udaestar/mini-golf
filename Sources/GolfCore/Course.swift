@@ -260,43 +260,67 @@ public enum CourseGenerator {
             rolls(from: x, to: worldW, around: max(0, nodes.last!.e), amp: 2.2)
 
         case .summitGreen:
-            let treadW = rand.next(20, 28)
+            // 오르막 완화 (2026-08-21 실플레이 판정 "올리는 게 불가능"): 라이저 ≤20m —
+            // 5I(정점 33m)~웨지까지 널리 넘길 수 있는 높이. 트레드 30~40m — 착지 관대
+            let treadW = rand.next(30, 40)
             let climbEnd = apronStart - 8
             // 티샷 낙하 공간 — 파3는 티샷이 곧 어프로치라 짧아도 된다 (상승량 확보 우선)
             let minTeeRun = max(par == 3 ? 35 : 60, (apronStart - teeEnd) * 0.30)
             let available = climbEnd - (teeEnd + minTeeRun)
             var totalRise = min(budget * rand.next(0.80, 0.95), 100)
             func span(_ rise: Double) -> Double {
-                rise * riserRatio + Double(max(1, Int(ceil(rise / 34)))) * treadW
+                rise * riserRatio + Double(max(1, Int(ceil(rise / 20)))) * treadW
             }
-            while span(totalRise) > available, totalRise > 22 {
+            while span(totalRise) > available, totalRise > 18 {
                 totalRise *= 0.87
             }
             // 파3 최소 상승 보장 — 티런을 조금 내주더라도 다이나믹은 지킨다
             // (climbStart는 최악에도 teeEnd+8보다 한참 오른쪽 — 기하 검산 2026-08-20)
-            totalRise = max(totalRise, 22)
-            let n = max(1, Int(ceil(totalRise / 34))) // 라이저당 ≤34m — 웨지 캐리로 오를 수 있는 상한
+            totalRise = max(totalRise, 18)
+            let n = max(1, Int(ceil(totalRise / 20)))
             let step = totalRise / Double(n)
             var x = climbEnd - span(totalRise)
             nodes = [(0, 0), (teeEnd + 8, 0)]
             rolls(from: teeEnd + 8, to: x, around: 0, amp: 2.2)
-            for _ in 0 ..< n {
+            for i in 0 ..< n {
                 x = addRiser(from: x, rise: step)
-                x += treadW
-                nodes.append((x, nodes.last!.e))
+                let tw = treadW
+                if i < n - 1 { // 중간 트레드: 접시 모양 — 공이 중앙으로 모인다 (착지 관대)
+                    let e = nodes.last!.e
+                    nodes.append((x + 3, e + 0.6))
+                    nodes.append((x + tw / 2, e))
+                    nodes.append((x + tw - 3, e + 0.6))
+                }
+                x += tw
+                nodes.append((x, nodes.last!.e - (i < n - 1 ? 0.6 : 0)))
             }
-            nodes.append((worldW, nodes.last!.e)) // 그린은 정상 트레드 위
+            let top = nodes.last!.e
+            // 정상 그린 뒤 백스톱 언덕 — 오버샷이 튕겨 돌아온다 (관대한 산)
+            let backstop = min(6, budget + 1 - top)
+            if worldW > climbEnd + 30, backstop > 1.5 {
+                nodes.append((climbEnd + 22, top))
+                nodes.append((climbEnd + 30, top + backstop))
+                nodes.append((worldW, top + backstop * 0.7))
+            } else {
+                nodes.append((worldW, top)) // 그린은 정상 트레드 위
+            }
 
         case .canyon:
             let midLo = teeEnd + 55
             let midHi = apronStart - 45
             let floorW = rand.next(24, 40)
-            let depth = max(15, min(budget * rand.next(0.72, 0.92), (midHi - midLo - floorW) / (2 * riserRatio)))
+            let rim = rand.next(0, 3)
+            // 탈출 가능 상한: 림 높이·워터 딥(1.2m)까지 합쳐 총 36m — SW 최고 탄도(정점 ≈43m)로
+            // 바닥에서 나올 수 있어야 한다 (2026-08-21 오르막 완화: 드라마는 폭으로, 좌절은 제거)
+            let depth = max(15, min(
+                budget * rand.next(0.72, 0.92),
+                36 - rim,
+                (midHi - midLo - floorW) / (2 * riserRatio)
+            ))
             let gorgeW = floorW + depth * 2 * riserRatio
             let cLo = midLo + gorgeW / 2
             let cHi = midHi - gorgeW / 2
             let cx = cHi > cLo ? rand.next(cLo, cHi) : (midLo + midHi) / 2
-            let rim = rand.next(0, 3)
             nodes = [(0, rim), (teeEnd + 8, rim)]
             var x = cx - gorgeW / 2
             rolls(from: teeEnd + 8, to: x, around: rim, amp: 2.2)

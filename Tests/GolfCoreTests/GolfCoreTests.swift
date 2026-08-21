@@ -402,9 +402,10 @@ final class GolfCoreTests: XCTestCase {
                 // 예산 내 (워터 딥 -1.2·벙커 딥 -0.9 여유 +3)
                 XCTAssertGreaterThan(lo, -budget - 3, "\(h.signature!): 하한 초과 (\(lo))")
                 XCTAssertLessThan(hi, budget + 5, "\(h.signature!): 상한 초과 (\(hi))")
-                // 실제로 다이나믹한지 — 낙차가 예산의 40% 이상
+                // 실제로 다이나믹한지 — 예산 비례 하한, 단 플레이 가능성 절대 상한(협곡 38m·
+                // 산정 라이저 20m — 2026-08-21 오르막 완화)과 충돌하지 않게 22m에서 캡
                 maxRelRange = max(maxRelRange, (hi - lo) / budget)
-                XCTAssertGreaterThan(hi - lo, budget * 0.30, "\(h.signature!): 낙차가 심심함 (\(hi - lo))")
+                XCTAssertGreaterThan(hi - lo, min(budget * 0.30, 22), "\(h.signature!): 낙차가 심심함 (\(hi - lo))")
                 // 경사 상한: cos 보간 라이저 최대 ≈0.95 + 보간 여유
                 for x in stride(from: 2.0, to: h.worldW - 2, by: 1.0) {
                     XCTAssertLessThan(abs(h.slope(at: x)), 1.15, "\(h.signature!): 경사 초과 @\(x)")
@@ -439,13 +440,58 @@ final class GolfCoreTests: XCTestCase {
                 var checked = 0
                 for x in stride(from: 2.0, to: h.worldW - 2, by: 2.0) where abs(h.slope(at: x)) > 0.5 {
                     let s = h.surface(at: x)
+                    // 벙커 턱은 정당한 급경사 (모래 구덩이 가장자리 — 라이저가 아니다)
+                    let nearBunker = h.segments.contains {
+                        $0.type == .bunker && x >= $0.from - 2.5 && x <= $0.to + 2.5
+                    }
                     XCTAssertTrue(
-                        s == .rough || s == .water,
+                        s == .rough || s == .water || nearBunker,
                         "\(h.signature!): 급경사(\(h.slope(at: x)))가 \(s) @\(x)"
                     )
                     checked += 1
                 }
                 XCTAssertGreaterThan(checked, 0, "\(h.signature!): 급경사 구간이 없음")
+            }
+        }
+    }
+
+    // ── 등반 가능성 (2026-08-21 오르막 완화 — "올리는 게 불가능" 재발 방지) ──
+
+    func testClimbabilityInvariant() {
+        // 클럽 탄도 정점이 지형 상한을 여유 있게 넘어야 오르막이 플레이 가능하다
+        let sw = simulate(club: club("SW"))
+        let i7 = simulate(club: club("7I"))
+        XCTAssertGreaterThan(sw.apex, 40, "SW 정점(\(sw.apex))이 협곡 깊이 상한 38m를 못 넘음")
+        XCTAssertGreaterThan(i7.apex, 25, "7I 정점(\(i7.apex))이 산정 라이저 상한 20m를 여유 있게 못 넘음")
+        // 생성 코스의 실제 지형이 상한을 지키는지
+        for seed in 1 ... 30 {
+            for h in CourseGenerator.makeCourse(seed: UInt32(seed)) {
+                guard let sig = h.signature else { continue }
+                if sig == .canyon {
+                    let floor = h.elevation.min() ?? 0
+                    let rim = h.ground(at: h.teeX)
+                    XCTAssertLessThanOrEqual(rim - floor, 39.5, "협곡 탈출 불가 깊이 (\(rim - floor))")
+                }
+                if sig == .summitGreen {
+                    // '한 샷으로 넘어야 하는' 가파른 상승(경사 >0.3) 연속 구간의 낙차만 측정
+                    // — 완경사 저지대는 걸어가 별도 샷이 가능하므로 라이저가 아니다
+                    var maxRiser = 0.0
+                    var runStart = h.elevation[0]
+                    var climbing = false
+                    for i in 1 ..< h.elevation.count {
+                        let d = h.elevation[i] - h.elevation[i - 1]
+                        if d > 0.3 {
+                            if !climbing {
+                                climbing = true
+                                runStart = h.elevation[i - 1]
+                            }
+                            maxRiser = max(maxRiser, h.elevation[i] - runStart)
+                        } else {
+                            climbing = false
+                        }
+                    }
+                    XCTAssertLessThanOrEqual(maxRiser, 21.5, "산정 라이저가 상한 초과 (\(maxRiser))")
+                }
             }
         }
     }
