@@ -48,6 +48,10 @@ final class GlassLabel: SKNode {
         addChild(mainLabel)
         mainLabel.horizontalAlignmentMode = align
         mainLabel.verticalAlignmentMode = .top
+        for l in haloLabels + [shadowLabel, mainLabel] { // 멀티라인 (기록 카드 등)
+            l.numberOfLines = 0
+            l.preferredMaxLayoutWidth = 760
+        }
         applyContrast()
     }
 
