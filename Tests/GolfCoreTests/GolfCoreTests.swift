@@ -450,6 +450,63 @@ final class GolfCoreTests: XCTestCase {
         }
     }
 
+    // ── 창 범퍼 (2026-08-21 재미 확장 1번) ──
+
+    /// 수평으로 나는 공이 범퍼 좌측면에 맞으면 반사되어 돌아온다 (터널링 없음)
+    func testBumperSideReflection() {
+        let hole = Hole.flatTest()
+        let bumper = Bumper(x: 100, y: 0, w: 30, h: 60) // 공 앞을 막는 큰 창
+        var b = BallState(x: 50, y: 20, vx: 60, vy: 0, phase: .fly)
+        var hit = false
+        var t = 0.0
+        while b.phase == .fly, t < 10 {
+            if case .bumper = Ballistics.step(&b, hole: hole, bumpers: [bumper]) {
+                hit = true
+            }
+            t += Phys.dt
+            XCTAssertFalse(bumper.contains(b.x, b.y), "공이 범퍼 내부에 존재 (터널링/삽입)")
+        }
+        XCTAssertTrue(hit, "범퍼 충돌 이벤트가 없음")
+        XCTAssertLessThan(b.x, 100, "반사된 공은 범퍼 앞에 멈춰야 함")
+    }
+
+    /// 위에서 떨어지는 공은 범퍼 상판에서 바운스한다
+    func testBumperTopBounce() {
+        let hole = Hole.flatTest()
+        let bumper = Bumper(x: 80, y: 0, w: 60, h: 25)
+        var b = BallState(x: 100, y: 60, vx: 2, vy: -1, phase: .fly) // 상판 위 낙하
+        var topBounced = false
+        var t = 0.0
+        while b.phase == .fly, t < 10 {
+            let prevVy = b.vy
+            if case .bumper = Ballistics.step(&b, hole: hole, bumpers: [bumper]) {
+                if prevVy < 0, b.vy > 0 {
+                    topBounced = true
+                    XCTAssertEqual(b.y, 25, accuracy: 0.5, "상판 높이에서 튕겨야 함")
+                }
+            }
+            t += Phys.dt
+        }
+        XCTAssertTrue(topBounced, "상판 바운스가 없음")
+    }
+
+    /// 범퍼 안에서 출발한 샷은 갇히지 않고 통과해 나간다
+    func testBumperInsideStartEscapes() {
+        let hole = Hole.flatTest()
+        let bumper = Bumper(x: 0, y: 0, w: 120, h: 80) // 공을 덮는 거대 창
+        var b = BallState(x: 50, y: 1, vx: 40, vy: 20, phase: .fly)
+        var t = 0.0
+        var hit = false
+        while b.phase == .fly, t < 5 {
+            if case .bumper = Ballistics.step(&b, hole: hole, bumpers: [bumper]) {
+                hit = true
+            }
+            t += Phys.dt
+        }
+        XCTAssertFalse(hit, "내부 출발 샷이 범퍼에 맞음")
+        XCTAssertGreaterThan(b.x, 120, "내부 출발 샷은 창을 빠져나가야 함")
+    }
+
     // ── 장애물 (나무·바위) ──
 
     private func obstacleHole(_ obstacles: [Obstacle]) -> Hole {

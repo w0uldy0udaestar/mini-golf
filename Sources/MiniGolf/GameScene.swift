@@ -96,6 +96,7 @@ final class GameScene: SKScene {
     private var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
     private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
+    private var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정
 
     private var hole: Hole {
         course[holeIdx]
@@ -692,6 +693,21 @@ final class GameScene: SKScene {
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope
         )
+        // 창 범퍼 모드: 샷 순간의 창 배치를 스냅샷 — 이 샷의 비행 동안 고정 범퍼
+        if Theme.windowBumpers, let screen = view?.window?.screen {
+            shotBumpers = WindowBumpers.snapshot(
+                screen: screen, pxPerM: Double(pxPerM), groundBase: Double(groundBase)
+            )
+            if demoMode, !shotBumpers.isEmpty { // 좌표 대조용 계측 (관찰용, 미터)
+                let list = shotBumpers
+                    .map { String(format: "(%.0f,%.0f %.0fx%.0f)", $0.x, $0.y, $0.w, $0.h) }
+                    .joined(separator: " ")
+                print("BUMPERS \(shotBumpers.count) \(list)")
+                fflush(stdout)
+            }
+        } else {
+            shotBumpers = []
+        }
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -1304,10 +1320,11 @@ final class GameScene: SKScene {
             var terminal = StepEvent.none
             var landing: (speed: Double, surface: Surface, x: Double)?
             var wallHit: (speed: Double, x: Double)?
+            var bumperHit: (speed: Double, x: Double, y: Double)?
             var lipped = false
             while acc >= Phys.dt {
                 acc -= Phys.dt
-                let event = Ballistics.step(&ball, hole: hole)
+                let event = Ballistics.step(&ball, hole: hole, bumpers: shotBumpers)
                 switch event {
                 case .holed, .water:
                     terminal = event
@@ -1318,6 +1335,10 @@ final class GameScene: SKScene {
                 case let .wall(speed):
                     if speed > (wallHit?.speed ?? 0) {
                         wallHit = (speed, ball.x)
+                    }
+                case let .bumper(speed):
+                    if speed > (bumperHit?.speed ?? 0) {
+                        bumperHit = (speed, ball.x, ball.y)
                     }
                 case .lipOut:
                     lipped = true
@@ -1339,6 +1360,14 @@ final class GameScene: SKScene {
             }
             if let w = wallHit, w.speed > 0.8 {
                 SoundKit.shared.wall(speed: w.speed)
+            }
+            if let bh = bumperHit, bh.speed > 0.8 { // 창 범퍼 — 벽 반사음 + 임팩트 링
+                SoundKit.shared.wall(speed: bh.speed)
+                FX.ripple(on: self, at: CGPoint(x: px(bh.x), y: py(bh.y)))
+                if demoMode {
+                    print(String(format: "BUMPER-HIT %.1f @(%.0f, %.0f)", bh.speed, bh.x, bh.y))
+                    fflush(stdout)
+                }
             }
             if lipped {
                 SoundKit.shared.lipOut()

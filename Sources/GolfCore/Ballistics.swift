@@ -67,6 +67,24 @@ public enum StepEvent: Sendable, Equatable {
     case bounce(speed: Double, surface: Surface) // 지면 충돌 (법선 속도 m/s)
     case lipOut // 컵 턱에 맞고 튐
     case wall(speed: Double) // 화면 가장자리 반사
+    case bumper(speed: Double) // 범퍼(앱 창) 반사 — 창 범퍼 모드 (2026-08-21)
+}
+
+/// 범퍼 사각형 (미터) — 창 범퍼 모드: 열린 앱 창이 비행 중인 공을 튕긴다.
+/// y = 바닥 표고, h는 위로. 굴림에는 관여하지 않는다 (비행 전용 — 직관 유지)
+public struct Bumper: Sendable, Equatable {
+    public let x, y, w, h: Double
+
+    public init(x: Double, y: Double, w: Double, h: Double) {
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+    }
+
+    func contains(_ px: Double, _ py: Double) -> Bool {
+        px > x && px < x + w && py > y && py < y + h
+    }
 }
 
 public enum Ballistics {
@@ -103,6 +121,41 @@ public enum Ballistics {
         b.phase = club.isPutter ? .roll : .fly
         b.lipped = false
         b.lowSpeedTime = 0
+    }
+
+    /// 범퍼(앱 창) 충돌 — AABB 면 반사. 진입면은 스텝 이전 위치로 판정
+    /// (240Hz 스텝 이동량 ≤ 0.32m — 창 크기 대비 한 면만 통과 가능, 터널링 없음).
+    /// 공이 범퍼 '안에서' 출발한 샷은 통과시킨다 (창 밑 티샷이 갇히면 버그로 보인다)
+    static func bumperCollision(
+        _ b: inout BallState, prevX: Double, prevY: Double, bumpers: [Bumper]
+    ) -> StepEvent {
+        let e = 0.55 // 창 프레임 반발 — 벽(0.5)보다 살짝 탱탱하게
+        for r in bumpers where r.contains(b.x, b.y) {
+            if r.contains(prevX, prevY) {
+                continue
+            } // 내부 출발 — 탈출 허용
+            if prevY >= r.y + r.h { // 상판 낙하 바운스
+                let s = -b.vy
+                b.y = r.y + r.h
+                b.vy = -b.vy * e
+                b.spin *= 0.7
+                return .bumper(speed: max(0, s))
+            }
+            if prevY <= r.y { // 밑면
+                let s = b.vy
+                b.y = r.y
+                b.vy = -b.vy * e
+                b.spin *= 0.7
+                return .bumper(speed: max(0, s))
+            }
+            let fromLeft = prevX <= r.x
+            let s = abs(b.vx)
+            b.x = fromLeft ? r.x : r.x + r.w
+            b.vx = -b.vx * e
+            b.spin *= 0.7
+            return .bumper(speed: s)
+        }
+        return .none
     }
 
     /// 장애물 충돌 — 캐노피는 비행을 삼키고(잎 스침 = rough 바운스 이벤트 재활용),
@@ -155,8 +208,11 @@ public enum Ballistics {
         return .none
     }
 
-    /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다
-    public static func step(_ b: inout BallState, hole: Hole, dt: Double = Phys.dt) -> StepEvent {
+    /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다.
+    /// bumpers: 창 범퍼 모드의 앱 창 사각형들 (비행 중에만 반사 — 240Hz 스텝이라 터널링 없음)
+    public static func step(
+        _ b: inout BallState, hole: Hole, bumpers: [Bumper] = [], dt: Double = Phys.dt
+    ) -> StepEvent {
         var ev = StepEvent.none
         switch b.phase {
         case .rest:
@@ -170,11 +226,16 @@ public enum Ballistics {
             // 항력(속도 반대) + 마그누스 양력(속도 수직, 백스핀=위) + 중력
             let ax = -Phys.q * Phys.cd * v * b.vx + Phys.q * cl * v * -b.vy * b.spinSign
             let ay = -Phys.g - Phys.q * Phys.cd * v * b.vy + Phys.q * cl * v * b.vx * b.spinSign
+            let prevX = b.x, prevY = b.y
             b.vx += ax * dt
             b.vy += ay * dt
             b.x += b.vx * dt
             b.y += b.vy * dt
             b.spin *= 1 - min(0.06, max(0.01, Phys.spinDecayPerSpeed * v)) * dt // 느린 웨지가 스핀을 안고 착지
+            let bmEv = bumperCollision(&b, prevX: prevX, prevY: prevY, bumpers: bumpers)
+            if bmEv != .none {
+                ev = bmEv
+            }
             let obEv = obstacleCollision(&b, hole: hole)
             if obEv != .none {
                 ev = obEv
