@@ -16,4 +16,9 @@ enum Theme {
     static var highContrast = UserDefaults.standard.bool(forKey: "highContrast") {
         didSet { UserDefaults.standard.set(highContrast, forKey: "highContrast") }
     }
+
+    /// 창 범퍼 모드 (2026-08-21 재미 확장 1번) — 기본 ON: 이 게임의 정체성 재미
+    static var windowBumpers = UserDefaults.standard.object(forKey: "windowBumpers") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(windowBumpers, forKey: "windowBumpers") }
+    }
 }

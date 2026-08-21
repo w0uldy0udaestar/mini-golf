@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: NSMenu!
     private var soundMenuItem: NSMenuItem!
     private var contrastMenuItem: NSMenuItem!
+    private var bumperMenuItem: NSMenuItem!
     private var monitorMenu: NSMenu!
     private var lastResignKey = Date.distantPast
 
@@ -170,6 +171,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         contrastMenuItem.target = self
         contrastMenuItem.state = Theme.highContrast ? .on : .off
+        bumperMenuItem = statusMenu.addItem(
+            withTitle: "창 범퍼 (공이 앱 창에 튕김)",
+            action: #selector(toggleBumpers),
+            keyEquivalent: ""
+        )
+        bumperMenuItem.target = self
+        bumperMenuItem.state = Theme.windowBumpers ? .on : .off
         let monitorItem = statusMenu.addItem(withTitle: "모니터", action: nil, keyEquivalent: "")
         monitorMenu = NSMenu()
         monitorItem.submenu = monitorMenu // 항목은 열 때마다 재구성 (연결 상태 반영)
@@ -192,6 +200,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleSound() {
         SoundKit.shared.enabled.toggle()
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
+    }
+
+    @objc private func toggleBumpers() {
+        Theme.windowBumpers.toggle()
+        bumperMenuItem.state = Theme.windowBumpers ? .on : .off
     }
 
     @objc private func toggleContrast() {
