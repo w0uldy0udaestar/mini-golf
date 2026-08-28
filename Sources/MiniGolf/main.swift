@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 100종 순서 시연 (카탈로그)
         scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
         scene.demoSurpriseForce = args.contains("--demo-surprise") // 서프라이즈 이벤트 순환 (관찰용)
+        scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
         if let i = args.firstIndex(of: "--hat"), i + 1 < args.count, let h = Hat(rawValue: args[i + 1]) {
             scene.applyHat(h) // 모자 시각 검증용 (저장 안 함)
         }
