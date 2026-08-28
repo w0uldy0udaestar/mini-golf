@@ -20,3 +20,6 @@ dist/
 *.pem
 credentials*
 .gstack/
+
+# CMU 모캡 원본 (재배포 대신 로컬 참조 — docs/research-mocap-index.md)
+refs/
