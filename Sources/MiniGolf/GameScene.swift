@@ -13,7 +13,7 @@ final class GameScene: SKScene {
     private var clubIdx = 0
     private var heightPct = 0.6
     private var results: [(par: Int, strokes: Int, gaveUp: Bool)] = []
-    private enum Mode { case aim, swinging, motion, walking, holed, end, surprise }
+    private enum Mode { case aim, swinging, motion, walking, holed, end, surprise, ritual }
     private var mode = Mode.aim
     private var dir = 1.0
     private var heldKeys = Set<UInt16>()
@@ -31,6 +31,7 @@ final class GameScene: SKScene {
     var demoMotionShowcase = false // --demo-motions: 모션 100종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
+    var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var surpriseCursor = 0
     private var motionCursor = 0
     private var showpieceCursor = 0
@@ -70,6 +71,20 @@ final class GameScene: SKScene {
         var stepFxParity = false // 스텝 먼지는 한 걸음 걸러 — 과하지 않게
     }
 
+    /// 골프 의식 (2026-08-29 CMU 모캡 이식): 티 꽂기·공 줍기 — 타이밍·자세 비율은
+    /// refs/mocap 64_17/64_20(스쿼트 0.68, 21/60/19)·64_28/64_29(허리 힌지, 33/33/33) 실측
+    fileprivate struct RitualAnim {
+        enum Kind { case teePlace, ballPickup }
+        let kind: Kind
+        var t = 0.0
+        var touchFired = false
+        var cupDx = 16.0 // pickup: 컵의 로컬 x (facing 기준)
+        var dur: Double {
+            kind == .teePlace ? 1.35 : 1.15
+        }
+    }
+
+    fileprivate var ritualAnim: RitualAnim?
     private var swingAnim: SwingAnim?
     private var walkAnim: WalkAnim?
     private var lastFinishPose: Pose?
@@ -269,6 +284,10 @@ final class GameScene: SKScene {
         let teeClub = hole.par == 3 ? "7I" : "DR"
         clubIdx = ClubTable.all.firstIndex { $0.id == teeClub } ?? 0
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
+        if demoPickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
+            let x = hole.holeX - 1.2 * (hole.holeX >= hole.teeX ? 1 : -1)
+            ball = BallState(x: x, y: hole.ground(at: x))
+        }
         if demoWallForce { // 벽 스탠스 관찰: 릴리프 하한(46px) 직후의 최소 이격 케이스로 시작
             let m = 48 / Double(pxPerM)
             let x = hole.holeX > hole.teeX ? m : hole.worldW - m
@@ -285,7 +304,12 @@ final class GameScene: SKScene {
             print("SIGNATURE \(sig.rawValue)")
             fflush(stdout)
         }
-        enterAim()
+        // 티 꽂기 의식 — 모션 카탈로그 캡처 모드에선 생략 (걷기 관찰이 목적)
+        if !demoMotionShowcase, !demoCardPreview {
+            startRitual(.teePlace)
+        } else {
+            enterAim()
+        }
     }
 
     private func enterAim() {
@@ -791,7 +815,16 @@ final class GameScene: SKScene {
             titleScale: diff <= -2 ? 1.3 : diff == -1 ? 1.12 : diff <= 0 ? 1.0 : 0.88
         )
         recordHoleOut(diff: diff)
-        run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
+        // 컵 근처(퍼팅·짧은 어프로치 홀인)면 스코어 리액션 후 공 줍기 의식 — 멀면 기존 흐름
+        // 미터 기준 (픽셀은 홀 전장에 따라 스케일이 달라 긴 홀에서 오판 — 2026-08-29 실측)
+        let nearCup = abs(stickX - hole.holeX) < 9 || demoPickupForce
+        if nearCup {
+            run(.sequence([.wait(forDuration: 1.3), .run { [weak self] in
+                self?.startRitual(.ballPickup)
+            }]))
+        } else {
+            run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
+        }
     }
 
     // ── 기록·배지 (2026-08-21 재미 확장 2번) ──
@@ -1355,6 +1388,10 @@ final class GameScene: SKScene {
             }
         }
 
+        if mode == .ritual {
+            stepRitual(dt: dt)
+        }
+
         if mode == .walking, var w = walkAnim {
             w.t += dt
             // 넘어짐: 전진 동결을 연속 램프로 — 쓰러지며(0.3~0.6) 멈추고, 일어난 만큼(1.5~2.2)
@@ -1710,6 +1747,10 @@ final class GameScene: SKScene {
             applyIdleFidget(&targetRig)
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
+        } else if mode == .ritual, let anim = ritualAnim {
+            targetRig = ritualRig(anim)
+            applySlopeStance(&targetRig) // 의식 중에도 발은 경사를 딛는다
+            rigRate = 10
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
             rigRate = 5
@@ -1753,7 +1794,9 @@ final class GameScene: SKScene {
             headMorph: headMorph, visualLoft: renderLoft, dir: dir
         )
 
-        if mode != .holed, mode != .surprise { // 홀인 드롭·서프라이즈 연출 중에는 SKAction이 공 위치를 갖는다
+        // 홀인 드롭·서프라이즈·공 줍기 연출 중에는 SKAction이 공 위치를 갖는다
+        let pickupOwns = mode == .ritual && ritualAnim?.kind == .ballPickup
+        if mode != .holed, mode != .surprise, !pickupOwns {
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
             let heightAbove = ball.y - hole.ground(at: ball.x)
             shadowNode.isHidden = heightAbove <= 0.2
@@ -1780,6 +1823,116 @@ final class GameScene: SKScene {
             x: min(size.width - 54, max(54, px(stickX) - CGFloat(dir) * 20)), // 벽 옆에서도 잘리지 않게
             y: groundY(stickX) + 112
         )
+    }
+}
+
+private extension GameScene {
+    // ═══════════════════════════════════════════════════════════════
+    // 골프 의식 (2026-08-29): CMU 모캡 64번 골프 세션 실측 이식
+    // 티 꽂기 = 무릎 스쿼트(힙이 손 하강의 0.68 동반), 공 줍기 = 허리 힌지 + 뒷다리 들기
+    // ═══════════════════════════════════════════════════════════════
+
+    func startRitual(_ kind: RitualAnim.Kind) {
+        var anim = RitualAnim(kind: kind)
+        if kind == .teePlace {
+            stickX = ball.x
+            dir = hole.holeX >= ball.x ? 1 : -1
+            ballNode.alpha = 0 // 공은 '심는' 순간 나타난다
+        } else {
+            // 컵의 로컬 x (facing 기준) — 손이 닿는 범위로 클램프
+            anim.cupDx = min(26, max(8, Double(px(hole.holeX) - px(stickX)) * dir))
+        }
+        ritualAnim = anim
+        mode = .ritual
+        if demoMode {
+            print("RITUAL \(kind)")
+            fflush(stdout)
+        }
+    }
+
+    func stepRitual(dt: Double) {
+        guard var anim = ritualAnim else { return }
+        anim.t += dt
+        // 터치 이벤트: 작업 구간 중앙 — 티 꽂기는 공 등장, 줍기는 공이 손에 들려 올라옴
+        let touchU = anim.kind == .teePlace ? 0.42 : 0.5
+        if !anim.touchFired, anim.t / anim.dur >= touchU {
+            anim.touchFired = true
+            let at = CGPoint(x: px(ball.x), y: groundY(ball.x))
+            if anim.kind == .teePlace {
+                ball = BallState(x: ball.x, y: hole.ground(at: ball.x))
+                ballNode.removeAllActions()
+                ballNode.setScale(0.6)
+                ballNode.alpha = 1
+                ballNode.run(.scale(to: 1, duration: 0.18))
+                FX.dust(on: self, at: at, surface: .tee, intensity: 0.25)
+                SoundKit.shared.bounce(speed: 1.2, surface: .green)
+            } else {
+                // 컵에서 공을 꺼내 든다 — 손을 따라 올라오는 연출
+                let cup = CGPoint(x: px(hole.holeX), y: groundY(hole.holeX))
+                ballNode.removeAllActions()
+                ballNode.position = CGPoint(x: cup.x, y: cup.y - 4)
+                ballNode.setScale(0.72)
+                ballNode.alpha = 1
+                let up = SKAction.move(to: CGPoint(x: cup.x - CGFloat(dir) * 4, y: cup.y + 34), duration: 0.45)
+                up.timingMode = .easeOut
+                ballNode.run(.sequence([up, .wait(forDuration: 0.15), .fadeOut(withDuration: 0.2)]))
+            }
+        }
+        if anim.t >= anim.dur {
+            let kind = anim.kind
+            ritualAnim = nil
+            if kind == .teePlace {
+                enterAim()
+            } else {
+                advanceHole()
+            }
+            return
+        }
+        ritualAnim = anim
+    }
+
+    /// 의식 리그 — 모캡 키포즈를 게임 리그 공간으로 옮긴 보간 (u: 0~1)
+    func ritualRig(_ anim: RitualAnim) -> Rig {
+        let u = anim.t / anim.dur
+        var r = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
+        if anim.kind == .teePlace {
+            // 구간 25 / 50 / 25 (모캡 21/60/19의 작업부 압축) — 스쿼트 깊이는 비율 0.68 반영
+            let down = smoothstep(min(1, u / 0.25)) * (1 - smoothstep(max(0, (u - 0.75) / 0.25)))
+            let squat = down
+            r.hip.y -= 18 * squat
+            r.hip.x -= 2 * squat
+            r.knee1 = mix(r.knee1, CGPoint(x: r.hip.x - 10, y: 13), squat)
+            r.knee2 = mix(r.knee2, CGPoint(x: r.hip.x + 13, y: 12), squat)
+            r.shoulder.y -= 20 * squat
+            r.shoulder.x += 4 * squat // 상체 살짝 숙임 (모캡 leanX 소량)
+            r.headDy = mix(12, 9, squat)
+            // 자유손: 공 자리(바닥)로 — 작업 중 '꽂는' 잔손질
+            let work = smoothstep(min(1, max(0, (u - 0.2) / 0.15))) * (1 - smoothstep(max(0, (u - 0.72) / 0.18)))
+            let jiggle = sin(u * 34) * 1.2 * (u > 0.3 && u < 0.65 ? 1 : 0)
+            r.handTrail = mix(
+                r.handTrail,
+                CGPoint(x: renderBallFwd - 2, y: 2 + jiggle),
+                work
+            )
+            // 클럽 든 손은 지팡이처럼 옆에 짚는다
+            r.grip = mix(r.grip, CGPoint(x: r.hip.x - 9, y: 28), squat)
+            r.clubPhi = mix(r.clubPhi, -0.06, squat)
+        } else {
+            // 공 줍기: 33/33/33 균등 (모캡) — 힙 고정, 허리 힌지, 뒷다리 들기
+            let hinge = smoothstep(min(1, u / 0.33)) * (1 - smoothstep(max(0, (u - 0.67) / 0.33)))
+            r.hip.y -= 3 * hinge
+            r.shoulder = mix(r.shoulder, CGPoint(x: r.hip.x + 21, y: 36), hinge)
+            r.headDy = mix(12, 7, hinge)
+            r.headDx = mix(r.headDx, 10, hinge)
+            // 뒷다리 들기 (모캡 시그니처) — 앞다리는 지지
+            r.foot1 = mix(r.foot1, CGPoint(x: r.hip.x - 20, y: 13), hinge)
+            r.knee1 = mix(r.knee1, CGPoint(x: r.hip.x - 12, y: 26), hinge)
+            r.handTrail = mix(r.handTrail, CGPoint(x: anim.cupDx, y: 1), hinge)
+            // 클럽 팔은 뒤로 뻗어 카운터밸런스
+            r.grip = mix(r.grip, CGPoint(x: r.hip.x - 16, y: 42), hinge)
+            r.clubPhi = mix(r.clubPhi, -1.35, hinge)
+        }
+        return r
     }
 }
 

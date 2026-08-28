@@ -260,6 +260,7 @@ docs/                모션 카탈로그 · QA 보고서 · 리서치 노트
 |---|---|
 | `--demo` | 자동 플레이 (모션 관찰용, 사운드 꺼짐) |
 | `--demo-motions` | 모션 100종을 순서대로 시연 — 이 저장소의 GIF 카탈로그가 이걸로 캡처됐습니다 |
+| `--demo-pickup` | 공 줍기 의식 관찰 (컵 앞 시작) |
 | `--demo-memes` | 밈 쇼피스 12종 순환 시연 |
 | `--seed N` | 코스 시드 고정 |
 | `--demo-wall` | 벽 반사 스탠스 관찰 |
@@ -299,6 +300,9 @@ macOS 13 (Ventura) 이상 · Apple Silicon / Intel · Swift 5.9+ (Xcode 15+)
 <sub>
 
 **MIT License** · 실제 탄도 물리와 지나치게 많은 걷기 애니메이션으로 만들었습니다
+
+골프 의식 모션의 타이밍·자세는 [CMU Graphics Lab Motion Capture Database](http://mocap.cs.cmu.edu)
+실측을 참조했습니다 (NSF EIA-0196217)
 
 </sub>
 </div>
