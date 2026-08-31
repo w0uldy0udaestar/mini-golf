@@ -36,10 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 저장된 선택 > 주 디스플레이 (선택한 모니터가 분리됐으면 주 디스플레이로 폴백).
-    /// NSScreen.main은 '키 윈도의 화면'이라 실행 순간의 포커스를 따라간다 — 폴백으로 부적합
+    /// NSScreen.main은 '키 윈도의 화면'이라 포커스를 따라가고, screens.first도 Sidecar/AirPlay
+    /// 연결 순서에 따라 주가 아닐 수 있다 (2026-08-31 실측 — 게임이 Sidecar에 떠 "업데이트
+    /// 실종"으로 보임). 전역 좌표 원점(0,0) 화면이 곧 메뉴바 있는 주 디스플레이다.
     private var preferredScreen: NSScreen? {
         let saved = UInt32(UserDefaults.standard.integer(forKey: screenPrefKey))
-        return NSScreen.screens.first { displayID($0) == saved } ?? NSScreen.screens.first
+        return NSScreen.screens.first { displayID($0) == saved }
+            ?? NSScreen.screens.first { $0.frame.origin == .zero }
+            ?? NSScreen.screens.first
     }
 
     func applicationDidFinishLaunching(_: Notification) {
