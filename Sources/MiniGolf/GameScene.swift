@@ -88,13 +88,17 @@ final class GameScene: SKScene {
         var stopPlan: StopPlan?
         var planPhase0 = 0.0
 
-        /// 두 발 모두 접지한 순간에만 호출 — 뒤에 있는 발을 feet[0](포즈 foot1 = 뒷발)로 정렬
-        mutating func beginStopPlan(dNow: Double, dStop: Double) {
-            if feet[1].plant < feet[0].plant {
-                feet.swapAt(0, 1) // 두 다리는 같은 획이라 인덱스 교환은 화면에 보이지 않는다
+        /// 두 발 모두 접지한 순간에만 호출 — 뒤에 있는 발을 feet[0](포즈 foot1 = 뒷발)로 정렬.
+        /// 반환 true면 정체를 교환했으니 호출측은 렌더 리그의 foot/knee도 함께 교환해야 한다
+        /// (타깃만 바꾸면 스무딩(footRate 60)이 두 발을 2~3프레임 가운데로 모았다 벌린다 — 리뷰 2026-09-14)
+        mutating func beginStopPlan(dNow: Double, dStop: Double) -> Bool {
+            let swapped = feet[1].plant < feet[0].plant
+            if swapped {
+                feet.swapAt(0, 1) // 두 다리는 같은 획이라 교환 자체는 화면에 보이지 않는다
             }
             stopPlan = StopPlan(dStart: dNow, dStop: dStop, rearFrom: feet[0].plant, frontFrom: feet[1].plant)
             planPhase0 = gaitPhase
+            return swapped
         }
     }
 
@@ -345,9 +349,14 @@ final class GameScene: SKScene {
     private func setFacing(_ newDir: Double) {
         guard newDir != dir else { return }
         renderRig.mirrorX()
+        swapRenderFeet()
+        dir = newDir
+    }
+
+    /// 두 발의 정체 교환을 렌더 리그에도 적용 — 타깃과 렌더가 같은 발을 가리켜야 스무딩이 발을 움직이지 않는다
+    private func swapRenderFeet() {
         swap(&renderRig.foot1, &renderRig.foot2)
         swap(&renderRig.knee1, &renderRig.knee2)
-        dir = newDir
     }
 
     private func enterAim() {
@@ -429,12 +438,30 @@ final class GameScene: SKScene {
     /// ── 벽 경성 클램프: 리그의 어떤 점(클럽 팁·머리 반지름 포함)도 화면 밖에 그려질 수 없다.
     /// 컴팩트 폼(wallTopScale)이 미적 1차 방어라면 이것은 기하학적 최종 보증 —
     /// 렌더 사본에만 적용되어 추적 상태에는 영향이 없다 (2026-08-15 사용자 재현 신고 대응) ──
-    private func clampRigToWalls(_ rig: inout Rig) {
+    /// 벽 경성 클램프의 로컬 x 경계 (facing 좌표)
+    private func wallBounds() -> (lo: Double, hi: Double) {
         let sx = Double(px(stickX))
         let margin = 8.0
         let a = (margin - sx) / dir
         let b = (Double(size.width) - margin - sx) / dir
-        let lo = min(a, b), hi = max(a, b)
+        return (min(a, b), max(a, b))
+    }
+
+    /// IK가 만든 무릎·팔꿈치는 현(chord) 밖으로 최대 ~8px 나온다 — 리그 점 클램프 뒤에 관절도 같은 경계로
+    /// (벽 옆에서 관절 획이 화면 밖으로 잘리지 않게 — 리뷰 2026-09-14). 경계에서만 뼈 길이가 미세하게 깨진다
+    private func clampJointsToWalls(_ j: inout Skeleton.Joints) {
+        let (lo, hi) = wallBounds()
+        func cl(_ p: inout CGPoint) {
+            p.x = CGFloat(min(hi, max(lo, Double(p.x))))
+        }
+        cl(&j.knee1)
+        cl(&j.knee2)
+        cl(&j.elbowLead)
+        cl(&j.elbowTrail)
+    }
+
+    private func clampRigToWalls(_ rig: inout Rig) {
+        let (lo, hi) = wallBounds()
         func cl(_ p: inout CGPoint) {
             p.x = CGFloat(min(hi, max(lo, Double(p.x))))
         }
@@ -1585,8 +1612,8 @@ final class GameScene: SKScene {
                     w.gaitPhase = 0.5
                     // 원점 전환: 조준(공 원점) → 걷기(몸 원점). 렌더 리그를 반대로 옮겨 화면 위치 보존
                     renderRig.shiftX(dir * Double(px(prevStickX) - px(stickX)))
-                    if dStop <= WalkAnim.stopPlanRange { // 두 걸음 거리 — 처음부터 발자국 계획
-                        w.beginStopPlan(dNow: dNow, dStop: dStop)
+                    if dStop <= WalkAnim.stopPlanRange, w.beginStopPlan(dNow: dNow, dStop: dStop) {
+                        swapRenderFeet() // 두 걸음 거리 — 처음부터 발자국 계획
                     }
                 }
                 if let plan = w.stopPlan {
@@ -1623,8 +1650,8 @@ final class GameScene: SKScene {
                             w.feet[i].swingTo = dNow + 2 * w.stepL * (1 - w.duty) + w.duty * w.stepL
                         }
                     }
-                    if landedNearStop {
-                        w.beginStopPlan(dNow: dNow, dStop: dStop)
+                    if landedNearStop, w.beginStopPlan(dNow: dNow, dStop: dStop) {
+                        swapRenderFeet()
                     }
                 }
                 walkAnim = w
@@ -1947,7 +1974,10 @@ final class GameScene: SKScene {
             logRigBounds(drawRig, currentTime: currentTime)
         }
         // 뼈대 후처리: 뼈 길이 고정 + 무릎·팔꿈치 IK (발은 불변, 손은 사거리 안으로) — Skeleton.swift
-        let joints = Skeleton.solve(&drawRig)
+        var joints = Skeleton.solve(&drawRig)
+        if !demoNoClamp {
+            clampJointsToWalls(&joints)
+        }
         if demoMode {
             logBones(joints, currentTime: currentTime)
             logJumps(drawRig, currentTime: currentTime)
@@ -2092,6 +2122,9 @@ private extension GameScene {
             // 힌지를 조금 더 깊게(어깨 y 36→33): 뼈 길이 고정 후 손이 컵에 정확히 닿도록 (사거리 35)
             let hinge = smoothstep(min(1, u / 0.33)) * (1 - smoothstep(max(0, (u - 0.67) / 0.33)))
             r.hip.y -= 3 * hinge
+            // 컵이 멀면(cupDx > 12) 힙을 그만큼 앞발 쪽으로 옮긴다 — 몸통 25 + 팔 35 사거리 안에 컵이 들도록
+            // (리뷰 2026-09-14: cupDx 26이면 손이 7.5px 못 닿았다). 앞발은 고정, 뒷다리는 힙 상대라 함께 간다
+            r.hip.x += max(0, anim.cupDx - 12) * hinge
             r.shoulder = mix(r.shoulder, CGPoint(x: r.hip.x + 21, y: 33), hinge)
             r.headDy = mix(12, 7, hinge)
             r.headDx = mix(r.headDx, 10, hinge)

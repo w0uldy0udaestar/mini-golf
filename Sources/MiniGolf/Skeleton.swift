@@ -9,7 +9,7 @@ import GolfCore
 /// (도립 진자: 접지 순간 몸이 가장 낮다). 손은 사거리 안으로 당긴다(클럽은 손을 따라간다).
 /// 리서치·설계: docs/research-stickman-rig.md
 enum Skeleton {
-    static let torso = 25.0 // 힙→어깨 (직립 25.0 · 스윙 포즈 24.2~25.6를 정규화)
+    static let torso = 25.0 // 힙→어깨 (직립 25.0 · 스윙 포즈 24.0(임팩트)~28.3(팔로스루 tilt 18)을 정규화)
     static let upperArm = 17.5
     static let foreArm = 17.5 // 합 35 — 어드레스 handD 34가 거의 완전 신전
     static let thigh = 23.25
