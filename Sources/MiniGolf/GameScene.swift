@@ -49,6 +49,7 @@ final class GameScene: SKScene {
 
     private struct WalkAnim {
         let fromX, toX, dur: Double
+        let profile: WalkProfile // 램프·등속·램프 속도 프로파일 — 위치와 vInst의 단일 출처 (GolfCore)
         var t = 0.0
         let relax = 0.8 // 피니시 여운 — 서두르지 않는다
         var vPx = 0.0
@@ -641,9 +642,11 @@ final class GameScene: SKScene {
             }
             hardness /= Double(n + 1)
         }
+        let dur = min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness)))
         var anim = WalkAnim(
-            fromX: from, toX: to,
-            dur: min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness)))
+            fromX: from, toX: to, dur: dur,
+            // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
+            profile: WalkProfile(dist: dist, dur: dur)
         )
         // 아주 가끔 넘어진다 (재미): 기본 1%, 험한 길 2% — 라운드에 한 번 볼까 말까
         // (초기 3~6%는 실플레이에서 "너무 자주"로 판정 — 2026-08-15)
@@ -1465,10 +1468,14 @@ final class GameScene: SKScene {
             let tw = w.t - w.relax - w.pausedTime
             if tw >= 0 {
                 let u = min(1, tw / w.dur)
-                stickX = w.fromX + (w.toX - w.fromX) * smoothstep(u)
-                // 유효 속도 = 해석 미분 × (1 - freeze) — 위치와 게이트가 같은 비율로 감속·재가속
-                let vInst = (1 - freeze) * abs(w.toX - w.fromX) * 6 * u * (1 - u) / w.dur
+                let sgn: Double = w.toX >= w.fromX ? 1 : -1
+                stickX = w.fromX + sgn * w.profile.position(at: tw)
+                // 유효 속도 = 프로파일의 해석 도함수 × (1 - freeze) — 위치와 게이트가 같은 비율로 감속·재가속
+                let vInst = (1 - freeze) * w.profile.velocity(at: tw)
                 w.vPx = vInst * Double(pxPerM)
+                if demoMode, Int(tw * 10) != Int((tw - dt) * 10) { // 속도 프로파일 계측 (0.1초 간격)
+                    print(String(format: "WALKV %.1f %.1f %.1f", tw, abs(stickX - w.fromX) * Double(pxPerM), w.vPx))
+                }
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
                 w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot()))
                 // 지형 적응 (2026-08-15 요청): 경사에선 보폭을 줄이고, 러프·벙커는 무거운 걸음
@@ -1942,7 +1949,12 @@ private extension GameScene {
             let squat = down
             r.hip.y -= 28 * squat // 42 → 14: 허벅지가 거의 수평인 스쿼트
             r.hip.x += (renderBallFwd - 9) * squat // 체중 앞발 — 클럽(ballFwd)과 무관하게 힙이 x≈-14에 (무릎은 IK가 접는다)
-            r.shoulder = mix(r.shoulder, CGPoint(x: r.hip.x + 20, y: r.hip.y + 15), squat) // 전방 숙임 — 어깨가 공 사거리 안 (계측: DR에서 손 3.8px 부족 → 보정)
+            r
+                .shoulder = mix(
+                    r.shoulder,
+                    CGPoint(x: r.hip.x + 20, y: r.hip.y + 15),
+                    squat
+                ) // 전방 숙임 — 어깨가 공 사거리 안 (계측: DR에서 손 3.8px 부족 → 보정)
             r.headDy = mix(12, 9, squat)
             r.headDx = mix(r.headDx, 9, squat) // 공을 내려다본다
             // 자유손: 공 자리(바닥)로 — 작업 중 '꽂는' 잔손질
