@@ -97,6 +97,34 @@ struct Rig {
     var clubPhi = 0.2 // 샤프트 절대각 (0 = 수직 아래, + = 타겟 쪽)
     var clubLen = 31.0
 
+    /// 원점 이동 보정 — 스틱맨 노드 원점(stickX)이 바뀔 때 화면 위치를 보존하려면 렌더 리그를 반대로 옮긴다
+    /// (렌더 리그는 스무딩 상태라 타깃만 바꾸면 원점 변경량만큼 '탁' 튄다 — 2026-09-14 전환 개편)
+    mutating func shiftX(_ dx: Double) {
+        hip.x += dx
+        shoulder.x += dx
+        foot1.x += dx
+        foot2.x += dx
+        knee1.x += dx
+        knee2.x += dx
+        grip.x += dx
+        handTrail.x += dx
+    }
+
+    /// 방향 반전 보정 — facing이 뒤집힐 때 화면 위치를 보존하는 로컬 미러 (x·headDx·clubPhi 부호 반전).
+    /// 두 발의 정체는 호출측에서 교환한다 (다리는 같은 획이라 교환이 보이지 않고, 어드레스 스탠스에 5px로 맞는다)
+    mutating func mirrorX() {
+        hip.x = -hip.x
+        shoulder.x = -shoulder.x
+        foot1.x = -foot1.x
+        foot2.x = -foot2.x
+        knee1.x = -knee1.x
+        knee2.x = -knee2.x
+        grip.x = -grip.x
+        handTrail.x = -handTrail.x
+        headDx = -headDx
+        clubPhi = -clubPhi
+    }
+
     /// 지수 감쇠 추적 — clubPhi는 최단 각도 경로로 (트월 한 바퀴 후 되감기 방지)
     /// footRate: 걷기 중 발·무릎만 고속 추적 — 접지점이 스무딩에 밀리면 미끄러져 보인다
     /// clubRate: 팔로스루에서 클럽만 느리게 — 몸이 멈춘 뒤 클럽이 늦게 멈추는 오버랩

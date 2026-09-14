@@ -70,6 +70,32 @@ final class GameScene: SKScene {
         var showKind: ShowpieceKind?
         var pausedTime = 0.0 // 넘어져 있는 동안 전진이 멈춘 시간 — 걸음 시계에서 빼서 위치를 동결
         var stepFxParity = false // 스텝 먼지는 한 걸음 걸러 — 과하지 않게
+        var relaxShift = 0.0 // 여운 포즈의 로컬 x 보정 (방향 반전 시 몸 자리에 앵커)
+
+        /// 정지 발자국 계획 (2026-09-14 전환 개편): 남은 거리가 stopPlanRange 이하가 된 착지 순간부터
+        /// 위상 대신 '남은 거리 비율 p'가 발을 움직인다 — 뒷발이 먼저 어드레스 뒷발 자리(-11)에,
+        /// 앞발이 마지막에 앞발 자리(+16)에 내려앉아 몸이 멈추는 순간 스탠스가 완성된다.
+        /// 미끄러짐 대신 보폭 차이로 오차를 흡수한다 (UE distance matching·footstep planning 번안)
+        struct StopPlan {
+            let dStart, dStop, rearFrom, frontFrom: Double
+            static let rearOffset = -11.0, frontOffset = 16.0 // 어드레스 포즈 foot1/foot2 − hip
+            func progress(_ dNow: Double) -> Double {
+                min(1, max(0, (dNow - dStart) / max(1e-6, dStop - dStart)))
+            }
+        }
+
+        static let stopPlanRange = 50.0 // 정상 스트라이드(44px) 안팎 — 마지막 두 걸음이 0.6~1.2배 보폭
+        var stopPlan: StopPlan?
+        var planPhase0 = 0.0
+
+        /// 두 발 모두 접지한 순간에만 호출 — 뒤에 있는 발을 feet[0](포즈 foot1 = 뒷발)로 정렬
+        mutating func beginStopPlan(dNow: Double, dStop: Double) {
+            if feet[1].plant < feet[0].plant {
+                feet.swapAt(0, 1) // 두 다리는 같은 획이라 인덱스 교환은 화면에 보이지 않는다
+            }
+            stopPlan = StopPlan(dStart: dNow, dStop: dStop, rearFrom: feet[0].plant, frontFrom: feet[1].plant)
+            planPhase0 = gaitPhase
+        }
     }
 
     /// 골프 의식 (2026-08-29 CMU 모캡 이식): 티 꽂기·공 줍기 — 타이밍·자세 비율은
@@ -313,6 +339,17 @@ final class GameScene: SKScene {
         }
     }
 
+    /// 방향 전환 — 렌더 리그를 로컬 미러하고 두 발의 정체를 교환해 화면 위치를 보존한다.
+    /// 구현 전(2026-09-14)에는 facing이 바뀌는 프레임에 스틱맨 전체가 원점 기준으로 뒤집혔다 (발 27~32px 점프).
+    /// 미러 후 타깃을 쫓아가면 머리·팔·클럽이 몸을 가로질러 반대편으로 '돌아서는' 연속 동작이 된다
+    private func setFacing(_ newDir: Double) {
+        guard newDir != dir else { return }
+        renderRig.mirrorX()
+        swap(&renderRig.foot1, &renderRig.foot2)
+        swap(&renderRig.knee1, &renderRig.knee2)
+        dir = newDir
+    }
+
     private func enterAim() {
         mode = .aim
         aimTime = 0
@@ -320,12 +357,15 @@ final class GameScene: SKScene {
         idleKind = 0
         idleNextAt = Double.random(in: 5 ... 9)
         walkAnim = nil
+        setFacing(hole.holeX >= ball.x ? 1 : -1)
+        // 원점 전환: 걷기(몸 원점) → 조준(공 원점). 렌더 리그를 반대로 옮겨 화면 위치 보존
+        renderRig.shiftX(dir * Double(px(stickX) - px(ball.x)))
         stickX = ball.x
-        dir = hole.holeX >= ball.x ? 1 : -1
         // 그린에 올라오면 퍼터로 자동 전환 (관례 — 이후 ←→로 자유 변경 가능)
         if strokes > 0 || demoPickupForce, hole.surface(at: ball.x) == .green, !club.isPutter { // 관찰 모드는 첫 샷도 퍼터
             clubIdx = ClubTable.all.firstIndex { $0.isPutter } ?? clubIdx
         }
+        renderBallFwd = profile.ballFwd // 걷기 도착 자리가 이 클럽의 스탠스로 계획됐으므로 스무딩 없이 맞춘다
         presetPutterHeight()
         updateHUD()
         if demoMode { // 프레임 캡처와 대조할 스탠스 계측 (관찰용): 경사·라이·근처 장애물
@@ -456,6 +496,41 @@ final class GameScene: SKScene {
             fflush(stdout)
         }
         bonesMax = Skeleton.Joints()
+    }
+
+    /// 전환 점프 계측 (관찰용): 힙·발·그립의 화면 x가 한 프레임에 움직인 최대량을 0.5초 창으로 찍는다.
+    /// 걷기 출발·도착의 '탁'은 여기서 수십 px/frame으로 드러난다 (정상 걷기 스윙발은 ≤ 6px/frame)
+    private var jumpPrev: (hip: Double, f1: Double, f2: Double, grip: Double)?
+    private var jumpMax = (hip: 0.0, f1: 0.0, f2: 0.0, grip: 0.0)
+    private var jumpLastLog: TimeInterval = 0
+    private var jumpModes = Set<String>()
+    private func logJumps(_ rig: Rig, currentTime: TimeInterval) {
+        let sx = Double(px(stickX))
+        let cur = (
+            hip: sx + Double(rig.hip.x) * dir, f1: sx + Double(rig.foot1.x) * dir,
+            f2: sx + Double(rig.foot2.x) * dir, grip: sx + Double(rig.grip.x) * dir
+        )
+        jumpModes.insert(String(describing: mode))
+        if let p = jumpPrev {
+            jumpMax.hip = max(jumpMax.hip, abs(cur.hip - p.hip))
+            // 두 발은 같은 획이라 정체 교환(정지 계획·방향 전환)은 보이지 않는다 — 짝짓기 중 작은 쪽을 잰다
+            let direct = max(abs(cur.f1 - p.f1), abs(cur.f2 - p.f2))
+            let swapped = max(abs(cur.f1 - p.f2), abs(cur.f2 - p.f1))
+            let feet = min(direct, swapped)
+            jumpMax.f1 = max(jumpMax.f1, feet)
+            jumpMax.f2 = max(jumpMax.f2, feet)
+            jumpMax.grip = max(jumpMax.grip, abs(cur.grip - p.grip))
+        }
+        jumpPrev = cur
+        guard currentTime - jumpLastLog > 0.5 else { return }
+        jumpLastLog = currentTime
+        print(String(
+            format: "MOVE[%.2f] hip %.1f f1 %.1f f2 %.1f grip %.1f %@",
+            Date().timeIntervalSince1970, jumpMax.hip, jumpMax.f1, jumpMax.f2, jumpMax.grip,
+            jumpModes.sorted().joined(separator: ">")
+        ))
+        jumpMax = (0, 0, 0, 0)
+        jumpModes = []
     }
 
     private func logRigBounds(_ rig: Rig, currentTime: TimeInterval) {
@@ -623,11 +698,20 @@ final class GameScene: SKScene {
 
     private func startWalk() {
         endShotTrail()
-        let from = stickX, to = ball.x
+        // 원점 통일 (2026-09-14 전환 개편): 포즈 리그는 공이 원점이고 몸(힙)은 공 뒤 ballFwd+5px에 선다.
+        // 걷기 리그는 몸이 원점이므로, 걷기의 출발·도착을 '몸이 서는 자리'로 잡아야 전환 순간 좌표 점프가 0이다
+        // (구: 출발 stickX·도착 ball.x → 출발 때 몸이 25px 앞으로 튀고, 도착 때 25px 뒤로 미끄러졌다).
+        let oldDir = dir
+        let from = stickX - dir * (renderBallFwd + 5) / Double(pxPerM)
+        let arrivalDir: Double = hole.holeX >= ball.x ? 1 : -1
+        // 도착 클럽은 enterAim의 자동 퍼터 전환과 같은 조건으로 미리 안다 — 도착 자리를 그 스탠스로
+        let willPutt = (strokes > 0 || demoPickupForce) && hole.surface(at: ball.x) == .green
+        let arrivalFwd = willPutt ? SwingProfile.profile(for: .putter).ballFwd : profile.ballFwd
+        let to = ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM)
         let dist = abs(to - from)
         mode = .walking
         if dist > 0.5 { // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
-            dir = to >= from ? 1 : -1
+            setFacing(to >= from ? 1 : -1)
         }
         // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다.
         // 험한 길(경사·러프·벙커)은 더 오래 걸린다 (지형 적응 — 2026-08-15 사용자 요청)
@@ -648,6 +732,8 @@ final class GameScene: SKScene {
             // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
             profile: WalkProfile(dist: dist, dur: dur)
         )
+        // 방향이 반전됐으면 여운(직립) 포즈를 몸이 있는 자리에 앵커 — 공 원점 포즈는 반대편에 서기 때문
+        anim.relaxShift = dir != oldDir ? 2 * (renderBallFwd + 5) : 0
         // 아주 가끔 넘어진다 (재미): 기본 1%, 험한 길 2% — 라운드에 한 번 볼까 말까
         // (초기 3~6%는 실플레이에서 "너무 자주"로 판정 — 2026-08-15)
         if anim.dur > 5.0,
@@ -1469,6 +1555,7 @@ final class GameScene: SKScene {
             if tw >= 0 {
                 let u = min(1, tw / w.dur)
                 let sgn: Double = w.toX >= w.fromX ? 1 : -1
+                let prevStickX = stickX
                 stickX = w.fromX + sgn * w.profile.position(at: tw)
                 // 유효 속도 = 프로파일의 해석 도함수 × (1 - freeze) — 위치와 게이트가 같은 비율로 감속·재가속
                 let vInst = (1 - freeze) * w.profile.velocity(at: tw)
@@ -1488,36 +1575,56 @@ final class GameScene: SKScene {
                 }
                 w.duty = 0.68 - 0.08 * min(1, w.vPx / 30)
                 let dNow = abs(stickX - w.fromX) * Double(pxPerM)
+                let dStop = abs(w.toX - w.fromX) * Double(pxPerM)
                 if !w.gaitReady {
                     w.gaitReady = true
-                    w.feet[0].plant = dNow + 8 // 어드레스 발 위치 근처에서 시작
-                    w.feet[1].plant = dNow - 10
+                    // 어드레스 스탠스 그 자리에서 시작 (foot1 = 뒷발 -11, foot2 = 앞발 +16 — 점프 0).
+                    // 위상 0.5: 뒷발(feet[0])이 먼저 나간다 (보행 개시 — 첫 걸음은 짧다)
+                    w.feet[0].plant = dNow + WalkAnim.StopPlan.rearOffset
+                    w.feet[1].plant = dNow + WalkAnim.StopPlan.frontOffset
+                    w.gaitPhase = 0.5
+                    // 원점 전환: 조준(공 원점) → 걷기(몸 원점). 렌더 리그를 반대로 옮겨 화면 위치 보존
+                    renderRig.shiftX(dir * Double(px(prevStickX) - px(stickX)))
+                    if dStop <= WalkAnim.stopPlanRange { // 두 걸음 거리 — 처음부터 발자국 계획
+                        w.beginStopPlan(dNow: dNow, dStop: dStop)
+                    }
                 }
-                w.gaitPhase += w.vPx * dt / (2 * w.stepL)
-                for i in 0 ..< 2 {
-                    let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
-                    if f < w.duty {
-                        if w.feet[i].inSwing { // 착지 — 목표점에 래치
-                            w.feet[i].inSwing = false
-                            w.feet[i].plant = w.feet[i].swingTo
-                            // 지물 반응 (재미): 러프·벙커 스텝 먼지, 물 위는 파문 — 한 걸음 걸러
-                            w.stepFxParity.toggle()
-                            if w.stepFxParity, w.vPx > 8 {
-                                let sgn: Double = w.toX >= w.fromX ? 1 : -1
-                                let footXm = w.fromX + sgn * w.feet[i].plant / Double(pxPerM)
-                                let fs = hole.surface(at: footXm)
-                                let at = CGPoint(x: px(footXm), y: groundY(footXm))
-                                if fs == .rough || fs == .bunker {
-                                    FX.dust(on: self, at: at, surface: fs, intensity: 0.18)
-                                } else if fs == .water {
-                                    FX.ripple(on: self, at: at)
+                if let plan = w.stopPlan {
+                    w.gaitPhase = w.planPhase0 + plan.progress(dNow) // 바운스·팔 위상만 이어간다
+                } else {
+                    w.gaitPhase += w.vPx * dt / (2 * w.stepL)
+                    var landedNearStop = false
+                    for i in 0 ..< 2 {
+                        let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
+                        if f < w.duty {
+                            if w.feet[i].inSwing { // 착지 — 목표점에 래치
+                                w.feet[i].inSwing = false
+                                w.feet[i].plant = w.feet[i].swingTo
+                                if dStop - dNow <= WalkAnim.stopPlanRange {
+                                    landedNearStop = true // 두 발 접지 — 여기서 정지 발자국 계획 시작
+                                }
+                                // 지물 반응 (재미): 러프·벙커 스텝 먼지, 물 위는 파문 — 한 걸음 걸러
+                                w.stepFxParity.toggle()
+                                if w.stepFxParity, w.vPx > 8 {
+                                    let sgn: Double = w.toX >= w.fromX ? 1 : -1
+                                    let footXm = w.fromX + sgn * w.feet[i].plant / Double(pxPerM)
+                                    let fs = hole.surface(at: footXm)
+                                    let at = CGPoint(x: px(footXm), y: groundY(footXm))
+                                    if fs == .rough || fs == .bunker {
+                                        FX.dust(on: self, at: at, surface: fs, intensity: 0.18)
+                                    } else if fs == .water {
+                                        FX.ripple(on: self, at: at)
+                                    }
                                 }
                             }
+                        } else if !w.feet[i].inSwing { // 리프트오프 — 다음 착지점을 지금 고정
+                            w.feet[i].inSwing = true
+                            w.feet[i].swingFrom = w.feet[i].plant
+                            w.feet[i].swingTo = dNow + 2 * w.stepL * (1 - w.duty) + w.duty * w.stepL
                         }
-                    } else if !w.feet[i].inSwing { // 리프트오프 — 다음 착지점을 지금 고정
-                        w.feet[i].inSwing = true
-                        w.feet[i].swingFrom = w.feet[i].plant
-                        w.feet[i].swingTo = dNow + 2 * w.stepL * (1 - w.duty) + w.duty * w.stepL
+                    }
+                    if landedNearStop {
+                        w.beginStopPlan(dNow: dNow, dStop: dStop)
                     }
                 }
                 walkAnim = w
@@ -1756,6 +1863,14 @@ final class GameScene: SKScene {
             let surfHere = hole.surface(at: stickX)
             let liftBoost = surfHere == .rough ? 1.5 : 1.0
             func footPose(_ i: Int) -> (x: Double, lift: Double) {
+                if let plan = w.stopPlan { // 정지 발자국 계획: 뒷발 p∈[0,0.5] → 앞발 p∈[0.45,1] (거리 구동 — 정지하면 발도 멈춘다)
+                    let p = plan.progress(dPx)
+                    let s = i == 0 ? min(1, p / 0.5) : min(1, max(0, (p - 0.45) / 0.55))
+                    let from = i == 0 ? plan.rearFrom : plan.frontFrom
+                    let to = plan.dStop + (i == 0 ? WalkAnim.StopPlan.rearOffset : WalkAnim.StopPlan.frontOffset)
+                    let lift = sin(.pi * s) * sin(.pi * s) * (4 + 3 * vAmp) * liftBoost
+                    return (mix(from, to, smoothstep(s)) - dPx, lift)
+                }
                 let f = (w.gaitPhase + (i == 1 ? 0.5 : 0)).truncatingRemainder(dividingBy: 1)
                 let g = w.feet[i]
                 if !g.inSwing {
@@ -1794,6 +1909,7 @@ final class GameScene: SKScene {
             rigRate = 10
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
+            targetRig.shiftX(walkAnim?.relaxShift ?? 0) // 방향 반전 시 몸이 있는 자리에
             rigRate = 5
         } else {
             targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
@@ -1834,6 +1950,7 @@ final class GameScene: SKScene {
         let joints = Skeleton.solve(&drawRig)
         if demoMode {
             logBones(joints, currentTime: currentTime)
+            logJumps(drawRig, currentTime: currentTime)
         }
         stickman.render(
             rig: drawRig, joints: joints, club: club, prevClub: prevHeadClub,
