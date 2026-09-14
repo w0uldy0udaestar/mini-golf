@@ -1,72 +1,79 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-14 세션 마무리)
+## 현재 상태 (2026-09-14 — 스틱맨 리그 개편 1·2·3 구현 완료, 사용자 플레이 판정 대기)
 
-**v0.4.1 배포·설치까지 완료.** main(=origin/main, bd8971e) 클린, 테스트 42개 통과.
-사용자 Mac의 `/Applications/MiniGolf.app`에 v0.4.1이 설치·검증돼 있다 (구사본 휴지통 정리,
-번들 도메인 설정 잔재 청소 완료 — 아래 함정 참조).
+사용자 피드백 5건(2026-09-14: ①전환 탁탁 ②걷기 느리다 가속 ③고무팔 ④모션 100종 획일 ⑤서프라이즈
+밋밋) 중 **①②③을 `feature/stickman-joints`(origin 푸시됨, main 미머지)에 구현**했다.
+리서치 게이트를 먼저 통과했고(docs/research-stickman-rig.md — 사용자 지시 "기존 구현체·에셋 먼저 찾아봐"),
+각 단계는 build·lint·test(52) + `--demo` 프레임 캡처·계측 로그로 검증했다. 이해도 확인 페이지(아티팩트):
+https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 
-- [x] CMU 모캡 골프 의식 2종: 티 꽂기·공 줍기 (v0.4.0) — 스윙은 대조 검증만(일치, 수정 없음)
-- [x] 주 디스플레이 폴백 버그 수정 — Sidecar 실종 (v0.4.1)
-- [x] 릴리스 체인: GitHub Release + Homebrew tap + 공개 SHA·brew 실설치 검증 (v0.4.0/v0.4.1)
-- [x] 사용자 Mac 재설치 + 설정 잔재 3종 삭제 (기록·고대비는 보존)
-- [ ] **무드 워크** — 승인된 모캡 계획(①파서 ②의식 ③무드 워크)의 잔여분, 아래 재개 지점
+- [x] ③ 관절 뼈대 — `GolfCore/TwoBoneIK`(Juckett 해석해+pole+tanh 소프트닝) + `MiniGolf/Skeleton`
+      (점 리그 유지, 렌더 직전 뼈 길이 강제: 몸통 25·팔 17.5+17.5·다리 23.25+23.25). 의식 2종 재작성
+- [x] ② 걷기 속도 — `GolfCore/WalkProfile` 램프 0.9s·등속·램프 1.1s. 실측 정점/평균 1.04~1.09(구 1.5)
+- [x] ① 전환 — 원점 통일(걷기 출발·도착 = 몸 자리) + StopPlan(마지막 두 걸음 발자국 계획) +
+      setFacing(방향 반전 미러 보정). 실측 출발 힙 1.3px/frame·발 0.5(구 40px), 도착 힙 0.4·발 0.0(구 25px)
+- [ ] **사용자 플레이 판정** — `dist/MiniGolf.app`(make app, v0.4.1 번들 도메인 공유) 또는
+      `swift build && .build/debug/MiniGolf`. 실행 중인 v0.4.1은 ⛳️ 메뉴로 먼저 종료
+- [ ] Code Reviewer 리뷰 결과 반영 → main 머지 → 버전 범프(0.5.0)·CHANGELOG·릴리스
+- [ ] ④ 모션 재설계 — 사용자 선택: **줄여서 확 다르게 30~40종**(관절 각도 기반, 실루엣·리듬 차별화).
+      데이터 후보: Quaternius UAL(CC0)·Nature 보행 데이터셋(CC BY)·Apple Vision 포즈 추출
+- [ ] ⑤ 서프라이즈 — 사용자 선택: 데스크탑 연동(권장)·물리·규칙·스틱맨/생물 전부. 아이디어 15개는
+      아티팩트 5절. 원칙: 결과 종류 다양화 · 예고→사건→반응 3박자 · 희귀 등급
 
-### ⚠️ 다음 세션 재개 지점 — 무드 워크
+### 재개 지점
 
-스코어 상태 → 걷기 스타일 연동 (버디 후 Elated/Bouncy, 더블보기 후 Depressed/Mope…).
+1. 사용자 판정 수집 → 미세 조정 후보: 다리 길이(46.5 — 서 있을 때 무릎 7.5px 굽음, 줄이면 보폭 극단에서
+   힙 하강 증가), 정지 계획 범위(50px), 램프 시간(0.9/1.1s), 방향 반전 시 상체가 몸을 가로질러 도는 연출
+2. 리뷰 반영 후 `git merge --no-ff feature/stickman-joints` → main
+3. ④ 착수 시: WalkFlavor 채널(오프셋)을 관절 각도 채널(어깨·팔꿈치·무릎·허리·목)로 확장하는 설계부터.
+   IK 후처리가 있으므로 손·발 목표점 기반으로도 실루엣 설계 가능. 100종 → 묶음별 대표 30~40종 선정 필요
 
-- 원료: `refs/mocap/` (157 AMC + 37 ASF, gitignore — manifest.json에 선정 목록.
-  CMU 데이터는 재판매 금지라 저장소 커밋 금지)
-- 도구: `refs/mocap/tools/amc2d.py` (ASF/AMC→FK→2D 투영→채널 추출, 검증 완료)
-- 방법: 성격 걷기 클립과 표준 걷기(neutral)의 채널 차분 → WalkFlavor 오버레이 초안
-  자동 생성 → 수동 다듬기. **발 접지(노슬립) 게이트는 절대 불변** — 상체 채널·보폭/듀티만
-- 참고: docs/research-mocap-index.md '이식 1차 결과' 절, B절(대상 ~40종 목록)
+### 관찰·계측 도구 (이번 세션 추가)
 
-### ⚠️ 설정 도메인 함정 (2026-08-31 실측 — "업데이트 적용 안 됨" 소동의 전말)
+- `--demo` 로그: `STICK[벽시계] x groundY H mode`(0.5s, 캡처 크롭용) · `BONES`(힙 하강·손 클램프·다리 잔여) ·
+  `WALKV tw x v`(0.1s 속도 프로파일) · `MOVE`(힙·발·그립 프레임당 최대 이동 — 전환 점프 검출)
+- 캡처 워크플로(스크래치패드 도구 capture.sh·crop.py·walkv.py·jumps.py·transitions.py — 세션 한정):
+  **사용자 인스턴스를 죽이지 않고** `--screen 1`로 두 번째 디스플레이에 띄운 뒤 `screencapture -D 2` 버스트,
+  STICK 로그로 크롭. 종료는 `pkill -f "\.build/debug/MiniGolf"`(경로 지정 — `pkill -f MiniGolf`는 사용자 앱도 죽인다)
+- `--demo-pickup`: 첫 샷도 퍼터·거리 프리셋 유지로 고쳐 탭인→홀인→줍기가 실제로 나온다
 
-.app 번들의 UserDefaults 도메인은 `io.github.w0uldy0udaestar.mini-golf`, 개발 바이너리
-(.build)는 `MiniGolf` — **서로 다른 저장소다**. 구버전 데모 사운드 버그의 잔재(soundEnabled=0)
-와 Sidecar 모니터 선택(preferredDisplayID)·범퍼 꺼짐이 번들 도메인에 남아 v0.4.0이 체감 0이
-됐었다. 교훈: 설정 복구·검증은 반드시 번들 도메인 기준으로.
+## 주요 결정·교훈 (누적)
 
-### ⚠️ 공개 저장소 이력 (반드시 알 것)
+- **애니메이션·리그는 기존 구현체·에셋 리서치 먼저** (2026-09-14 사용자 지시, 메모리 저장)
+- **8-14 크로스페이드/원점 블렌드 기각의 구조적 원인**: 접지 발은 월드 제약인데 포즈 평균은 제3의 점 →
+  반드시 미끄러짐. 블렌드 가중치 조정은 막다른 길 — 좌표계 정의를 맞추고 걸음을 계획한다
+- SpriteKit 내장 IK(`SKReachConstraints`·`reach(to:)`)는 실존하지만 노드 트리·시간 액션 기반이라 기각
+- 코드리뷰는 fable 모델(설치형 Code Reviewer frontmatter 고정, model 파라미터 생략) — 다른 위임은 opus
+- 모션·시각 검증은 증거 루프: --demo 플래그 + 계측 로그 + 타임스탬프 캡처, 추정 금지
+- 넘어지기·쇼피스 동결은 연속 램프(fall×(1-rise²)) · 걷기 위치 곡선과 vInst는 반드시 짝(WalkProfile이 단일 출처)
+- 조정 포인트: 잔동작 진폭 1.7(boostMotion) · 쇼피스/서프라이즈 8% · 시그니처 표고 예산 0.34×worldW
 
-- 저장소는 **public** (https://github.com/w0uldy0udaestar/mini-golf). 과거 캡처에 개인정보가
-  찍혀 히스토리 재작성 후 **저장소를 재생성**해 정리된 히스토리만 올린 것이다.
-- `mini-golf-archive-private`는 오염 캡처를 품은 보관용 — **절대 public 전환 금지**.
-  재작성 전 전체 백업: `~/Project/mini-golf-backup-20260816-135637.bundle`.
-- 교훈: 캡처물은 처음부터 검정 배경막(스크래치패드 backdrop 도구) 위에서 찍을 것.
+### ⚠️ 설정 도메인 함정 (2026-08-31)
+
+.app 번들 UserDefaults 도메인은 `io.github.w0uldy0udaestar.mini-golf`, 개발 바이너리(.build)는 `MiniGolf` —
+서로 다른 저장소. 설정 복구·검증은 반드시 번들 도메인 기준으로.
+
+### ⚠️ 공개 저장소 이력
+
+- 저장소는 **public**. 과거 캡처 개인정보로 히스토리 재작성·저장소 재생성. `mini-golf-archive-private`는
+  절대 public 전환 금지. 백업: `~/Project/mini-golf-backup-20260816-135637.bundle`
+  (태그 `exp-transition-lab-20260814`에 8-14 스프링 실험실 보존 — 스크래치패드 복제본에서만 읽을 것)
+- **캡처물은 저장소에 커밋 금지** (이번 세션 캡처는 전부 스크래치패드)
 
 ## 백로그 (우선순위 낮음)
 
-- 크로스플랫폼 배포 설계 논의 (사용자 지정 예약 주제 — GolfCore는 순수 Swift라 이식 가능,
-  쟁점은 렌더·오버레이·사운드 대체와 Windows Swift 툴체인. 리서치 후 AskUserQuestion 권장)
-- 모캡 후속: 공 놓기(64_23/24) 드롭 연출, 모자 쓰기 해금 연출, 아이들/트립/제스처 확장
-- Apple 공증(연 $99) — 미서명 경고 제거 옵션
-- QA 잔여 P1: 립아웃/워터 좌절 반응, 연속 버디 스트릭, 포커스 복귀 인사
-- 릴리스 절차(확립됨): Makefile VERSION → `make zip` → `gh release create` →
-  tap cask version·sha256 갱신 → 공개 SHA·brew 설치 검증
+- 무드 워크(스코어 상태→걷기 스타일, 모캡 차분) — ④와 합쳐 설계 권장 (`refs/mocap/`, amc2d.py)
+- 걷기 방향 반전을 '제자리 돌기 2걸음'으로 (IDEAS) · 크로스플랫폼 배포 논의 · Apple 공증 · QA P1 잔여
+- 릴리스 절차: Makefile VERSION → `make zip` → `gh release create` → tap cask 갱신 → 공개 SHA·brew 검증
 
-## 실행·관찰 도구
+## 실행·관찰
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
-플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--demo-pickup`
-`--demo-trip` `--demo-idle` `--screen N` `--seed N` `--hat` `--demo-records`
-계측 로그: AIM·FLAVOR·MOTION·HOLED·SIGNATURE·RITUAL·BUMPERS·SHOWPIECE
-
-## 주요 결정·교훈
-
-- **코드리뷰는 fable 모델로** (사용자 지시, 메모리 저장됨) — 다른 위임은 opus
-- 모션·시각 검증은 증거 루프: --demo 플래그 + 계측 로그 + 타임스탬프 캡처, 추정 금지
-- **데모 캡처 전 반드시 `pkill -f MiniGolf`** — 사용자 인스턴스와 겹치면 이중 오버레이
-- 넘어지기·쇼피스 동결은 이진 아닌 연속 램프(fall×(1-rise²)) — 슬라이드·듀티 스냅 방지
-- 걷기 위치 곡선(smoothstep)과 vInst 도함수는 반드시 짝으로
-- 조정 포인트: 잔동작 진폭 1.7(GameScene boostMotion 호출부) · 쇼피스/서프라이즈 8% ·
-  시그니처 표고 예산 0.34×worldW(Course.swift)
+플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--demo-pickup` `--demo-trip` `--demo-idle`
+`--screen N` `--seed N` `--hat` `--demo-records`
 
 ## 주의사항
 
-- 합성 키 전송 금지 · 검증 명령에 파이프 금지(`$?` 가림) · 캡처는 화면 잠금 시 실패
-- SourceKit 진단은 상시 뒤처짐 — 컴파일러 결과만 신뢰
-- main = 항상 동작 상태 · 시그니처 지형 변경 시 등반 가능성 회귀 테스트 필수
+- 합성 키 전송 금지 · 검증 명령에 파이프 금지(`$?` 가림 — swiftformat --lint | tail 로 한 번 놓쳤다) ·
+  캡처는 화면 잠금 시 실패 · SourceKit 진단은 상시 뒤처짐(컴파일러만 신뢰) · main = 항상 동작 상태
