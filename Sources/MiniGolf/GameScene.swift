@@ -322,7 +322,7 @@ final class GameScene: SKScene {
         stickX = ball.x
         dir = hole.holeX >= ball.x ? 1 : -1
         // 그린에 올라오면 퍼터로 자동 전환 (관례 — 이후 ←→로 자유 변경 가능)
-        if strokes > 0, hole.surface(at: ball.x) == .green, !club.isPutter {
+        if strokes > 0 || demoPickupForce, hole.surface(at: ball.x) == .green, !club.isPutter { // 관찰 모드는 첫 샷도 퍼터
             clubIdx = ClubTable.all.firstIndex { $0.isPutter } ?? clubIdx
         }
         presetPutterHeight()
@@ -427,6 +427,36 @@ final class GameScene: SKScene {
     private var boundsWorst = 0.0
     private var boundsCount = 0
     private var boundsLastLog: TimeInterval = 0
+    /// 뼈대 계측 (관찰용): 힙 하강·손 클램프·다리 잔여 신장의 구간 최대치를 0.5초마다 찍는다.
+    /// 프레임 캡처와 대조해 "늘어남 0"을 증거로 확인하기 위한 로거 (추정 금지 원칙)
+    private var bonesLastLog: TimeInterval = 0
+    private var bonesMax = Skeleton.Joints()
+    private func logBones(_ j: Skeleton.Joints, currentTime: TimeInterval) {
+        bonesMax.hipDrop = max(bonesMax.hipDrop, j.hipDrop)
+        bonesMax.clampLead = max(bonesMax.clampLead, j.clampLead)
+        bonesMax.clampTrail = max(bonesMax.clampTrail, j.clampTrail)
+        bonesMax.legStretch = max(bonesMax.legStretch, j.legStretch)
+        guard currentTime - bonesLastLog > 0.5 else { return }
+        bonesLastLog = currentTime
+        // 캡처 크롭용 위치 (벽시계 타임스탬프): 씬 좌표 x, 지면 y, 씬 높이 — 스크린샷은 좌상단 원점
+        print(String(
+            format: "STICK[%.2f] %d %d %d %@",
+            Date().timeIntervalSince1970, Int(px(stickX)), Int(groundY(stickX)), Int(size.height),
+            String(describing: mode)
+        ))
+        let notable = bonesMax.hipDrop > 0.05 || bonesMax.clampLead > 0.05
+            || bonesMax.clampTrail > 0.05 || bonesMax.legStretch > 0
+        if notable {
+            print(String(
+                format: "BONES[%.2f] drop %.1f clampLead %.1f clampTrail %.1f legStretch %.1f mode %@",
+                currentTime, bonesMax.hipDrop, bonesMax.clampLead, bonesMax.clampTrail, bonesMax.legStretch,
+                String(describing: mode)
+            ))
+            fflush(stdout)
+        }
+        bonesMax = Skeleton.Joints()
+    }
+
     private func logRigBounds(_ rig: Rig, currentTime: TimeInterval) {
         let sx = Double(px(stickX))
         func scr(_ x: Double) -> Double {
@@ -1348,7 +1378,11 @@ final class GameScene: SKScene {
                 if demoWait > (demoIdleForce ? 25 : 1.2) { // 아이들 관찰 모드는 조준을 길게 유지
                     demoWait = 0
                     // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
-                    heightPct = demoWallForce ? Double.random(in: 0.9 ... 1.0) : Double.random(in: 0.5 ... 0.85)
+                    if demoWallForce {
+                        heightPct = Double.random(in: 0.9 ... 1.0)
+                    } else if !(demoPickupForce && club.isPutter) { // 줍기 관찰: 거리 프리셋 퍼팅 그대로 (탭인)
+                        heightPct = Double.random(in: 0.5 ... 0.85)
+                    }
                     startSwing()
                 }
             } else if mode == .end {
@@ -1789,8 +1823,13 @@ final class GameScene: SKScene {
         if demoMode {
             logRigBounds(drawRig, currentTime: currentTime)
         }
+        // 뼈대 후처리: 뼈 길이 고정 + 무릎·팔꿈치 IK (발은 불변, 손은 사거리 안으로) — Skeleton.swift
+        let joints = Skeleton.solve(&drawRig)
+        if demoMode {
+            logBones(joints, currentTime: currentTime)
+        }
         stickman.render(
-            rig: drawRig, club: club, prevClub: prevHeadClub,
+            rig: drawRig, joints: joints, club: club, prevClub: prevHeadClub,
             headMorph: headMorph, visualLoft: renderLoft, dir: dir
         )
 
@@ -1896,16 +1935,16 @@ private extension GameScene {
         let u = anim.t / anim.dur
         var r = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
         if anim.kind == .teePlace {
-            // 구간 25 / 50 / 25 (모캡 21/60/19의 작업부 압축) — 스쿼트 깊이는 비율 0.68 반영
+            // 구간 25 / 50 / 25 (모캡 21/60/19의 작업부 압축).
+            // 뼈 길이 고정(Skeleton) 이후 재작성: 팔이 늘어나 공에 닿던 것을 — 깊은 스쿼트 + 체중을
+            // 앞발로 옮기고(힙 전진, 발은 고정) 상체를 45° 숙여 어깨가 공 사거리(35px) 안에 들게 한다
             let down = smoothstep(min(1, u / 0.25)) * (1 - smoothstep(max(0, (u - 0.75) / 0.25)))
             let squat = down
-            r.hip.y -= 18 * squat
-            r.hip.x -= 2 * squat
-            r.knee1 = mix(r.knee1, CGPoint(x: r.hip.x - 10, y: 13), squat)
-            r.knee2 = mix(r.knee2, CGPoint(x: r.hip.x + 13, y: 12), squat)
-            r.shoulder.y -= 20 * squat
-            r.shoulder.x += 4 * squat // 상체 살짝 숙임 (모캡 leanX 소량)
+            r.hip.y -= 28 * squat // 42 → 14: 허벅지가 거의 수평인 스쿼트
+            r.hip.x += (renderBallFwd - 9) * squat // 체중 앞발 — 클럽(ballFwd)과 무관하게 힙이 x≈-14에 (무릎은 IK가 접는다)
+            r.shoulder = mix(r.shoulder, CGPoint(x: r.hip.x + 20, y: r.hip.y + 15), squat) // 전방 숙임 — 어깨가 공 사거리 안 (계측: DR에서 손 3.8px 부족 → 보정)
             r.headDy = mix(12, 9, squat)
+            r.headDx = mix(r.headDx, 9, squat) // 공을 내려다본다
             // 자유손: 공 자리(바닥)로 — 작업 중 '꽂는' 잔손질
             let work = smoothstep(min(1, max(0, (u - 0.2) / 0.15))) * (1 - smoothstep(max(0, (u - 0.72) / 0.18)))
             let jiggle = sin(u * 34) * 1.2 * (u > 0.3 && u < 0.65 ? 1 : 0)
@@ -1914,22 +1953,25 @@ private extension GameScene {
                 CGPoint(x: renderBallFwd - 2, y: 2 + jiggle),
                 work
             )
-            // 클럽 든 손은 지팡이처럼 옆에 짚는다
-            r.grip = mix(r.grip, CGPoint(x: r.hip.x - 9, y: 28), squat)
-            r.clubPhi = mix(r.clubPhi, -0.06, squat)
+            // 클럽 든 손은 지팡이처럼 옆에 짚는다 — 헤드가 지면에 닿는 각도로 뒤로 기울인다
+            // (수직(-0.06)이면 긴 클럽 헤드가 지면 아래로 뚫고 들어갔다)
+            let caneY = 28.0
+            r.grip = mix(r.grip, CGPoint(x: r.hip.x - 9, y: caneY), squat)
+            r.clubPhi = mix(r.clubPhi, -acos(min(1, caneY / renderLen)), squat)
         } else {
-            // 공 줍기: 33/33/33 균등 (모캡) — 힙 고정, 허리 힌지, 뒷다리 들기
+            // 공 줍기: 33/33/33 균등 (모캡) — 힙 고정, 허리 힌지, 뒷다리 들기.
+            // 힌지를 조금 더 깊게(어깨 y 36→33): 뼈 길이 고정 후 손이 컵에 정확히 닿도록 (사거리 35)
             let hinge = smoothstep(min(1, u / 0.33)) * (1 - smoothstep(max(0, (u - 0.67) / 0.33)))
             r.hip.y -= 3 * hinge
-            r.shoulder = mix(r.shoulder, CGPoint(x: r.hip.x + 21, y: 36), hinge)
+            r.shoulder = mix(r.shoulder, CGPoint(x: r.hip.x + 21, y: 33), hinge)
             r.headDy = mix(12, 7, hinge)
             r.headDx = mix(r.headDx, 10, hinge)
             // 뒷다리 들기 (모캡 시그니처) — 앞다리는 지지
             r.foot1 = mix(r.foot1, CGPoint(x: r.hip.x - 20, y: 13), hinge)
             r.knee1 = mix(r.knee1, CGPoint(x: r.hip.x - 12, y: 26), hinge)
             r.handTrail = mix(r.handTrail, CGPoint(x: anim.cupDx, y: 1), hinge)
-            // 클럽 팔은 뒤로 뻗어 카운터밸런스
-            r.grip = mix(r.grip, CGPoint(x: r.hip.x - 16, y: 42), hinge)
+            // 클럽 팔은 뒤로 뻗어 카운터밸런스 (사거리 35 안: 계측에서 (−16, 42)는 4.8px 클램프)
+            r.grip = mix(r.grip, CGPoint(x: r.hip.x - 11, y: 40), hinge)
             r.clubPhi = mix(r.clubPhi, -1.35, hinge)
         }
         return r
