@@ -761,9 +761,10 @@ final class GameScene: SKScene {
             // 몸이 타깃 쪽으로 실린다. 이글 이상은 두 번(코킹은 한 번). 리그 추적은 이 동안 16 (5는 펀치를 반도 못 따라간다)
             let n = reactionKind == .rejoice ? 2.0 : 1.0
             let c = (u * n).truncatingRemainder(dividingBy: 1) // u < 1이라 마지막 사이클도 1에 닿지 않는다
-            let cock = smoothstep(min(1, u * n / 0.22)) * smoothstep(min(1, (1 - u) / 0.15)) // 끝에는 클럽으로 복귀
-            let punch = c < 0.22 ? 0 : c < 0.34 ? smoothstep((c - 0.22) / 0.12) : c < 0.75 ? 1 : 1 -
-                smoothstep((c - 0.75) / 0.25)
+            let fade = smoothstep(min(1, (1 - u) / 0.15)) // 끝에는 손이 클럽으로, 몸도 같이 복귀 (리뷰: 몸만 0.2s 잔류)
+            let cock = smoothstep(min(1, u * n / 0.22)) * fade
+            let punch = fade * (c < 0.22 ? 0 : c < 0.34 ? smoothstep((c - 0.22) / 0.12) : c < 0.75 ? 1 : 1 -
+                smoothstep((c - 0.75) / 0.25))
             let hx = mix(rig.shoulder.x - 7, rig.shoulder.x + 9, punch)
             let hy = mix(rig.shoulder.y - 12, rig.shoulder.y + 13, punch)
             rig.handTrail = CGPoint(x: mix(rig.handTrail.x, hx, cock), y: mix(rig.handTrail.y, hy, cock))
@@ -2087,7 +2088,9 @@ final class GameScene: SKScene {
             targetRig = RigBuilder.fromPose(pose, ballFwd: renderBallFwd, clubLen: renderLen)
             if let tw = twirl {
                 targetRig.clubPhi += tw.spin
-                rigClubRate = 40 // 트월 중 클럽은 고속 추적 — 느린 추적(5)은 회전에 π 넘게 뒤처져 되감긴다
+                if ft < 1.0 { // 스핀 창(0.45~0.9)만 고속 추적 — 느린 추적(5)은 회전에 π 넘게 뒤처져 되감긴다.
+                    rigClubRate = 40 // 이후는 5로 복귀: 무빙 홀드 흔들림(0.18)이 rate 5 필터 전제라 40이면 2.4배 커진다 (리뷰)
+                }
             }
             applySlopeStance(&targetRig) // 피니시 홀드 중에도 발은 경사를 딛는다 (리뷰 지적)
             applyFinishRecoil(&targetRig, ft: ft) // 로리 트레이드마크
@@ -2107,8 +2110,9 @@ final class GameScene: SKScene {
         }
         // 걷기 중 발·무릎은 고속 추적 — 접지점이 스무딩에 밀려 미끄러져 보이는 것을 방지
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
-        // 암록 퍼터: 조준·스트로크·피니시 홀드 동안 그립 위로 샤프트가 전완을 따라 올라간다 (걷기·의식은 0)
-        let holdsPutter = mode == .aim || swingAnim != nil || mode == .motion || mode == .holed
+        // 암록 퍼터: 퍼터를 쥐고 서 있는 동안(조준·스트로크·피니시 홀드·서프라이즈·라운드 끝) 그립 위로 샤프트가
+        // 전완을 따라 올라간다. 걷기·의식만 0 (리뷰: 포함 목록 방식은 .surprise/.end에서 연장부가 스르륵 사라졌다)
+        let holdsPutter = mode != .walking && mode != .ritual
         targetRig.butt = club.isPutter && holdsPutter ? profile.putt.butt : 0
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
