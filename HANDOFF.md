@@ -22,12 +22,23 @@ https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 - [x] **프로 스윙 키포인트**(사용자 제안): 로리 매킬로이 아이언 face-on 영상 → MediaPipe → P-System 키프레임·템포
       갱신. 도구 refs/video/tools, 문서 docs/research-swing-keypoints.md. 핵심: 톱에서 몸이 뒤로 흔들리지 않음, 임팩트
       머리 공 뒤, 팔로 척추 타깃 반대 유지, 피니시 손 머리 뒤
-- [ ] **사용자 플레이 판정 대기** (`dist/MiniGolf.app` 실행 중 = main 최신) → 버전 범프 0.5.0·릴리스·GIF 카탈로그 재캡처
-- [ ] 후속 후보: 드라이버·웨지·퍼터 face-on 영상으로 클럽별 키프레임 분리, 어드레스·임팩트 샤프트 각 검출(현재 미검출)
+- [x] **선수별 스윙 스타일 3종 1단계**(f96f675): 로리·타이거·브라이슨 × 드라이버/아이언 6편 실측 → SwingKeyframes 6세트,
+      ⛳️ 메뉴 "스윙 스타일"(UserDefaults `swingStyle`), --style 플래그. 편차 1.3배 과장. 문서 docs/research-swing-styles.md
+- [ ] **사용자 플레이 판정 대기** (`dist/MiniGolf.app` 실행 중 = main 최신). 스타일 차이가 약하면 gen_table.py의 EX(1.3)를
+      올려 재생성, 너무 과하면 내림. 후보 조정: 브라이슨 템포(추정 0.21/0.10/0.26)·타이거 피니시 감김
+- [ ] 2단계: 웨지·퍼터 face-on 6편 (브라이슨 암록 퍼팅은 퍼터 렌더 길이 변경 필요) · 버전 범프 0.5.0·릴리스·GIF 재캡처
+- [ ] 후속 후보: 어드레스·임팩트 샤프트 각 자동 검출(현재 미검출, 기존 기하 유지) · 선수 추가 시 gen_table.py 평균 재계산 주의
 - [ ] ⑤ 서프라이즈 — 사용자 선택: 데스크탑 연동(권장)·물리·규칙·스틱맨/생물 전부. 아이디어 15개는
       아티팩트 5절. 원칙: 결과 종류 다양화 · 예고→사건→반응 3박자 · 희귀 등급
 
-### 재개 지점
+### 재개 지점 (스윙 스타일 파이프라인)
+
+영상 → `refs/video/README.md` 절차. 작업 폴더(`SWING_WORK`)에 pose_<name>.json·events_<name>.json을 만들고
+`gen_table.py`가 Swift 테이블을 출력하면 `Poses.swift`의 SwingKeyframes 세트에 붙여 넣는다. 유튜브 다운로드는
+yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403이 안 난다. MediaPipe는 0.10.21(레거시 API).
+장면 전환이 많은 영상은 analyze.py에 시간 창(t0 t1)을 주고, 오버레이 PNG로 관절 정합을 반드시 눈으로 확인.
+
+### 재개 지점 (기존)
 
 1. 사용자 판정 수집 → 미세 조정 후보: 다리 길이(46.5 — 서 있을 때 무릎 7.5px 굽음, 줄이면 보폭 극단에서
    힙 하강 증가), 정지 계획 범위(50px), 램프 시간(0.9/1.1s), 방향 반전 시 상체가 몸을 가로질러 도는 연출
