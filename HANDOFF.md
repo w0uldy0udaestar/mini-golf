@@ -1,9 +1,9 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-15 — 선수 트레이드마크 연출 구현 완료, 리뷰 반영 후 main 머지·플레이 판정 대기)
+## 현재 상태 (2026-09-15 — 선수 트레이드마크 연출 main 머지 완료, 사용자 플레이 판정 대기)
 
 스틱맨 리그 개편(①②③④)·프로 스윙 스타일 3종(1.3배→2.5배 과장)에 이어 **선수 트레이드마크 연출**을
-`feature/swing-trademarks`에 구현했다(4470f6b). 정면 2D 키포인트가 못 잡는 특징을 키프레임 밖 연출로 넣은 것이고
+`feature/swing-trademarks`에 구현하고 Code Reviewer(minor 3·nit 3, critical 0) 반영 후 main에 머지했다. 정면 2D 키포인트가 못 잡는 특징을 키프레임 밖 연출로 넣은 것이고
 물리는 동일하다. 각 단계는 build·lint·test(52) + `--demo-trademark` 리그 덤프 → 프레임 시트로 검증했다.
 이해도 확인 페이지(아티팩트): https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 
@@ -31,7 +31,8 @@
       `Rig.butt` 10·샤프트=전완) · 로리 — 임팩트 점프 8px(`applyImpactJump`)·피니시 리코일(`applyFinishRecoil`).
       부수 수정: 탭인 홀아웃 반응이 퍼터 스윙 애니 상한(0.83s) 때문에 0.3s 늦던 문제(전 스타일). "브라이슨 긴 톱 홀드"는
       출처가 없어 제외
-- [ ] Code Reviewer 리뷰 반영 → `git merge --no-ff feature/swing-trademarks` → main push → `make app`(dist 갱신, 사용자 앱 재실행 필요)
+- [x] Code Reviewer 반영(e1955b8: 트월 고속 추적 스핀 창 한정·암록 연장부 .surprise/.end 유지·어퍼컷 종료 페이드) → main 머지 → `make app`.
+      보류: 기권·워터 경로의 리코일 포즈 잔존(해제 시 클럽 재감기 스냅이 더 나쁨), 칩인 시 트월+어퍼컷 동시(의도), UPPER 로그 60Hz
 - [ ] **사용자 플레이 판정 대기** — 2.5배 과장(아직 안 해봄)과 트레이드마크를 한 번에. 약하면: 점프 8→10, 트월 트리거 완화
       (heightPct 0.45→0.3), 암록 butt 10→14. ⛳️ 메뉴 → 스윙 스타일로 전환하며 비교, 타이거 어퍼컷은 버디 이상 홀아웃에서만
 - [ ] 2단계: 웨지·퍼터 face-on 6편 (브라이슨 암록 퍼팅은 퍼터 렌더 길이 변경 필요) · 버전 범프 0.5.0·릴리스·GIF 재캡처
