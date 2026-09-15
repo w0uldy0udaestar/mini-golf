@@ -861,7 +861,8 @@ final class GameScene: SKScene {
         let arrivalDir: Double = hole.holeX >= ball.x ? 1 : -1
         // 도착 클럽은 enterAim의 자동 퍼터 전환과 같은 조건으로 미리 안다 — 도착 자리를 그 스탠스로
         let willPutt = (strokes > 0 || demoPickupForce) && hole.surface(at: ball.x) == .green
-        let arrivalFwd = willPutt ? SwingProfile.profile(for: .putter).ballFwd : profile.ballFwd
+        let arrivalFwd = willPutt ? SwingProfile.profile(for: .putter, style: swingStyle).ballFwd : profile
+            .ballFwd // 스타일별 퍼터 스탠스
         let to = ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM)
         let dist = abs(to - from)
         mode = .walking

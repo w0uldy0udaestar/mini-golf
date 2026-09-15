@@ -77,12 +77,7 @@ enum Poses {
         heel: 10,
         headDx: 2
     ) // 피니시 (손 머리 뒤, 샤프트 수평 뒤)
-    // 퍼터 전용: 펜듈럼 스트로크
-    static let ptA = Pose(hipDx: 0, tilt: -3, handA: 10, handD: 30, clubA: 8, heel: 0, headDx: 7)
-    static let ptTop = Pose(hipDx: 0, tilt: -4, handA: -22, handD: 30, clubA: -30, heel: 0, headDx: 7)
-    static let ptImp = Pose(hipDx: 1, tilt: -3, handA: 12, handD: 30, clubA: 10, heel: 0, headDx: 7)
-    static let ptFin = Pose(hipDx: 2, tilt: -2, handA: 34, handD: 30, clubA: 46, heel: 0, headDx: 8) // 팔로 ≥ 백 (대칭 이상)
-    // 클럽을 옆에 들고 선 직립 — 걷기↔어드레스 전환 기준
+    /// 클럽을 옆에 들고 선 직립 — 걷기↔어드레스 전환 기준
     static let upright = Pose(hipDx: 0, tilt: 2, handA: -18, handD: 30, clubA: -35, heel: 0, headDx: 5)
 }
 
@@ -138,33 +133,53 @@ enum SwingStyle: String, CaseIterable {
     }
 }
 
-/// 퍼터 키프레임 — 표준 펜듈럼(공용) / 브라이슨 암록. 물리는 같고 렌더 길이·그립 위치·스트로크 모양만 다르다
+/// 퍼터 키프레임 — 선수별 face-on 실측 (2026-09-15 2단계, docs/research-swing-styles.md §2단계). 물리는 같고 자세·스트로크 모양·
+/// 렌더 길이·그립 위치·스탠스(ballFwd)만 다르다. 실측 요지: 세 선수 모두 척추는 거의 수직(tilt −10~−14 = 어깨가 힙 위)이고 손은
+/// 어깨 바로 아래 — 구 공용 세트(공이 힙 23px 앞, 손 10° 앞, 척추 앞기울기)는 드라이버 스탠스에 가까웠다. 공은 스탠스 중앙 약간
+/// 앞(ballFwd 6, 암록은 전진 프레스를 위해 16). 백스트로크 폭(−32°)은 사용자 입력이 정하므로 공용, 팔로스루 길이만 선수별
+/// (로리 길게 35° · 타이거 짧게 19° · 브라이슨 38°, 평균 대비 1.5배 과장).
 struct PutterKeyframes {
     let a, top, imp, fin: Pose
     let len: Double // 렌더 길이(px) — 표준 34(실 34") · 암록 43(실 43")
     let butt: Double // 그립 위로 샤프트가 전완을 따라 더 올라가는 길이(px) — 암록의 17" 그립
+    let ballFwd: Double // 스탠스에서 공 위치(px) — 실측 자세에서 헤드가 공 뒤 5px에 오도록 손 각을 수치 해로 맞췄다 (gen_table2.py)
 
-    static let standard = PutterKeyframes(
-        a: Poses.ptA, top: Poses.ptTop, imp: Poses.ptImp, fin: Poses.ptFin, len: 34, butt: 0
+    static let roryPutt = PutterKeyframes(
+        a: Pose(hipDx: 0.0, tilt: -10.1, handA: 5.9, handD: 30, clubA: 3.9, heel: 0, headDx: 3.7),
+        top: Pose(hipDx: 0.1, tilt: -10.7, handA: -25.8, handD: 30, clubA: -33.8, heel: 0, headDx: 3.0),
+        imp: Pose(hipDx: 0.3, tilt: -11.7, handA: 8.6, handD: 30, clubA: 6.6, heel: 0, headDx: 2.7),
+        fin: Pose(hipDx: 3, tilt: -7.6, handA: 34.7, handD: 30, clubA: 46.7, heel: 0, headDx: 4.7),
+        len: 34, butt: 0, ballFwd: 6
     )
 
-    /// 암록: 샤프트가 리드 전완과 한 직선(clubA == handA)이고 손목이 꺾이지 않아 어깨 회전만으로 흔든다.
-    /// 손은 힙 높이(전완이 짧아 보이는 만큼 곧은 팔의 원근 단축) — handD는 RigBuilder의 긴 클럽 보정(−12)을 감안한 값.
-    /// 어드레스 헤드는 공 6px 뒤·지면 2px 위로 표준 퍼터 기하와 맞췄다(직립 스탠스라 tilt 0)
-    static let armLock = PutterKeyframes(
-        a: Pose(hipDx: 0, tilt: 0, handA: 11, handD: 34, clubA: 11, heel: 0, headDx: 6),
-        top: Pose(hipDx: 0, tilt: 0, handA: -8, handD: 34, clubA: -8, heel: 0, headDx: 6),
-        imp: Pose(hipDx: 1, tilt: 0, handA: 12, handD: 34, clubA: 12, heel: 0, headDx: 6),
-        fin: Pose(hipDx: 2, tilt: 1, handA: 30, handD: 34, clubA: 30, heel: 0, headDx: 7),
-        len: 43, butt: 10
+    static let tigerPutt = PutterKeyframes(
+        a: Pose(hipDx: 0.0, tilt: -10.8, handA: 6.2, handD: 30, clubA: 4.2, heel: 0, headDx: 6.3),
+        top: Pose(hipDx: 2.4, tilt: -14, handA: -24.3, handD: 30, clubA: -32.3, heel: 0, headDx: 5.9),
+        imp: Pose(hipDx: 0.4, tilt: -11.6, handA: 8.6, handD: 30, clubA: 6.6, heel: 0, headDx: 5.3),
+        fin: Pose(hipDx: -0.6, tilt: -9.4, handA: 19.4, handD: 30, clubA: 31.4, heel: 0, headDx: 5.7),
+        len: 34, butt: 0, ballFwd: 6
+    )
+
+    /// 암록: 샤프트가 리드 전완과 한 직선(clubA == handA)이고 손목이 꺾이지 않아 어깨 회전만으로 흔든다. handD 34는 RigBuilder의
+    /// 긴 클럽 보정(−12) 후 22 — 곧은 팔의 원근 단축. 전진 프레스 15°를 지키려면 공이 앞쪽(ballFwd 16)이어야 한다
+    static let brysonPutt = PutterKeyframes(
+        a: Pose(hipDx: 0.0, tilt: -14, handA: 15.2, handD: 34, clubA: 15.2, heel: 0, headDx: 0.0),
+        top: Pose(hipDx: -1.1, tilt: -14, handA: -16.8, handD: 34, clubA: -16.8, heel: 0, headDx: 0.0),
+        imp: Pose(hipDx: 0.2, tilt: -14, handA: 17.2, handD: 34, clubA: 17.2, heel: 0, headDx: 0.0),
+        fin: Pose(hipDx: -2.6, tilt: -14, handA: 37.9, handD: 34, clubA: 37.9, heel: 0, headDx: 0.0),
+        len: 43, butt: 10, ballFwd: 16
     )
 
     static func table(_ style: SwingStyle) -> PutterKeyframes {
-        style.armLockPutter ? armLock : standard
+        switch style {
+        case .rory: roryPutt
+        case .tiger: tigerPutt
+        case .bryson: brysonPutt
+        }
     }
 }
 
-/// 스타일 × 클럽군의 풀스윙 키프레임 6개 + 템포 (퍼터는 공용 펜듈럼)
+/// 스타일 × 클럽군의 풀스윙 키프레임 6개 + 템포 (드라이버·아이언·웨지; 퍼터는 PutterKeyframes)
 struct SwingKeyframes {
     let p1, p2, p4, p7, p8, p10: Pose
     let down, follow, finish: Double // 다운스윙·임팩트→최대 뻗음·→피니시 (초)
@@ -245,13 +260,49 @@ struct SwingKeyframes {
         down: 0.18, follow: 0.08, finish: 0.21, topHold: 0.0
     )
 
+    /// ── 웨지 3세트 (2026-09-15 2단계): 로리·타이거는 face-on 실측(3/4 스윙이 그대로 담겨 wedge 프로파일 topScale 1.0),
+    /// 브라이슨은 정면 풀웨지 영상을 6편 뒤져도 없어(TV 줌·후방 뷰·칩샷) 아이언 세트에서 유도 — 톱·피니시만 짧게.
+    /// 두 선수 평균 대비 2.5배 과장. 타이거 피니시는 클립이 팔로스루에서 끝나 손·팔만 아이언 피니시로 대체
+    static let roryWedge = SwingKeyframes(
+        p1: Pose(hipDx: 0.0, tilt: -13.6, handA: 13.4, handD: 34, clubA: 12, heel: 0.0, headDx: 5.0),
+        p2: Pose(hipDx: 1.0, tilt: -14.5, handA: -80.7, handD: 34, clubA: -100, heel: 0.0, headDx: 3.9),
+        p4: Pose(hipDx: -0.5, tilt: -7.1, handA: -124.8, handD: 26.1, clubA: -235, heel: 0.0, headDx: 1.1),
+        p7: Pose(hipDx: 7.3, tilt: -17.5, handA: 17.1, handD: 34, clubA: 6, heel: 1.0, headDx: 4.0),
+        p8: Pose(hipDx: 9.1, tilt: -16.0, handA: 72.6, handD: 32.6, clubA: 120, heel: 3.0, headDx: 5.0),
+        p10: Pose(hipDx: 9.8, tilt: -19.7, handA: 200, handD: 19, clubA: 250, heel: 6.0, headDx: 9.8),
+        down: 0.24, follow: 0.12, finish: 0.28, topHold: 0.0
+    )
+
+    static let tigerWedge = SwingKeyframes(
+        p1: Pose(hipDx: 0.0, tilt: -17.0, handA: 16.3, handD: 34, clubA: 12, heel: 0.0, headDx: 3.7),
+        p2: Pose(hipDx: -1.1, tilt: -14.1, handA: -35, handD: 30, clubA: -100, heel: 0.0, headDx: 2.2),
+        p4: Pose(hipDx: 3.7, tilt: -23.4, handA: -115.4, handD: 31.8, clubA: -230, heel: 0.0, headDx: 1.0),
+        p7: Pose(hipDx: 7.7, tilt: -26.8, handA: 24.9, handD: 34, clubA: 6, heel: 1.0, headDx: -0.1),
+        p8: Pose(hipDx: 7.7, tilt: -22.5, handA: 73.4, handD: 26.7, clubA: 120, heel: 3.0, headDx: 3.9),
+        p10: Pose(hipDx: 7.2, tilt: -20.1, handA: 200, handD: 21.5, clubA: 250, heel: 6.0, headDx: 4.0),
+        down: 0.24, follow: 0.12, finish: 0.3, topHold: 0.08
+    )
+
+    static let brysonWedge = SwingKeyframes(
+        p1: brysonIron.p1,
+        p2: brysonIron.p2,
+        p4: Pose(hipDx: 5.2, tilt: -2.4, handA: -95.0, handD: 27.3, clubA: -205, heel: 0.0, headDx: 1.0),
+        p7: brysonIron.p7,
+        p8: brysonIron.p8,
+        p10: Pose(hipDx: -2.0, tilt: -8.7, handA: 185, handD: 20.2, clubA: 285, heel: 0.9, headDx: 13.3),
+        down: 0.17, follow: 0.08, finish: 0.20, topHold: 0.0
+    )
+
     static func table(_ style: SwingStyle, _ cat: ClubCategory) -> SwingKeyframes {
         switch (style, cat) {
         case (.rory, .wood): roryDriver
+        case (.rory, .wedge): roryWedge
         case (.rory, _): roryIron
         case (.tiger, .wood): tigerDriver
+        case (.tiger, .wedge): tigerWedge
         case (.tiger, _): tigerIron
         case (.bryson, .wood): brysonDriver
+        case (.bryson, .wedge): brysonWedge
         case (.bryson, _): brysonIron
         }
     }
@@ -303,18 +354,18 @@ struct SwingProfile {
                 keys: k,
                 putt: pt
             )
-        case .wedge: SwingProfile(
-                topScale: 0.72,
+        case .wedge: SwingProfile( // 실측 웨지 세트가 3/4 스윙을 담고 있어 스케일 없음 (구 0.72는 아이언 세트 축소용)
+                topScale: 1.0,
                 ballFwd: 13,
-                finishScale: 0.72,
+                finishScale: 1.0,
                 down: k.topHold + k.down,
                 isPutter: false,
                 keys: k,
                 putt: pt
             )
         case .putter: SwingProfile(
-                topScale: 1.0, ballFwd: 18, finishScale: 1.0, down: 0.29, isPutter: true, keys: k, putt: pt
-            ) // PGA 실측 317±35ms
+                topScale: 1.0, ballFwd: pt.ballFwd, finishScale: 1.0, down: 0.29, isPutter: true, keys: k, putt: pt
+            ) // PGA 실측 317±35ms · 스탠스는 스타일 퍼터 세트(표준 6 · 암록 16)
         }
     }
 }

@@ -39,7 +39,10 @@
       사용자 "좋아" 판정. 남은 조정 후보: 아이언·웨지 백스윙 tilt 자체 축소(드라이버 유지)
 - [ ] **트레이드마크·2.5배 세부 판정 대기** — 2.5배 과장과 트레이드마크를 한 번에. 약하면: 점프 8→10, 트월 트리거 완화
       (heightPct 0.45→0.3), 암록 butt 10→14. ⛳️ 메뉴 → 스윙 스타일로 전환하며 비교, 타이거 어퍼컷은 버디 이상 홀아웃에서만
-- [ ] 2단계: 웨지·퍼터 face-on 6편 (브라이슨 암록 퍼팅은 퍼터 렌더 길이 변경 필요) · 버전 범프 0.5.0·릴리스·GIF 재캡처
+- [x] **2단계 웨지·퍼터 실측** (`feature/swing-stage2`): 퍼터 3인 실측(PutterKeyframes rory/tiger/bryson + ballFwd 6/6/16, 손 각은
+      헤드=공 뒤 5px 수치 해), 웨지 로리·타이거 실측 + 브라이슨 유도(brysonWedge). wedge 프로파일 topScale·finishScale 0.72→1.0.
+      브라이슨 정면 풀웨지 영상은 6편 탐색 모두 불가(TV 줌·후방 뷰·칩샷). 문서 docs/research-swing-styles.md §2단계, 도구 refs/video/README
+- [ ] 버전 범프 0.5.0·릴리스·GIF 재캡처
 - [ ] 후속 후보: 어드레스·임팩트 샤프트 각 자동 검출(현재 미검출, 기존 기하 유지) · 선수 추가 시 gen_table.py 평균 재계산 주의
 - [ ] ⑤ 서프라이즈 — 사용자 선택: 데스크탑 연동(권장)·물리·규칙·스틱맨/생물 전부. 아이디어 15개는
       아티팩트 5절. 원칙: 결과 종류 다양화 · 예고→사건→반응 3박자 · 희귀 등급
@@ -53,6 +56,11 @@ butt curved dir` 30Hz 덤프 + `TRADEMARK twirl/jump`·`UPPER`(어퍼컷 위상)
 (컵 앞 시작 → 탭인 → 홀인원 판정 → rejoice 반응).
 
 ### 재개 지점 (스윙 스타일 파이프라인)
+
+2단계 작업 폴더 `~/swing-work`(venv .venv, 영상·pose_*.json·events_*_{wg,pt}.json·overlay_*.png). 재생성은
+`gen_table2.py` → Poses.swift의 roryWedge/tigerWedge/roryPutt/tigerPutt/brysonPutt에 붙여 넣기. 퍼팅은 `analyze_putt.py`
+(브라이슨은 `PICK=0`, 크롭 632~1066·41~80s), 웨지는 `HAND_PEAK=-0.3 EXT_MIN=0.35`. 브라이슨 웨지 실측 영상을 찾으면
+`events_bryson_wg.json`만 추가하면 3인 평균 기준으로 재생성된다.
 
 영상 → `refs/video/README.md` 절차. 작업 폴더(`SWING_WORK`)에 pose_<name>.json·events_<name>.json을 만들고
 `gen_table.py`가 Swift 테이블을 출력하면 `Poses.swift`의 SwingKeyframes 세트에 붙여 넣는다. 유튜브 다운로드는
