@@ -333,6 +333,7 @@ final class GameScene: SKScene {
         if let id = demoClubId, let i = ClubTable.all.firstIndex(where: { $0.id == id }) {
             clubIdx = i // 관찰용 클럽 고정
         }
+        renderBallFwd = profile.ballFwd // 홀 시작 클럽의 스탠스로 즉시 — 퍼터(6)→드라이버(20) 활강이 티 의식 발 기준점을 미끄러뜨린다 (리뷰)
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
         if demoPickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
             let x = hole.holeX - 1.2 * (hole.holeX >= hole.teeX ? 1 : -1)

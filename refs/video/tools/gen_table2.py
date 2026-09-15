@@ -93,6 +93,7 @@ def solve_handA(shoulder_x, eff, length, wrist_deg, tip_x):
     """shoulder_x + eff·sin a + length·sin(a + wrist) = tip_x 를 이분법으로 (a: −40°~60°)"""
     lo, hi = -40.0, 60.0
     f = lambda a: shoulder_x + eff * math.sin(math.radians(a)) + length * math.sin(math.radians(a + wrist_deg)) - tip_x
+    assert f(lo) < 0 < f(hi), f'handA bracket failed: f(-40)={f(lo):.1f} f(60)={f(hi):.1f} (ballFwd/tilt/len 조합 확인)'
     for _ in range(60):
         mid = (lo + hi) / 2
         if f(lo) * f(mid) <= 0: hi = mid

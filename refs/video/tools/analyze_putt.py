@@ -11,7 +11,7 @@ import cv2, numpy as np
 S = os.environ.get('SWING_WORK', os.path.expanduser('~/swing-work'))
 name = sys.argv[1]
 T0 = float(sys.argv[2]) if len(sys.argv) > 2 else -1; T1 = float(sys.argv[3]) if len(sys.argv) > 3 else 1e9
-D = json.load(open(f'{S}/pose_{name}.json')); fps = D['fps'] / D.get('step', 1); x0, x1 = D['crop']; VIDEO = D.get('video')
+D = json.load(open(f'{S}/pose_{name}.json')); fps = D['fps'] / D.get('step', 1); x0, x1 = D['crop']; VIDEO = D.get('video', f'{S}/{name}.mp4')
 fr = [f for f in D['frames'] if f['lm'] and T0 <= f['t'] <= T1]
 if len(fr) < 10: sys.exit('too few frames with landmarks')
 def P(f, i): return np.array([f['lm'][i][0], -f['lm'][i][1]])  # y up
@@ -69,6 +69,7 @@ for s in strokes:
 if not valid: sys.exit('no valid stroke')
 # 포즈는 진폭이 가장 큰(잘 보이는) 스트로크, 템포 비율은 가장 짧은 스트로크에서
 PICK = os.environ.get('PICK')  # 유효 스트로크 중 n번째를 강제 (슬로모션 클립이 톱에서 시작하는 등 최대 진폭이 오검출일 때)
+if PICK is not None and not (0 <= int(PICK) < len(valid)): sys.exit(f'PICK {PICK} out of range (valid strokes: {len(valid)})')
 ev = valid[int(PICK)] if PICK is not None else max(valid, key=lambda s: s['amp']); fast = min(valid, key=lambda s: T[s['finish']] - T[s['address']])
 order = ['address', 'top', 'impact', 'finish']
 tb, td, tf = (T[fast['top']] - T[fast['address']], T[fast['impact']] - T[fast['top']], T[fast['finish']] - T[fast['impact']])

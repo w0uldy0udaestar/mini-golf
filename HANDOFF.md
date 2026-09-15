@@ -42,6 +42,9 @@
 - [x] **2단계 웨지·퍼터 실측** (`feature/swing-stage2`): 퍼터 3인 실측(PutterKeyframes rory/tiger/bryson + ballFwd 6/6/16, 손 각은
       헤드=공 뒤 5px 수치 해), 웨지 로리·타이거 실측 + 브라이슨 유도(brysonWedge). wedge 프로파일 topScale·finishScale 0.72→1.0.
       브라이슨 정면 풀웨지 영상은 6편 탐색 모두 불가(TV 줌·후방 뷰·칩샷). 문서 docs/research-swing-styles.md §2단계, 도구 refs/video/README
+      리뷰(Code Reviewer, minor 3·nit 5, 블로커 0) 반영: startHole renderBallFwd 스냅·armLockPutter 플래그 제거·도구 방어 코드.
+      수용한 잔여: 걷기 도착 중 ⛳️ 스타일 전환 시 퍼터 스탠스 차(최대 10px)가 스무딩으로만 흡수됨. 후속 제안: 퍼터·웨지 테이블의
+      "어드레스 헤드 팁 ≈ (−5, 공 높이)" 불변식 유닛 테스트(Poses는 MiniGolf 타깃이라 테스트 타깃 분리 필요)
 - [ ] 버전 범프 0.5.0·릴리스·GIF 재캡처
 - [ ] 후속 후보: 어드레스·임팩트 샤프트 각 자동 검출(현재 미검출, 기존 기하 유지) · 선수 추가 시 gen_table.py 평균 재계산 주의
 - [ ] ⑤ 서프라이즈 — 사용자 선택: 데스크탑 연동(권장)·물리·규칙·스틱맨/생물 전부. 아이디어 15개는

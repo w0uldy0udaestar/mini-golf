@@ -117,10 +117,7 @@ enum SwingStyle: String, CaseIterable {
         self == .bryson
     }
 
-    /// 브라이슨: 암록 퍼팅 — 긴 퍼터(43")를 리드 전완에 밀착, 손목 없이 어깨로만 흔든다
-    var armLockPutter: Bool {
-        self == .bryson
-    }
+    // 브라이슨 암록 퍼팅은 PutterKeyframes.brysonPutt(길이 43·butt 10·샤프트=전완)로 표현 — 별도 플래그 없음
 
     /// 로리: 임팩트 점프 — 지면 반력으로 몸이 뜬다 (양발 이륙, 최대 px). 실측 ~5px는 리그 덤프에서 2~3px로 안 읽혀 8로 과장
     var impactJump: Double {

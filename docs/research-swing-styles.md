@@ -114,7 +114,7 @@
 ## 트레이드마크 연출 (2026-09-15, 2단계 — 키프레임 밖)
 
 사용자 선택: 2.5배 과장과 별개로 "정면 2D 키포인트가 못 잡는 특징"을 연출로 넣는다. 물리는 전부 동일하고
-`SwingStyle`의 특성 플래그(`clubTwirl`·`uppercut`·`straightArms`·`armLockPutter`·`impactJump`·`finishRecoil`)로
+`SwingStyle`의 특성 플래그(`clubTwirl`·`uppercut`·`straightArms`·`impactJump`·`finishRecoil`; 암록은 `PutterKeyframes.brysonPutt`)로
 GameScene의 피니시 홀드·스코어 반응·스윙 경로·렌더에 분기를 둔다. 관찰 플래그 `--demo-trademark`(풀샷마다 굿샷
 판정 강제 + `RIG[...]` 30Hz 리그 덤프 → 오프라인 플롯).
 
