@@ -210,8 +210,9 @@ public enum Ballistics {
 
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다.
     /// bumpers: 창 범퍼 모드의 앱 창 사각형들 (비행 중에만 반사 — 240Hz 스텝이라 터널링 없음)
+    /// wind: 바람 덮어쓰기(m/s) — 돌풍 서프라이즈가 비행 중 잠시 넘긴다 (nil이면 홀 바람)
     public static func step(
-        _ b: inout BallState, hole: Hole, bumpers: [Bumper] = [], dt: Double = Phys.dt
+        _ b: inout BallState, hole: Hole, bumpers: [Bumper] = [], dt: Double = Phys.dt, wind: Double? = nil
     ) -> StepEvent {
         var ev = StepEvent.none
         switch b.phase {
@@ -220,7 +221,7 @@ public enum Ballistics {
 
         case .fly:
             // 바람: 공기력은 대기 상대속도 기준 — 뒷바람은 항력을 줄이고 맞바람은 키운다
-            let rvx = b.vx - hole.wind
+            let rvx = b.vx - (wind ?? hole.wind)
             let v = max(hypot(rvx, b.vy), 1e-9)
             let omega = b.spin * 2 * .pi / 60
             let spinRatio = min(Phys.ballRadius * omega / v, Phys.spinRatioMax)

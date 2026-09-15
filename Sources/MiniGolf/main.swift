@@ -92,8 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
         scene.demoSurpriseForce = args.contains("--demo-surprise") // 서프라이즈 이벤트 순환 (관찰용)
+        if let i = args.firstIndex(of: "--surprise"), i + 1 < args.count, let k = SurpriseKind(rawValue: args[i + 1]) {
+            scene.demoSurpriseKind = k // 특정 서프라이즈를 해당 훅마다 강제 (관찰용)
+        }
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
         scene.demoTrademarkForce = args.contains("--demo-trademark") // 풀샷마다 굿샷 판정 + 리그 덤프 (트레이드마크 관찰)
+        scene.demoBackdrop = args.contains("--demo-bg") // 불투명 배경 — 캡처 판독용 (데스크탑 위 겹침 제거)
+        if let i = args.firstIndex(of: "--demo-restart-in"), i + 1 < args.count, let t = Double(args[i + 1]) {
+            scene.demoRestartIn = t // 서프라이즈 시작 T초 뒤 새 라운드 — 인터럽트 정리 관찰용
+        }
         if let i = args.firstIndex(of: "--club"), i + 1 < args.count {
             scene.demoClubId = args[i + 1] // 홀 시작 클럽 지정 (클럽별 어드레스 관찰용)
         }
