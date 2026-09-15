@@ -1988,7 +1988,8 @@ final class GameScene: SKScene {
         }
         // 뼈대 후처리: 뼈 길이 고정 + 무릎·팔꿈치 IK (발은 불변, 손은 사거리 안으로) — Skeleton.swift
         // 스윙·어드레스·피니시는 팔이 공(카메라) 쪽으로 향해 원근 단축되는 자세 — 팔꿈치 대신 호로 (Skeleton 주석)
-        var joints = Skeleton.solve(&drawRig, curvedArms: mode != .walking && mode != .ritual)
+        let projected = mode != .walking && mode != .ritual
+        var joints = Skeleton.solve(&drawRig, curvedArms: projected, projected: projected)
         if !demoNoClamp {
             clampJointsToWalls(&joints)
         }

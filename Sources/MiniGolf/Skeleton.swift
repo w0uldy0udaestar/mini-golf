@@ -34,7 +34,10 @@ enum Skeleton {
     /// curvedArms: 스윙·어드레스처럼 팔이 카메라 쪽(공)으로 향해 원근 단축되는 자세 — 손을 당긴 것을
     /// 팔꿈치 굽힘으로 그리면 '배 앞에서 클럽 쥔 할아버지'가 된다(2026-09-15 사용자 판정). 이때는 팔 IK를
     /// 건너뛰고 예전처럼 완만한 호(원근 단축)로 그린다. 다리는 항상 관절.
-    static func solve(_ r: inout Rig, curvedArms: Bool = false) -> Joints {
+    /// projected: 스윙·어드레스 — 힙의 전후 이동(백스윙 −6·피니시 +16)은 3D 회전의 투영이라 다리가 사거리를
+    /// 넘어도 힙을 내리지 않고 곧게 뻗게 둔다(구 곡선 다리와 같은 관용). 내리면 톱에서 3px·피니시에서 6px
+    /// 주저앉아 "뒤로 쏠린 스윙"으로 읽혔다 (2026-09-15 사용자 판정). 걷기·의식은 힙을 내린다(도립 진자)
+    static func solve(_ r: inout Rig, curvedArms: Bool = false, projected: Bool = false) -> Joints {
         var j = Joints()
 
         // 1. 몸통: 힙 고정, 어깨는 같은 기울기 방향으로 길이만 맞춘다 (머리는 어깨 상대라 따라온다)
@@ -59,10 +62,12 @@ enum Skeleton {
                 j.legStretch = max(j.legStretch, d - legReach)
             }
         }
-        if drop > 0 {
+        if drop > 0, !projected {
             j.hipDrop = drop
             r.hip.y -= drop
             r.shoulder.y -= drop // 상체가 함께 내려온다 (손 목표는 그대로 — 팔이 조금 더 굽는다)
+        } else if drop > 0 {
+            j.legStretch = max(j.legStretch, drop) // 투영 모드: 다리가 그만큼 곧게 늘어난다 (계측만)
         }
 
         /// 3. 무릎: 힙→발 2-bone IK (발 위치는 해의 말단이 아니라 원래 값을 쓴다 — 노슬립)
