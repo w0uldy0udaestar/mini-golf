@@ -18,7 +18,7 @@ extension Club {
 }
 
 /// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감.
-/// 100종의 모션(WalkFlavors.swift)은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로
+/// 37종의 모션(WalkFlavors.swift)은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로
 /// 표현된다 (겹쳐도 안전). 발 접지 게이트는 채널이 아니다 — 노슬립 불변식 보호
 struct WalkFlavor {
     var twirlAngle = 0.0 // 클럽 트월 누적 회전(rad) — 완료 후에도 유지 (되감기 없음)
@@ -39,27 +39,29 @@ struct WalkFlavor {
     var gripLift = 0.0 // 클럽 살짝 들기 (0~1)
     var clubPointBlend = 0.0 // 클럽 전방 수평 지목 블렌드
     var clubUpBlend = 0.0 // 클럽 수직 세워 균형 블렌드
+    // ── 2026-09-15 재설계 채널: 관절 뼈대 위의 실루엣 제어 (37종 모션이 주로 쓴다) ──
+    var freeHandPolar = (angle: 0.0, reach: 0.0, w: 0.0) // 자유 손 목표: 어깨 기준 극좌표 (0=아래, +앞, π=위 · 뻗음 1 = 35px)
+    var clubHandPolar = (angle: 0.0, reach: 0.0, w: 0.0) // 클럽 손(그립) 목표
+    var clubPhiTarget = (phi: 0.0, w: 0.0) // 샤프트 절대각 목표 (최단 경로 블렌드)
+    var jump = 0.0 // 두 발이 함께 뜨는 점프 높이(px) — 발 x는 고정
+    var heelLift = 0.0 // 뒤꿈치 들기(px) — 접지 발도 수직으로만
 
-    /// 잔동작 진폭 부스트 (2026-08-20 사용자: "동작이 완전 커야") — 오프셋 채널만 스케일.
-    /// twirlAngle은 회전수 의미(스케일하면 클럽이 거꾸로 선 채 끝남), shoulder는 기능 포즈라 제외.
-    /// 팔 오프셋은 리그의 팔 길이에서 자연 포화 — 큰 값은 '팔을 끝까지 뻗음'이 된다.
-    mutating func boostMotion(_ k: Double) {
-        headDxOff *= k
-        headDyOff *= k
-        shoulderXOff *= k
-        shoulderYOff *= k
-        hipXOff *= k
-        hipYOff *= k
-        armAmpBoost *= k
-        freeHandXOff *= k
-        freeHandYOff *= k
-        phiWobble *= k
-        gripLift = min(1, gripLift * k)
-        skip = min(1, skip * k)
-        lookBack = min(1, lookBack * k)
-        hatTouch = min(1, hatTouch * k)
-        clubPointBlend = min(1, clubPointBlend * k)
-        clubUpBlend = min(1, clubUpBlend * k)
+    mutating func setFreeHand(angle: Double, reach: Double, w: Double) {
+        if w > freeHandPolar.w {
+            freeHandPolar = (angle, reach, w)
+        }
+    }
+
+    mutating func setClubHand(angle: Double, reach: Double, w: Double) {
+        if w > clubHandPolar.w {
+            clubHandPolar = (angle, reach, w)
+        }
+    }
+
+    mutating func setClubPhi(_ phi: Double, w: Double) {
+        if w > clubPhiTarget.w {
+            clubPhiTarget = (phi, w)
+        }
     }
 }
 
@@ -208,11 +210,16 @@ enum RigBuilder {
             y: (r.hip.y + r.foot2.y) / 2 + 3 + f2.lift * 0.5
         )
 
-        // 클럽 캐리: 기본은 옆에 살짝 들어(당당함) gripLift로 더 들 수 있고, 어깨 캐리 블렌드 시 어깨 위로.
-        // hipYOff(스쿼트·넘어짐)를 따라 내려간다 — 몸만 떨어지고 클럽이 공중에 뜨지 않게
+        // 클럽 캐리: 팔을 거의 편 채(뻗음 0.8) 옆에 늘어뜨려 들고, 헤드는 뒤에서 지면 위 4px를 유지하는
+        // 각도로 (구 (-12, 48.5)는 팔 길이의 67%라 팔꿈치가 늘 접혀 '할아버지 팔' — 2026-09-15 사용자 판정).
+        // gripLift로 더 들 수 있고, 어깨 캐리 블렌드 시 어깨 위로. hipYOff는 어깨에 이미 반영돼 함께 내려간다
         let s = clubLen / 38
-        var grip = CGPoint(x: -12, y: 48.5 + bob + flavor.hipYOff + 6 * flavor.gripLift)
-        var tip = CGPoint(x: grip.x - 19 * s, y: grip.y - 33 * s)
+        var grip = CGPoint(
+            x: r.shoulder.x + sin(-0.35) * 28,
+            y: r.shoulder.y - cos(-0.35) * 28 + 6 * flavor.gripLift
+        )
+        let carryPhi = -max(0.52, acos(min(1, max(0, (grip.y - 4) / clubLen))))
+        var tip = CGPoint(x: grip.x + sin(carryPhi) * clubLen, y: grip.y - cos(carryPhi) * clubLen)
         if flavor.shoulder > 0 {
             let sGrip = CGPoint(x: r.shoulder.x + 9, y: r.shoulder.y - 3)
             let sTip = CGPoint(x: r.shoulder.x - 26 * s, y: r.shoulder.y + 15 * s)
@@ -226,21 +233,56 @@ enum RigBuilder {
         if flavor.clubUpBlend > 0 {
             grip = mix(grip, CGPoint(x: 9, y: 49 + bob), flavor.clubUpBlend)
         }
-        r.grip = grip
         var phi = atan2(tip.x - grip.x, grip.y - tip.y)
         phi = mix(phi, .pi / 2, flavor.clubPointBlend) // 팁이 타깃 쪽 수평
         phi = mix(phi, .pi - 0.05, flavor.clubUpBlend) // 팁이 하늘 (균형 잡기)
+        // 극좌표 손 목표·샤프트 각 목표 (재설계 채널) — 팔꿈치는 Skeleton IK가 접는다
+        if flavor.clubHandPolar.w > 0 {
+            let c = flavor.clubHandPolar
+            let t = CGPoint(
+                x: r.shoulder.x + sin(c.angle) * 35 * c.reach,
+                y: r.shoulder.y - cos(c.angle) * 35 * c.reach
+            )
+            grip = mix(grip, t, c.w)
+        }
+        if flavor.clubPhiTarget.w > 0 {
+            phi = mixAngle(phi, flavor.clubPhiTarget.phi, flavor.clubPhiTarget.w)
+        }
+        r.grip = grip
         r.clubPhi = phi + flavor.twirlAngle + flavor.phiWobble
         r.clubLen = clubLen
 
-        // 자유 팔: 다리 반대 위상 스윙 — 느린 걸음에도 최소 진폭을 보장해 생기를 유지
-        // (구 vAmp² 감쇠는 저속에서 팔이 완전히 죽어 '축 늘어짐'으로 읽혔다)
-        let armAmp = (3 + 5 * vAmp) * max(0, 1 + flavor.armAmpBoost)
-        let free = CGPoint(x: 5 - armAmp * sin(2 * .pi * gaitPhase), y: 48.5 + bob + flavor.hipYOff)
+        // 자유 팔: 다리 반대 위상의 진자 — 어깨에서 거의 편 팔(뻗음 0.88)이 ±9°(저속)~±23°(정상)로 흔들린다.
+        // 느린 걸음에도 최소 진폭을 보장해 생기를 유지 (구 x 오프셋 방식은 손이 어깨 아래 20px에 있어
+        // 관절 리그에서 팔꿈치가 늘 접혔다 — 2026-09-15 사용자 판정 "할아버지 자세")
+        let swingAngle = (0.15 + 0.25 * vAmp) * max(0, 1 + flavor.armAmpBoost) * -sin(2 * .pi * gaitPhase)
+        let free = CGPoint(
+            x: r.shoulder.x + sin(swingAngle) * 31,
+            y: r.shoulder.y - cos(swingAngle) * 31
+        )
         let hat = CGPoint(x: r.shoulder.x + r.headDx + 3, y: r.shoulder.y + 9)
-        r.handTrail = mix(free, hat, flavor.hatTouch)
-        r.handTrail.x += flavor.freeHandXOff
-        r.handTrail.y += flavor.freeHandYOff
+        var hand = mix(free, hat, flavor.hatTouch)
+        if flavor.freeHandPolar.w > 0 {
+            let c = flavor.freeHandPolar
+            let t = CGPoint(
+                x: r.shoulder.x + sin(c.angle) * 35 * c.reach,
+                y: r.shoulder.y - cos(c.angle) * 35 * c.reach
+            )
+            hand = mix(hand, t, c.w)
+        }
+        hand.x += flavor.freeHandXOff
+        hand.y += flavor.freeHandYOff
+        r.handTrail = hand
+        // 점프: 온몸이 뜬다 (발 x 고정) · 뒤꿈치: 발만 수직으로
+        if flavor.jump != 0 || flavor.heelLift != 0 {
+            let j = flavor.jump
+            r.hip.y += j
+            r.shoulder.y += j
+            r.grip.y += j
+            r.handTrail.y += j
+            r.foot1.y += j + flavor.heelLift
+            r.foot2.y += j + flavor.heelLift
+        }
         return r
     }
 }
@@ -423,10 +465,14 @@ final class StickmanNode: SKNode {
         body.move(to: hip)
         body.addLine(to: k2)
         body.addLine(to: f2)
-        // 리드 암 — 어깨→팔꿈치→그립
+        // 리드 암 — 어깨→팔꿈치→그립 (스윙·어드레스는 원근 단축 호: 팔꿈치 대신 제어점)
         body.move(to: shoulder)
-        body.addLine(to: eLead)
-        body.addLine(to: grip)
+        if joints.armsCurved {
+            body.addQuadCurve(to: grip, control: eLead)
+        } else {
+            body.addLine(to: eLead)
+            body.addLine(to: grip)
+        }
         bodyShape.path = body
         bodyRim.path = body
 
@@ -435,8 +481,12 @@ final class StickmanNode: SKNode {
         let eTrail = m(joints.elbowTrail)
         let trail = CGMutablePath()
         trail.move(to: shoulder)
-        trail.addLine(to: eTrail)
-        trail.addLine(to: hTrail)
+        if joints.armsCurved {
+            trail.addQuadCurve(to: hTrail, control: eTrail)
+        } else {
+            trail.addLine(to: eTrail)
+            trail.addLine(to: hTrail)
+        }
         trailArmShape.path = trail
         trailArmRim.path = trail
 

@@ -28,12 +28,12 @@ final class GameScene: SKScene {
     var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
     var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
     var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
-    var demoMotionShowcase = false // --demo-motions: 모션 100종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
+    var demoMotionShowcase = false // --demo-motions: 모션 37종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var surpriseCursor = 0
-    private var motionCursor = 0
+    var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
     private var demoWait = 0.0
 
@@ -84,7 +84,7 @@ final class GameScene: SKScene {
             }
         }
 
-        static let stopPlanRange = 50.0 // 정상 스트라이드(44px) 안팎 — 마지막 두 걸음이 0.6~1.2배 보폭
+        static let stopPlanRange = 42.0 // 마지막 두 걸음 보폭 0.5~1.0배 — 50은 다리 45에서 보폭 극단에 힙이 7px 내려앉았다
         var stopPlan: StopPlan?
         var planPhase0 = 0.0
 
@@ -788,7 +788,7 @@ final class GameScene: SKScene {
                 anim.showAt = anim.relax + Double.random(in: 1.2 ... latest)
             }
         }
-        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 100종 모션을 겹치지 않게 흩뿌린다
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 37종 모션을 겹치지 않게 흩뿌린다
         if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
@@ -798,7 +798,7 @@ final class GameScene: SKScene {
                 t += 1.1
                 continue
             }
-            let kind = WalkFlavorKind.allCases.randomElement()!
+            let kind = WalkFlavorKind.weightedRandom() // 멈추는 모션은 드물게
             let dur = kind.duration
             // 어깨에 클럽을 걸친 동안엔 클럽 손짓 불가 (클럽이 손에 없다)
             if kind.needsClub, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
@@ -819,10 +819,12 @@ final class GameScene: SKScene {
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
             t += dur + Double.random(in: 0.8 ... 2.2)
         }
-        if demoMotionShowcase { // 카탈로그 캡처: 랜덤 대신 100종을 커서 순서로, 트립·어깨 캐리 없이
+        if demoMotionShowcase { // 카탈로그 캡처: 랜덤 대신 37종을 커서 순서로, 트립·어깨 캐리 없이
             anim.flavorEvents = []
             anim.shoulderRange = nil
             anim.tripAt = nil
+            anim.showAt = nil // 쇼피스가 카탈로그 위에 겹치면 캡처가 오염된다 (리뷰)
+            anim.showKind = nil
             var st = anim.relax + 0.8
             while st < anim.relax + anim.dur - 1.5, motionCursor < WalkFlavorKind.allCases.count {
                 let kind = WalkFlavorKind.allCases[motionCursor]
@@ -1581,6 +1583,13 @@ final class GameScene: SKScene {
                     freeze = max(freeze, inR * (1 - outR * outR))
                 }
             }
+            // 잔동작 중 걸음을 멈추는 것(bow·airSwing 등)과 보폭 배율 — 쇼피스와 같은 동결 램프 (WalkFlavorKind.gait)
+            var strideScale = 1.0
+            for e in w.flavorEvents {
+                let g = e.kind.gait(u: (w.t - e.t0) / e.dur)
+                strideScale *= g.stride
+                freeze = max(freeze, g.stop)
+            }
             if freeze > 0 {
                 w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
             }
@@ -1597,7 +1606,7 @@ final class GameScene: SKScene {
                     print(String(format: "WALKV %.1f %.1f %.1f", tw, abs(stickX - w.fromX) * Double(pxPerM), w.vPx))
                 }
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
-                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot()))
+                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot())) * strideScale
                 // 지형 적응 (2026-08-15 요청): 경사에선 보폭을 줄이고, 러프·벙커는 무거운 걸음
                 let walkSurf = hole.surface(at: stickX)
                 w.stepL *= 1 - 0.3 * min(1, abs(atan(hole.slope(at: stickX))) / 0.35)
@@ -1815,21 +1824,19 @@ final class GameScene: SKScene {
                 let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
                 flavor.shoulder = smoothstep(min(up, down))
             }
-            // 모션 레시피는 WalkFlavorKind.apply(100종 — WalkFlavors.swift)가 채널에 합산한다
+            // 모션 레시피는 WalkFlavorKind.apply(37종 — WalkFlavors.swift)가 채널에 합산한다
             for e in w.flavorEvents {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
                 if demoMotionShowcase, w.t - dt < e.t0 { // 시작 프레임 — 캡처 워처에 위치 통지
-                    let info = "\(e.kind) \(Int(px(stickX))) \(Int(groundY(stickX)))"
+                    let info = "\(e.kind) \(Int(px(stickX))) \(Int(groundY(stickX))) \(String(format: "%.1f", e.dur))"
                     try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
-                    print("MOTION \(info)")
+                    print(String(format: "MOTION[%.2f] ", Date().timeIntervalSince1970) + info)
                     fflush(stdout)
                 }
                 e.kind.apply(u: u, into: &flavor)
             }
-            // 잔동작 진폭 부스트 (2026-08-20 사용자: "동작이 완전 커야") — 잔동작만.
-            // 쇼피스·트립·지형 적응은 이 뒤에 얹혀 원설계 크기 유지
-            flavor.boostMotion(1.7)
+            // (구 1.7× 진폭 부스트는 제거 — 37종은 관절 사거리 안에서 최종 크기로 직접 작성됐다, 2026-09-15)
             // 쇼피스 밈 모션 — 동결된 무대 위에 크게 얹는다 (WalkFlavors.swift ShowpieceKind)
             if let sa = w.showAt, let sk = w.showKind {
                 let su = (w.t - sa) / sk.duration
@@ -1980,7 +1987,8 @@ final class GameScene: SKScene {
             logRigBounds(drawRig, currentTime: currentTime)
         }
         // 뼈대 후처리: 뼈 길이 고정 + 무릎·팔꿈치 IK (발은 불변, 손은 사거리 안으로) — Skeleton.swift
-        var joints = Skeleton.solve(&drawRig)
+        // 스윙·어드레스·피니시는 팔이 공(카메라) 쪽으로 향해 원근 단축되는 자세 — 팔꿈치 대신 호로 (Skeleton 주석)
+        var joints = Skeleton.solve(&drawRig, curvedArms: mode != .walking && mode != .ritual)
         if !demoNoClamp {
             clampJointsToWalls(&joints)
         }
