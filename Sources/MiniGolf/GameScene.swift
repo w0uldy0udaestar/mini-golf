@@ -156,8 +156,17 @@ final class GameScene: SKScene {
         ClubTable.all[clubIdx]
     }
 
+    /// 스윙 스타일 (⛳️ 메뉴 선택, UserDefaults 기억) — 키프레임·템포만 바뀌고 물리는 동일
+    var swingStyle = SwingStyle.saved
+
     private var profile: SwingProfile {
-        SwingProfile.profile(for: club.cat)
+        SwingProfile.profile(for: club.cat, style: swingStyle)
+    }
+
+    func setSwingStyle(_ style: SwingStyle) {
+        swingStyle = style
+        UserDefaults.standard.set(style.rawValue, forKey: SwingStyle.prefKey)
+        toast("스윙 스타일 · \(style.title)", sub: nil)
     }
 
     private var pxPerM: CGFloat {
@@ -1952,7 +1961,11 @@ final class GameScene: SKScene {
             targetRig.shiftX(walkAnim?.relaxShift ?? 0) // 방향 반전 시 몸이 있는 자리에
             rigRate = 5
         } else {
-            targetRig = RigBuilder.fromPose(lastFinishPose ?? Poses.p10, ballFwd: renderBallFwd, clubLen: renderLen)
+            targetRig = RigBuilder.fromPose(
+                lastFinishPose ?? profile.keys.p10,
+                ballFwd: renderBallFwd,
+                clubLen: renderLen
+            )
             applySlopeStance(&targetRig) // 피니시 홀드 중에도 발은 경사를 딛는다 (리뷰 지적)
             if mode == .holed, reactionKind != .none {
                 applyScoreReaction(&targetRig, t: currentTime - reactionAt)

@@ -4,15 +4,15 @@ import json, math, sys, cv2, numpy as np
 import os
 S = os.environ.get('SWING_WORK', os.path.expanduser('~/swing-work'))  # 영상·키포인트 작업 폴더 (저장소 밖)
 name = sys.argv[1]
-E = json.load(open(f'{S}/events_{name}.json')); D = json.load(open(f'{S}/pose_{name}.json')); x0, x1 = D['crop']
+E = json.load(open(f'{S}/events_{name}.json')); D = json.load(open(f'{S}/pose_{name}.json')); x0, x1 = D['crop']; VIDEO = D.get('video', f'{S}/rory.mp4')
 byf = {f['f']: f for f in D['frames']}
-cap = cv2.VideoCapture(f'{S}/rory.mp4')
+cap = cv2.VideoCapture(VIDEO)
 order = ['address', 'takeaway', 'top', 'impact', 'follow', 'finish']
 tiles = []; out = {}
 TS = 1
 for k, fi in zip(order, E['frames']):
     f = byf[fi]; lm = f['lm']
-    cap.set(cv2.CAP_PROP_POS_FRAMES, fi); ok, img = cap.read(); crop = img[:, x0:x1].copy()
+    cap.set(cv2.CAP_PROP_POS_FRAMES, fi); ok, img = cap.read(); crop = (img[:, x0:x1] if x1 else img).copy()
     wr = np.array([(lm[15][0] + lm[16][0]) / 2, (lm[15][1] + lm[16][1]) / 2])
     torso = abs((lm[23][1] + lm[24][1]) / 2 - (lm[11][1] + lm[12][1]) / 2)
     # 손목 주변 ROI에서 직선 검출
