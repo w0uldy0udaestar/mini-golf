@@ -355,8 +355,14 @@ final class GameScene: SKScene {
 
     /// 두 발의 정체 교환을 렌더 리그에도 적용 — 타깃과 렌더가 같은 발을 가리켜야 스무딩이 발을 움직이지 않는다
     private func swapRenderFeet() {
-        swap(&renderRig.foot1, &renderRig.foot2)
-        swap(&renderRig.knee1, &renderRig.knee2)
+        // swap(&a.x, &a.y)는 같은 프로퍼티(renderRig)에 대한 중첩 inout 접근이라 런타임 배타성 위반으로 크래시한다
+        // (2026-09-15 시연 중 "Fatal access conflict" 실측) — 임시 변수로 교환
+        let f = renderRig.foot1
+        renderRig.foot1 = renderRig.foot2
+        renderRig.foot2 = f
+        let k = renderRig.knee1
+        renderRig.knee1 = renderRig.knee2
+        renderRig.knee2 = k
     }
 
     private func enterAim() {
