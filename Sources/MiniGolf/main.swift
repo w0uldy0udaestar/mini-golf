@@ -94,6 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoSurpriseForce = args.contains("--demo-surprise") // 서프라이즈 이벤트 순환 (관찰용)
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
         scene.demoTrademarkForce = args.contains("--demo-trademark") // 풀샷마다 굿샷 판정 + 리그 덤프 (트레이드마크 관찰)
+        if let i = args.firstIndex(of: "--club"), i + 1 < args.count {
+            scene.demoClubId = args[i + 1] // 홀 시작 클럽 지정 (클럽별 어드레스 관찰용)
+        }
         if let i = args.firstIndex(of: "--style"), i + 1 < args.count, let st = SwingStyle(rawValue: args[i + 1]) {
             scene.swingStyle = st // 스윙 스타일 지정 (관찰·캡처용, 저장 안 함)
         }
