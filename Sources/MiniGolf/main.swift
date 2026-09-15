@@ -86,7 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
         scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
-        scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 100종 순서 시연 (카탈로그)
+        scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 37종 순서 시연 (카탈로그)
+        if let i = args.firstIndex(of: "--motion-cursor"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            scene.motionCursor = n // 시연을 N번째 모션부터 (부분 재캡처용)
+        }
         scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
         scene.demoSurpriseForce = args.contains("--demo-surprise") // 서프라이즈 이벤트 순환 (관찰용)
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)

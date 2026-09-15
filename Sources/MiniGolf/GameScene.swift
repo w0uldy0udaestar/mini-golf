@@ -33,7 +33,7 @@ final class GameScene: SKScene {
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var surpriseCursor = 0
-    private var motionCursor = 0
+    var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
     private var demoWait = 0.0
 

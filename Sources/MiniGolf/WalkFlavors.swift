@@ -215,7 +215,9 @@ enum WalkFlavorKind: CaseIterable {
         case .lookBack: // 오래 뒤돌아보며 걷는다 — 어깨도 살짝 따라간다
             let w = env(u, in: 0.2, out: 0.25)
             f.lookBack = max(f.lookBack, w)
-            f.shoulderXOff -= 2 * w
+            f.shoulderXOff -= 4 * w
+            f.headDyOff += 1 * w
+            f.setFreeHand(angle: -0.6, reach: 0.6, w: w) // 자유 손도 뒤로 — 상체가 따라 돈다
         case .skyGaze: // 하늘 보며 걷다가 삐끗 — 팔을 앞으로 휘저으며 회복
             let w = env(u, in: 0.2, out: 0.25)
             f.headDyOff += 4 * w
@@ -270,12 +272,13 @@ enum WalkFlavorKind: CaseIterable {
             f.shoulderXOff += 2 * w
         case .shrug: // 양손 벌려 손바닥 위로 + 어깨 으쓱, 고개 갸웃
             let w = env(u, in: 0.2, out: 0.25)
-            f.shoulderYOff += 3 * w
-            f.headDxOff -= 1.5 * w
-            f.headDyOff -= 1 * w
-            f.setFreeHand(angle: 1.35, reach: 0.5, w: w)
-            f.setClubHand(angle: -1.35, reach: 0.5, w: w)
-            f.setClubPhi(-0.6, w: w)
+            f.shoulderYOff += 4 * w
+            f.headDxOff -= 2 * w
+            f.headDyOff -= 1.5 * w
+            f.setFreeHand(angle: 1.6, reach: 0.62, w: w)
+            f.setClubHand(angle: -1.6, reach: 0.62, w: w)
+            f.setClubPhi(-0.9, w: w)
+            f.armAmpBoost -= 1 * w
         case .stretch: // 양팔(클럽까지) 하늘로 쭉, 허리 젖히고 기지개
             let w = env(u, in: 0.3, out: 0.3)
             f.setFreeHand(angle: 3.0, reach: 0.95, w: w)
@@ -306,11 +309,12 @@ enum WalkFlavorKind: CaseIterable {
             f.hipXOff -= 3 * b
         case .leanBack: // 뒤로 젖히고 가슴 펴고 느긋한 긴 보폭 — 으스댐
             let w = env(u, in: 0.25, out: 0.3)
-            f.shoulderXOff -= 6 * w
+            f.shoulderXOff -= 9 * w
             f.shoulderYOff += 1 * w
-            f.headDyOff += 1 * w
-            f.headDxOff -= 1 * w
-            f.armAmpBoost += 0.8 * w
+            f.headDyOff += 2 * w
+            f.headDxOff -= 2 * w
+            f.armAmpBoost += 1.2 * w
+            f.hipXOff += 2 * w
         case .crouchSneak: // 웅크려 살금살금 — 무릎 굽고 상체 숙임, 짧고 빠른 걸음, 클럽은 뒤로 눕힌다
             let w = env(u, in: 0.25, out: 0.3)
             f.hipYOff -= 10 * w
@@ -355,11 +359,12 @@ enum WalkFlavorKind: CaseIterable {
             f.headDyOff += 1 * w
         case .strut: // 으스대는 긴 보폭 — 어깨·힙 엇갈려 흔들기
             let w = env(u, in: 0.3, out: 0.3)
-            f.shoulderXOff += 2.5 * sin(4 * .pi * u) * w
-            f.hipXOff -= 3 * sin(4 * .pi * u) * w
-            f.armAmpBoost += 0.6 * w
-            f.headDyOff += 1.5 * w
-            f.shoulderYOff += 1 * w
+            f.shoulderXOff += 4 * sin(4 * .pi * u) * w
+            f.hipXOff -= 5 * sin(4 * .pi * u) * w
+            f.armAmpBoost += 1.2 * w
+            f.headDyOff += 2 * w
+            f.shoulderYOff += 1.5 * w
+            f.headDxOff += 2 * sin(4 * .pi * u) * w
         case .stumble: // 걸려서 앞으로 쏠리고 팔 휘저음 → 아무 일 없었다는 듯 두리번
             let st = smoothstep(seg(u, 0.1, 0.2)) * (1 - smoothstep(seg(u, 0.45, 0.7)))
             f.shoulderXOff += 8 * st
@@ -389,18 +394,22 @@ enum WalkFlavorKind: CaseIterable {
             f.setClubPhi(-2.35, w: w)
         case .laugh: // 고개 젖히고 어깨 들썩, 손은 배에
             let w = env(u, in: 0.2, out: 0.25)
-            f.headDyOff += 2 * w
-            f.headDxOff -= 1 * w
-            f.shoulderYOff += 2 * abs(sin(8 * .pi * u)) * w
-            f.shoulderXOff -= 2 * w
-            f.setFreeHand(angle: 0.4, reach: 0.43, w: w)
-            f.hipYOff += 0.8 * abs(sin(8 * .pi * u)) * w
+            f.headDyOff += 3.5 * w
+            f.headDxOff -= 3 * w
+            f.shoulderYOff += 3 * abs(sin(8 * .pi * u)) * w
+            f.shoulderXOff -= 5 * w
+            f.setFreeHand(angle: 0.55, reach: 0.45, w: w)
+            f.hipYOff += 1.2 * abs(sin(8 * .pi * u)) * w
+            f.armAmpBoost -= 0.8 * w
         case .nervous: // 움츠리고 빠르게 두리번, 손은 가슴 앞에서 꼼지락, 종종걸음
             let w = env(u, in: 0.2, out: 0.25)
-            f.headDxOff += 3 * sin(12 * .pi * u) * w
-            f.shoulderYOff -= 2 * w
-            f.shoulderXOff += 2 * w
-            f.setFreeHand(angle: 0.93 + 0.15 * sin(14 * .pi * u), reach: 0.3, w: w)
+            f.headDxOff += 4.5 * sin(12 * .pi * u) * w
+            f.headDyOff -= 2 * w
+            f.shoulderYOff -= 3.5 * w
+            f.shoulderXOff += 3 * w
+            f.hipYOff -= 2 * w
+            f.setFreeHand(angle: 1.0 + 0.2 * sin(14 * .pi * u), reach: 0.32, w: w)
+            f.armAmpBoost -= 1 * w
         // ── H 관찰·잡동사니 ──
         case .windCheck: // 멈춰서 풀 뜯어 → 위로 뿌리고 → 날아가는 걸 본다
             let p = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.3, 0.42)))
