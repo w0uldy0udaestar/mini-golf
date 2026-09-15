@@ -32,6 +32,7 @@ final class GameScene: SKScene {
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
+    var demoTrademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그 — 트레이드마크 관찰용
     var surpriseCursor = 0
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
@@ -137,6 +138,11 @@ final class GameScene: SKScene {
     private enum ReactionKind { case none, rejoice, fistPump, nod, slump, dejected }
     private var reactionKind = ReactionKind.none
     private var reactionAt: TimeInterval = 0
+    /// 이번 샷의 스트라이크 품질 — 타이거 트월 트리거. 결과(낙하 지점)가 아니라 발사 순간의 '느낌'(미스힛·파워)으로 판단
+    private var lastShotGood = false
+    private var rigDumpLast: TimeInterval = 0
+    private var jumpLogged = false // 계측: 임팩트 점프 로그 스윙당 1회
+    private var twirlLogged = false // 계측: 트월 로그 스윙당 1회
     /// 조준 방치 시 잔동작 (아이들) — 곁눈질했을 때도 스틱맨이 살아 있다
     private var idleNextAt = 6.0
     private var idleKind = 0
@@ -575,6 +581,32 @@ final class GameScene: SKScene {
         jumpModes = []
     }
 
+    /// 리그 전체 덤프 (30Hz, --demo-trademark): 오프라인 플롯으로 트레이드마크 연출을 프레임 단위로 검증한다.
+    /// 좌표는 facing 로컬(px, 지면 0) — 렌더는 x·headDx·clubPhi에 dir을 곱한다
+    private func logRigDump(_ r: Rig, joints j: Skeleton.Joints, currentTime: TimeInterval) {
+        guard currentTime - rigDumpLast >= 1.0 / 30 else { return }
+        rigDumpLast = currentTime
+        let pts: [CGPoint] = [
+            r.hip,
+            r.shoulder,
+            r.foot1,
+            r.foot2,
+            r.knee1,
+            r.knee2,
+            r.grip,
+            r.handTrail,
+            j.elbowLead,
+            j.elbowTrail,
+        ]
+        let xy = pts.map { String(format: "%.1f,%.1f", Double($0.x), Double($0.y)) }.joined(separator: " ")
+        print(String(
+            format: "RIG[%.3f] %@ %@ head %.1f,%.1f phi %.3f len %.1f butt %.1f curved %d dir %d",
+            currentTime, String(describing: mode), xy, r.headDx, r.headDy, r.clubPhi, r.clubLen, r.butt,
+            j.armsCurved ? 1 : 0, Int(dir)
+        ))
+        fflush(stdout)
+    }
+
     private func logRigBounds(_ rig: Rig, currentTime: TimeInterval) {
         let sx = Double(px(stickX))
         func scr(_ x: Double) -> Double {
@@ -660,6 +692,63 @@ final class GameScene: SKScene {
         rig.knee2.x -= 3 * shift
     }
 
+    // ── 선수 트레이드마크 연출 (2026-09-15, docs/research-swing-styles.md §트레이드마크) ──
+    // 키프레임 밖 연출: 정면 2D 키포인트가 못 잡는 특징이 진짜 구분점이라 스타일 분기를 여기에 둔다. 물리는 동일
+
+    /// 타이거 트월 (굿샷 한정): 피니시 도달 뒤 0.1~0.45s 감긴 클럽을 앞으로 풀어 내려 리코일 자세,
+    /// 0.45~0.9s 그립을 축으로 한 바퀴(오른손 엄지). 반환 회전은 타깃 clubPhi에 더해지며 렌더 추적이 최단 각도라 되감기 없음
+    private func trademarkTwirl(ft: Double) -> (recoil: Pose, blend: Double, spin: Double)? {
+        guard swingStyle.clubTwirl, lastShotGood, ft > 0.1 else { return nil } // 상한 없음 — 리코일 자세는 걷기 전까지 유지
+        let base = lastFinishPose ?? profile.keys.p10
+        let recoil = Pose(
+            hipDx: base.hipDx, tilt: base.tilt + 4, handA: 32, handD: 27, clubA: 28, heel: base.heel,
+            headDx: base.headDx + 2
+        )
+        let blend = smoothstep(min(1, max(0, (ft - 0.1) / 0.35)))
+        let spin = 2 * Double.pi * smoothstep(min(1, max(0, (ft - 0.45) / 0.45)))
+        if demoMode, ft >= 0.45, !twirlLogged { // 스윙당 한 번
+            twirlLogged = true
+            print(String(format: "TRADEMARK twirl ft %.2f", ft))
+            fflush(stdout)
+        }
+        return (recoil, blend, spin)
+    }
+
+    /// 타이거 어퍼컷이 진행 중인가 — 이 동안 리그 추적을 16으로 (5는 펀치의 반도 못 따라간다)
+    private var uppercutActive: Bool {
+        mode == .holed && swingStyle.uppercut && (reactionKind == .rejoice || reactionKind == .fistPump)
+    }
+
+    /// 로리 임팩트 점프: 다운스윙 끝~팔로 초입에 지면 반력으로 몸 전체가 뜬다 (양발 이륙, 파워 비례). 무릎은 뼈대 IK가 따라온다
+    private func applyImpactJump(_ rig: inout Rig, t: Double, prof: SwingProfile) {
+        let h = swingStyle.impactJump
+        guard h > 0, !prof.isPutter else { return }
+        let u = (t - (prof.down - 0.03)) / 0.26
+        guard u > 0, u < 1 else { return }
+        let lift = h * sin(.pi * u) * max(0.4, heightPct)
+        rig.hip.y += lift
+        rig.shoulder.y += lift
+        rig.foot1.y += lift
+        rig.foot2.y += lift
+        rig.knee1.y += lift
+        rig.knee2.y += lift
+        if demoMode, u >= 0.5, !jumpLogged { // 스윙당 한 번 (프레임 간격 0.064가 좁은 창을 건너뛴다)
+            jumpLogged = true
+            print(String(format: "TRADEMARK jump lift %.1f", lift))
+            fflush(stdout)
+        }
+    }
+
+    /// 로리 피니시 리코일: 피니시에 도달한 상체가 리드 다리 위로 탄력 있게 올라앉으며 잦아드는 반동 (감쇠 진동 0.8s).
+    /// 렌더 추적(5)이 진동을 절반쯤 깎으므로 진폭은 그만큼 크게 준다
+    private func applyFinishRecoil(_ rig: inout Rig, ft: Double) {
+        guard swingStyle.finishRecoil, !club.isPutter, ft > 0, ft < 0.8 else { return }
+        let osc = sin(2 * .pi * 1.4 * ft) * exp(-3.5 * ft)
+        rig.shoulder.x += 6 * osc
+        rig.hip.y += 1.5 * osc
+        rig.headDx += 2 * osc
+    }
+
     /// 홀아웃 스코어 반응 — 피니시 홀드 위에 얹는 짧은 감정 표현 (0.15~1.5s).
     /// 공이 컵에 들어가는 걸 '본 다음' 반응한다 (인과 — 드롭 연출 0.24s 이후 시작)
     private func applyScoreReaction(_ rig: inout Rig, t: Double) {
@@ -667,6 +756,26 @@ final class GameScene: SKScene {
         let u = (t - 0.15) / 1.35
         let bell = smoothstep(min(1, min(u, 1 - u) / 0.25))
         switch reactionKind {
+        case .rejoice where swingStyle.uppercut, .fistPump where swingStyle.uppercut:
+            // 타이거 어퍼컷 (트레이드마크): 트레일 손이 클럽을 놓고 뒤·아래로 당겼다가(코킹 0.15s) 앞·위로 꽂히고(0.08s)
+            // 몸이 타깃 쪽으로 실린다. 이글 이상은 두 번(코킹은 한 번). 리그 추적은 이 동안 16 (5는 펀치를 반도 못 따라간다)
+            let n = reactionKind == .rejoice ? 2.0 : 1.0
+            let c = (u * n).truncatingRemainder(dividingBy: 1) // u < 1이라 마지막 사이클도 1에 닿지 않는다
+            let fade = smoothstep(min(1, (1 - u) / 0.15)) // 끝에는 손이 클럽으로, 몸도 같이 복귀 (리뷰: 몸만 0.2s 잔류)
+            let cock = smoothstep(min(1, u * n / 0.22)) * fade
+            let punch = fade * (c < 0.22 ? 0 : c < 0.34 ? smoothstep((c - 0.22) / 0.12) : c < 0.75 ? 1 : 1 -
+                smoothstep((c - 0.75) / 0.25))
+            let hx = mix(rig.shoulder.x - 7, rig.shoulder.x + 9, punch)
+            let hy = mix(rig.shoulder.y - 12, rig.shoulder.y + 13, punch)
+            rig.handTrail = CGPoint(x: mix(rig.handTrail.x, hx, cock), y: mix(rig.handTrail.y, hy, cock))
+            rig.shoulder.x += 4 * punch
+            rig.hip.y -= 2 * punch // 무릎을 굽히며
+            rig.headDx += 3 * punch
+            rig.headDy -= 1.5 * punch
+            if demoTrademarkForce { // 계측: 어퍼컷 위상 (30Hz 덤프와 대조)
+                print(String(format: "UPPER t %.2f u %.2f c %.2f cock %.2f punch %.2f n %.0f", t, u, c, cock, punch, n))
+                fflush(stdout)
+            }
         case .rejoice: // 홀인원·이글: 만세 + 두 번 폴짝
             let hop = abs(sin(2 * .pi * 2 * u)) * bell * 5
             rig.hip.y += hop
@@ -861,6 +970,8 @@ final class GameScene: SKScene {
 
     private func startSwing() {
         mode = .swinging
+        jumpLogged = false
+        twirlLogged = false
         swingAnim = SwingAnim(
             prof: profile,
             fromPose: backswingPose(heightPct: heightPct, profile: profile, topScale: wallTopScale)
@@ -878,6 +989,8 @@ final class GameScene: SKScene {
         let risk = 0.25 + 0.75 * pow(overdrive, 1.6)
         let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
         let mishit = club.isPutter ? 0 : risk * gauss
+        // 굿샷 판정 (타이거 트월): 실제처럼 공이 뜨자마자 스트라이크 품질로 — 미스힛 작고 반 이상 파워. 퍼터 제외
+        lastShotGood = !club.isPutter && (demoTrademarkForce || (heightPct >= 0.45 && abs(mishit) < 0.12))
         // 벽·나무 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
         // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
@@ -1781,7 +1894,7 @@ final class GameScene: SKScene {
         // ── 통합 리그: 모든 상태가 같은 파라미터 공간의 '타깃'만 바꾼다 → 전환이 자동으로 이어진다 ──
         // 클럽 변경으로 점프하는 값 전부 스무딩 (길이·스탠스·백스윙 폭 — 카테고리 경계 움찔 방지)
         let clubK = 1 - exp(-8 * dt)
-        renderLen += (club.renderLength - renderLen) * clubK
+        renderLen += ((club.isPutter ? profile.putt.len : club.renderLength) - renderLen) * clubK // 암록 퍼터는 43
         renderBallFwd += (profile.ballFwd - renderBallFwd) * clubK
         renderTop += (profile.topScale - renderTop) * clubK
         /// 헤드 '종류'가 바뀌면 morph 시작 (캡슐 기하 변형 — 몸 동작 없이 헤드만 변한다)
@@ -1826,6 +1939,11 @@ final class GameScene: SKScene {
             applySlopeStance(&targetRig)
             applyWallStance(&targetRig, t: wallSwingT)
             applyLieStance(&targetRig)
+            applyImpactJump(&targetRig, t: anim.t, prof: anim.prof) // 로리 트레이드마크
+            // 탭인은 스윙 애니메이션(스타일 상한 0.83s)이 끝나기 전에 홀아웃된다 — 반응을 늦추지 않고 피니시 위에 바로 얹는다
+            if mode == .holed, reactionKind != .none, anim.t >= anim.prof.down {
+                applyScoreReaction(&targetRig, t: currentTime - reactionAt)
+            }
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
@@ -1961,16 +2079,25 @@ final class GameScene: SKScene {
             targetRig.shiftX(walkAnim?.relaxShift ?? 0) // 방향 반전 시 몸이 있는 자리에
             rigRate = 5
         } else {
-            targetRig = RigBuilder.fromPose(
-                lastFinishPose ?? profile.keys.p10,
-                ballFwd: renderBallFwd,
-                clubLen: renderLen
-            )
+            let ft = currentTime - finishAt
+            var pose = lastFinishPose ?? profile.keys.p10
+            let twirl = trademarkTwirl(ft: ft) // 타이거: 굿샷 뒤 리코일 → 트월
+            if let tw = twirl {
+                pose = Pose.lerp(pose, tw.recoil, tw.blend)
+            }
+            targetRig = RigBuilder.fromPose(pose, ballFwd: renderBallFwd, clubLen: renderLen)
+            if let tw = twirl {
+                targetRig.clubPhi += tw.spin
+                if ft < 1.0 { // 스핀 창(0.45~0.9)만 고속 추적 — 느린 추적(5)은 회전에 π 넘게 뒤처져 되감긴다.
+                    rigClubRate = 40 // 이후는 5로 복귀: 무빙 홀드 흔들림(0.18)이 rate 5 필터 전제라 40이면 2.4배 커진다 (리뷰)
+                }
+            }
             applySlopeStance(&targetRig) // 피니시 홀드 중에도 발은 경사를 딛는다 (리뷰 지적)
+            applyFinishRecoil(&targetRig, ft: ft) // 로리 트레이드마크
             if mode == .holed, reactionKind != .none {
                 applyScoreReaction(&targetRig, t: currentTime - reactionAt)
             }
-            rigRate = 5
+            rigRate = uppercutActive ? 16 : twirl != nil ? 9 : 5
         }
         // 피니시 무빙 홀드: 완전 정지 대신 클럽이 관성으로 미세하게 흔들리다 잦아든다 (리서치 P6)
         if swingAnim == nil, mode == .motion || mode == .holed {
@@ -1983,6 +2110,10 @@ final class GameScene: SKScene {
         }
         // 걷기 중 발·무릎은 고속 추적 — 접지점이 스무딩에 밀려 미끄러져 보이는 것을 방지
         let footRate: Double? = mode == .walking && (walkAnim.map { $0.t >= $0.relax } ?? false) ? 60 : nil
+        // 암록 퍼터: 퍼터를 쥐고 서 있는 동안(조준·스트로크·피니시 홀드·서프라이즈·라운드 끝) 그립 위로 샤프트가
+        // 전완을 따라 올라간다. 걷기·의식만 0 (리뷰: 포함 목록 방식은 .surprise/.end에서 연장부가 스르륵 사라졌다)
+        let holdsPutter = mode != .walking && mode != .ritual
+        targetRig.butt = club.isPutter && holdsPutter ? profile.putt.butt : 0
         renderRig.chase(targetRig, rate: rigRate, footRate: footRate, clubRate: rigClubRate, dt: dt)
 
         // 경사 라이: 걷기 외에는 스탠스가 지면 경사를 따라 기운다 (물리와 동일 비율 — 3eccc4f 복원).
@@ -2002,13 +2133,18 @@ final class GameScene: SKScene {
         // 뼈대 후처리: 뼈 길이 고정 + 무릎·팔꿈치 IK (발은 불변, 손은 사거리 안으로) — Skeleton.swift
         // 스윙·어드레스·피니시는 팔이 공(카메라) 쪽으로 향해 원근 단축되는 자세 — 팔꿈치 대신 호로 (Skeleton 주석)
         let projected = mode != .walking && mode != .ritual
-        var joints = Skeleton.solve(&drawRig, curvedArms: projected, projected: projected)
+        var joints = Skeleton.solve(
+            &drawRig, curvedArms: projected, straightArms: swingStyle.straightArms, projected: projected
+        )
         if !demoNoClamp {
             clampJointsToWalls(&joints)
         }
         if demoMode {
             logBones(joints, currentTime: currentTime)
             logJumps(drawRig, currentTime: currentTime)
+            if demoTrademarkForce {
+                logRigDump(drawRig, joints: joints, currentTime: currentTime)
+            }
         }
         stickman.render(
             rig: drawRig, joints: joints, club: club, prevClub: prevHeadClub,
