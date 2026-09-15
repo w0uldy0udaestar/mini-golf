@@ -7,6 +7,8 @@ S = os.environ.get('SWING_WORK', os.path.expanduser('~/swing-work'))  # 영상·
 name = sys.argv[1] if len(sys.argv) > 1 else 'slow'
 D = json.load(open(f'{S}/pose_{name}.json')); fps = D['fps'] / D.get('step', 1); x0, x1 = D['crop']; VIDEO = D.get('video', f'{S}/rory.mp4')
 T0 = float(sys.argv[2]) if len(sys.argv) > 2 else -1; T1 = float(sys.argv[3]) if len(sys.argv) > 3 else 1e9  # 분석 시간 창 (인트로·장면 전환 배제)
+HAND_PEAK = float(os.environ.get('HAND_PEAK', '0.25'))  # 톱·피니시 봉우리 최소 손 높이(어깨 기준, ×몸통) — 웨지 피치는 −0.3 정도로 완화
+EXT_MIN = float(os.environ.get('EXT_MIN', '0.6'))  # 팔로스루 최소 뻗음(×몸통) — 웨지는 0.35
 fr = [f for f in D['frames'] if f['lm'] and T0 <= f['t'] <= T1]
 def P(f, i): return np.array([f['lm'][i][0], -f['lm'][i][1]])  # y up
 def mid(f, a, b): return (P(f, a) + P(f, b)) / 2
@@ -27,8 +29,8 @@ def find_swings():
     임계: 어깨보다 0.25·torso 이상 높고, 이웃 봉우리와 0.6s 이상 떨어짐 (구 0.6·torso 절대 임계는 작은 골퍼에서 톱을 놓쳤다)"""
     w = max(2, int(0.35 * fps)); gap = int(0.6 * fps)
     peaks = []
-    for i in range(w, len(handY) - w):
-        if handY[i] < 0.25 * torso0: continue
+    for i in range(w, len(handY)):  # 끝 프레임 포함 — 영상이 피니시 도중 끝나면 마지막 상승이 피니시 봉우리 (웨지 클립)
+        if handY[i] < HAND_PEAK * torso0: continue
         if handY[i] >= handY[i - w:i + w + 1].max():
             if peaks and i - peaks[-1] < gap:
                 if handY[i] > handY[peaks[-1]]: peaks[-1] = i
@@ -41,19 +43,22 @@ print(f'[{name}] frames {len(fr)}  fps {fps}  torso {torso0:.0f}px  high-hand se
 # 그 사이 팔로스루에서 손이 타깃 쪽으로 크게 뻗는다 — 타깃 방향은 그 뻗음의 부호로 판정한다.
 swings = []
 last_finish = 0  # 어드레스 탐색 창은 직전 '스윙'의 피니시 이후 (봉우리가 아니라) — 톱 근처 이중 봉우리에 창이 잘리지 않게
+DEBUG = os.environ.get('DEBUG') == '1'
+def skip(k, why):
+    if DEBUG: print(f'  skip pair {k}: {why}')
 for k in range(len(segs) - 1):
     a0, a1 = segs[k]; b0, b1 = segs[k + 1]
-    if T[b0] - T[a1] < 0.05: continue
+    if T[b0] - T[a1] < 0.05: skip(k, 'gap'); continue
     topi = a0 + int(np.argmax(handY[a0:a1])); fini = b0 + int(np.argmax(handY[b0:b1]))
     relx = (W_ - S_)[:, 0]
     mid_lo, mid_hi = a1, b0
     ext = relx[mid_lo:mid_hi]
-    if len(ext) < 3: continue
-    fol = mid_lo + int(np.argmax(np.abs(ext)))
-    tsign = 1 if relx[fol] > 0 else -1
-    if abs(relx[fol]) < 0.6 * torso0: continue
-    if relx[topi] * tsign > 0: continue  # 톱의 손은 타깃 반대쪽
-    if topi <= last_finish: continue  # 직전 스윙의 피니시 봉우리를 톱으로 재사용하지 않는다
+    if len(ext) < 3: skip(k, 'short ext'); continue
+    # 팔로스루 = 톱의 손 반대편으로 가장 크게 뻗은 순간 (구: 절대값 최대 — 피치샷은 톱 뻗음이 팔로보다 커서 방향이 뒤집혔다)
+    tsign = -1 if relx[topi] > 0 else 1
+    fol = mid_lo + int(np.argmax(ext * tsign))
+    if relx[fol] * tsign < EXT_MIN * torso0: skip(k, f'ext {relx[fol]*tsign/torso0:.2f} < {EXT_MIN}'); continue
+    if topi <= last_finish: skip(k, 'top before last finish'); continue  # 직전 스윙의 피니시 봉우리를 톱으로 재사용하지 않는다
     win0 = last_finish
     minY = handY[win0:topi].min()
     low = [i for i in range(win0, topi) if handY[i] <= minY + 0.03 * torso0]

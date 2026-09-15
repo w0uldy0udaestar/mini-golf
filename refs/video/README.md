@@ -22,3 +22,17 @@ python tools/shaft.py slow              # → 손목 주변 직선 검출로 샤
 이벤트 검출 원리: 손목 중점 높이의 봉우리 두 개(톱·피니시)와 그 사이 타깃 쪽 최대 뻗음(팔로)으로 스윙을
 찾고, 타깃 방향은 팔로의 부호로 자동 판정한다. 어드레스는 톱 이전 손이 바닥에 머문 마지막 프레임.
 파라미터는 몸통 길이(힙→어깨)를 스틱맨 25px, 팔 최대 신전을 35px로 정규화한다.
+
+## 2단계 도구 (2026-09-15, 웨지·퍼터)
+
+```bash
+python tools/thumbs.py <video.mp4> thumbs.png 8            # 등간격 썸네일 시트 — 각도(face-on)·슬로모션 구간·장면 전환 확인
+python tools/extract.py <name> <video> [x0 x1] [step] [t0 t1]   # 시간 창 추가 (긴 영상의 일부만, 예: 흑백 분석 영상의 단일 패널 41~80s)
+HAND_PEAK=-0.3 EXT_MIN=0.35 DEBUG=1 python tools/analyze.py <name> [t0 t1]   # 웨지: 봉우리 손 높이·팔로 뻗음 임계 완화, 짝짓기 스킵 사유 출력
+PICK=0 python tools/analyze_putt.py <name> [t0 t1]         # 퍼팅 전용 검출(손목 수평 변위) — PICK으로 n번째 유효 스트로크 강제
+python tools/gen_table2.py                                  # events_<style>_{wg|pt}.json → SwingKeyframes 웨지 3 + PutterKeyframes 3 (EX=2.5)
+```
+
+이벤트 파일 이름 규약: `events_<style>_wg.json`(웨지)·`events_<style>_pt.json`(퍼터) — analyze 출력(`events_<name>.json`)을 복사해 맞춘다.
+퍼터 생성기는 어드레스·임팩트 손 각을 "헤드가 공 뒤 5px"가 되도록 이분법으로 풀고(ballFwd 표준 6·암록 16), 백스트로크 폭은 표준
+−32° 공용, 팔로스루 길이만 1.5배 과장한다. 배경 이유는 `docs/research-swing-styles.md` §2단계.
