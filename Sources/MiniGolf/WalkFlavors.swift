@@ -1,80 +1,112 @@
 import Foundation
 
 /// ═══════════════════════════════════════════════════════════════
-/// 랜덤 걷기 모션 100종 (2026-08-15 사용자 요청 5번: "완전 창의적으로, 재밌게")
-/// 각 모션 = WalkFlavor 채널들의 시간 엔벨로프 레시피. 발 접지 게이트는 건드리지 않는다.
-/// 엔벨로프 어휘: bell(부드러운 in-hold-out) · wob2/3/F(2·3·5회 진동) · pulse2/3(봉우리 2·3개)
+/// 걷기 랜덤 모션 37종 (2026-09-15 재설계 — 사용자 피드백 4번 "이름만 다르고 다 비슷해" → "전부 확 다르게").
+/// 구 100종은 같은 오프셋 채널(머리·어깨 몇 px, 손 위로 몇 px)에 같은 종 모양 엔벨로프였고 팔꿈치가 없어
+/// 흔들기·지목·환호가 전부 '팔 한 줄 올렸다 내리기'였다. 재설계 원칙:
+/// ① 관절 뼈대(Skeleton IK) 위에서 손 목표를 어깨 기준 극좌표(각도·뻗음)로 잡아 팔꿈치가 접히는 실루엣
+/// ② 리듬을 다르게 — 스냅·홀드, 예비동작→본동작, 진동, 펄스 ③ 일부는 걸음 자체를 바꾼다(보폭 배율·정지·
+/// 점프·발끝) ④ 8묶음 안에서 실루엣이 겹치는 것은 합쳤다. 발 접지 게이트는 건드리지 않는다.
+/// 각도 규약: 0 = 손이 어깨 바로 아래, + = 앞(바라보는 쪽), π = 바로 위. 뻗음 1 = 팔 길이 35px.
 /// ═══════════════════════════════════════════════════════════════
 enum WalkFlavorKind: CaseIterable {
-    // ── 클럽 트월·곡예 (14) ──
-    case twirl, twirlDouble, twirlReverse, twirlTriple, twirlHigh, twirlLow
-    case wristRoll, clubRaise, clubTapShoulder, clubPoint, clubPointHold
-    case clubBalance, clubConduct, clubHelicopter
-    // ── 에어 골프·클럽 장난 (6) ──
-    case airSwingMini, airPutt, clubInspect, clubSpinCatch, clubBat, clubSword
-    // ── 머리·시선 (12) ──
-    case lookBack, lookBackLong, lookSky, lookHole, headBob, headTilt
-    case lookDown, doubleTake, nodYes, shakeNo, birdWatch, stargaze
-    // ── 팔·손 (12) ──
-    case hatTouch, armSwing, armSwingBig, fistPump, fistPumpDouble, wave, waveBig
-    case airDrum, scratchHead, pointAhead, shadowBox, palmCheck
-    // ── 상체·자세 (14) ──
-    case shrug, slump, stretch, chestPuff, leanBack, leanForward, bowSlight
-    case squatDip, squatDeep, torsoTwist, shoulderRoll, neckStretch, backArch, wiggle
-    // ── 리듬·스텝 (16) ──
-    case skip, skipJoy, hipSway, bounce, moonBounce, strut, shimmy, grooveNod
-    case hopSmall, doubleHop, danceStep, waddle, springStep, tipToe, marchStep, slideGlide
-    // ── 감정 표현 (14) ──
-    case cheer, celebrate, facepalm, dejected, determined, nervous, whistle
-    case yawn, laugh, grumble, psyched, zen, sneeze, hiccup
-    // ── 관찰·잡동사니 (12) ──
-    case butterflyWatch, windCheck, distanceScan, watchAdjust, kneeSlap, chinStroke
-    case pocketPat, stumbleCatch, skyPoint, crowdWave, tada, bowFinish
+    /// ── A 클럽 곡예 (6) ──
+    case twirl, helicopter, clubBalance, clubDrag, clubSword, clubCane
+    /// ── B 에어 골프 (3) ──
+    case airSwing, airPutt, clubInspect
+    /// ── C 머리·시선 (3) ──
+    case lookBack, skyGaze, doubleTake
+    /// ── D 팔 제스처 (7) ──
+    case wave, fistPump, skyPoint, facepalm, shrug, stretch, chinStroke
+    /// ── E 상체·자세 (4) ──
+    case bow, leanBack, crouchSneak, yawn
+    /// ── F 리듬·스텝 (6) ──
+    case skip, hopscotch, marchStep, tipToe, strut, stumble
+    /// ── G 감정 (4) ──
+    case cheer, dejected, laugh, nervous
+    /// ── H 관찰·잡동사니 (4) ──
+    case windCheck, distanceScan, watchCheck, sneeze
 
     /// 클럽이 손에 있어야 하는 모션 (어깨 캐리 중 금지)
     var needsClub: Bool {
         switch self {
-        case .twirl, .twirlDouble, .twirlReverse, .twirlTriple, .twirlHigh, .twirlLow,
-             .wristRoll, .clubRaise, .clubTapShoulder, .clubPoint, .clubPointHold,
-             .clubBalance, .clubConduct, .clubHelicopter,
-             .airSwingMini, .airPutt, .clubInspect, .clubSpinCatch, .clubBat, .clubSword:
+        case .twirl, .helicopter, .clubBalance, .clubDrag, .clubSword, .clubCane,
+             .airSwing, .airPutt, .clubInspect, .skyPoint, .shrug, .stretch, .bow,
+             .crouchSneak, .marchStep, .cheer, .dejected:
             true
         default:
             false
         }
     }
 
+    /// 걸음을 멈추고 하는 모션 — 게이트가 쇼피스와 같은 연속 동결 램프를 건다. 발동 가중치도 낮다
+    var stopsWalking: Bool {
+        switch self {
+        case .clubBalance, .airSwing, .airPutt, .bow, .windCheck, .distanceScan: true
+        default: false
+        }
+    }
+
     var duration: Double {
         switch self {
-        case .hopSmall: 0.5
-        case .skip, .stumbleCatch: 0.7
-        case .shrug, .sneeze: 0.9
-        case .twirl, .twirlReverse, .headTilt, .doubleHop, .hiccup, .nodYes, .shakeNo: 1.0
-        case .hatTouch, .wiggle, .kneeSlap, .pocketPat, .palmCheck: 1.1
-        case .lookHole, .headBob, .wristRoll, .airPutt, .fistPump, .lookDown, .squatDip,
-             .bounce, .springStep, .tada, .skyPoint:
-            1.2
-        case .lookBack, .shoulderRoll, .clubRaise, .clubPoint, .clubBalance, .leanBack,
-             .leanForward, .torsoTwist, .grooveNod, .whistle, .determined, .nervous,
-             .laugh, .grumble, .watchAdjust, .chinStroke:
-            1.3
-        case .lookSky, .hipSway, .clubTapShoulder, .doubleTake, .airSwingMini, .clubBat,
-             .neckStretch, .backArch, .shimmy, .danceStep, .waddle, .psyched, .windCheck,
-             .distanceScan, .crowdWave, .bowSlight, .twirlHigh, .twirlLow:
-            1.4
-        case .twirlDouble, .stretch, .chestPuff, .clubSpinCatch, .clubSword, .marchStep,
-             .tipToe, .slideGlide:
-            1.5
-        case .armSwing, .slump, .skipJoy, .squatDeep, .yawn, .facepalm, .cheer, .strut,
-             .fistPumpDouble, .clubInspect, .scratchHead, .airDrum, .shadowBox, .pointAhead,
-             .bowFinish, .clubConduct:
-            1.6
-        case .armSwingBig, .waveBig, .clubHelicopter, .clubPointHold, .celebrate: 1.8
-        case .twirlTriple, .moonBounce, .butterflyWatch, .dejected, .birdWatch: 2.0
-        case .lookBackLong, .stargaze: 2.2
-        case .zen: 2.4
-        case .wave: 1.4
+        case .skip: 0.8
+        case .twirl: 1.0
+        case .sneeze: 1.1
+        case .doubleTake, .stumble: 1.2
+        case .fistPump: 1.3
+        case .shrug, .hopscotch, .laugh: 1.4
+        case .clubSword, .wave, .skyPoint: 1.5
+        case .helicopter, .clubInspect, .facepalm, .cheer: 1.6
+        case .stretch, .chinStroke, .yawn, .airPutt, .distanceScan, .watchCheck, .nervous: 1.8
+        case .clubBalance, .airSwing, .lookBack, .skyGaze, .bow, .leanBack, .marchStep: 2.0
+        case .clubDrag, .clubCane, .tipToe: 2.2
+        case .crouchSneak, .strut, .dejected, .windCheck: 2.4
         }
+    }
+
+    /// 스케줄러 가중치 — 멈추는 모션은 드물게 (걷기가 자꾸 끊기면 개그가 아니라 버그로 읽힌다)
+    var weight: Double {
+        stopsWalking ? 0.35 : 1
+    }
+
+    static func weightedRandom() -> WalkFlavorKind {
+        let total = allCases.reduce(0) { $0 + $1.weight }
+        var r = Double.random(in: 0 ..< total)
+        for k in allCases {
+            r -= k.weight
+            if r < 0 {
+                return k
+            }
+        }
+        return allCases.last!
+    }
+
+    /// 걸음 수정자 — 게이트가 매 프레임 묻는다. stride: 보폭 배율(케이던스는 거리 구동이라 자동 반비례),
+    /// stop: 전진 동결 비율 0~1 (쇼피스와 같은 in 0.35s / out 0.5s 램프)
+    func gait(u: Double) -> (stride: Double, stop: Double) {
+        guard u > 0, u < 1 else { return (1, 0) }
+        var stop = 0.0
+        if stopsWalking {
+            let t = u * duration
+            let inR = smoothstep(min(1, t / 0.35))
+            let outR = smoothstep(min(1, max(0, (t - (duration - 0.5)) / 0.5)))
+            stop = inR * (1 - outR * outR)
+        }
+        let k: Double = switch self {
+        case .lookBack, .marchStep: 0.9
+        case .facepalm: 0.85
+        case .clubSword, .yawn: 0.8
+        case .clubCane: 0.75
+        case .clubInspect, .chinStroke, .stumble, .dejected: 0.7
+        case .hopscotch, .nervous: 0.6
+        case .crouchSneak: 0.55
+        case .tipToe: 0.5
+        case .leanBack: 1.25
+        case .strut: 1.35
+        case .watchCheck: 1 + 0.3 * smoothstep(seg(u, 0.55, 0.7)) * (1 - smoothstep(seg(u, 0.9, 1)))
+        default: 1
+        }
+        return (1 + (k - 1) * env(u, in: 0.25, out: 0.3), stop)
     }
 
     /// 모션 레시피 — u: 정규화 진행 (트월 계열은 완료 후에도 호출되어 누적각 유지)
@@ -82,214 +114,356 @@ enum WalkFlavorKind: CaseIterable {
         let ss = smoothstep(min(1, u))
         // 트월 계열: 되감기 없음 — u ≥ 1에서도 누적각을 남긴다
         switch self {
-        case .twirl, .twirlLow:
+        case .twirl:
             f.twirlAngle += 2 * .pi * ss
-            if self == .twirlLow, u < 1 {
-                f.hipYOff -= 2 * bellEnv(u) // 낮게 웅크리고 돌리기
+            if u < 1 {
+                f.gripLift += 0.3 * bell(u)
             }
             return
-        case .twirlDouble:
+        case .helicopter: // 머리 위에서 두 바퀴 — 그립을 머리 위 앞으로 들어 올린 채 회전
             f.twirlAngle += 4 * .pi * ss
-            return
-        case .twirlReverse:
-            f.twirlAngle -= 2 * .pi * ss
-            return
-        case .twirlTriple:
-            f.twirlAngle += 6 * .pi * ss
-            return
-        case .twirlHigh, .clubHelicopter:
-            f.twirlAngle += (self == .clubHelicopter ? 4 : 2) * .pi * ss
             if u < 1 {
-                f.gripLift += bellEnv(u) // 높이 들고 돌리는 헬리콥터
+                let e = env(u, in: 0.2, out: 0.2)
+                f.setClubHand(angle: 2.75, reach: 0.8, w: e)
+                f.headDyOff += 2 * e
             }
             return
         default:
             break
         }
         guard u < 1 else { return }
-        let bell = bellEnv(u)
-        let wob2 = sin(4 * .pi * u) * bell
-        let wob3 = sin(6 * .pi * u) * bell
-        let wobF = sin(10 * .pi * u) * bell
-        let pulse2 = abs(sin(2 * .pi * u)) * bell
-        let pulse3 = abs(sin(3 * .pi * u)) * bell
+        let e = env(u)
         switch self {
-        // 클럽 손짓
-        case .wristRoll: f.phiWobble += 0.25 * wob2
-        case .clubRaise: f.gripLift += bell; f.phiWobble += 0.35 * bell
-        case .clubTapShoulder: f.gripLift += 0.8 * bell; f.phiWobble += 0.3 * wob2
-        case .clubPoint: f.clubPointBlend = max(f.clubPointBlend, bell) // 전방 지목: "저기다"
-        case .clubPointHold: f.clubPointBlend = max(f.clubPointBlend, bell) // 길게 겨눈다
-        case .clubBalance: f.clubUpBlend = max(f.clubUpBlend, bell) // 수직 세워 균형 잡기
-        case .clubConduct: f.gripLift += 0.5 * bell; f.phiWobble += 0.5 * wob3 // 오케스트라 지휘
-        case .airSwingMini: // 걸으며 하는 미니 연습 스윙: 뒤로 감았다 앞으로
-            f.gripLift += 0.4 * bell
-            f.phiWobble += -1.1 * sin(.pi * min(1, u / 0.55)) * bell + (u > 0.55 ? 1.4 * bell * (u - 0.55) / 0.45 : 0)
-        case .airPutt: f.phiWobble += 0.35 * wob2; f.headDyOff -= 1.5 * bell // 퍼팅 스트로크 흉내
-        case .clubInspect: // 헤드를 눈앞에 들고 살핀다
-            f.gripLift += bell
-            f.clubPointBlend = max(f.clubPointBlend, 0.5 * bell)
-            f.headDyOff -= 1.5 * bell
-        case .clubSpinCatch: f.phiWobble += 1.5 * sin(2 * .pi * u) * bell // 반 바퀴 돌렸다 잡기
-        case .clubBat: f.shoulderXOff -= 2 * bell; f.phiWobble += -0.8 * bell // 야구 타격 자세 장난
-        case .clubSword: // 검처럼 겨누고 잔떨림
-            f.clubPointBlend = max(f.clubPointBlend, bell)
-            f.phiWobble += 0.08 * wobF
-        // 머리·시선
-        case .lookBack, .lookBackLong: f.lookBack = max(f.lookBack, bell)
-        case .lookSky: f.headDxOff += 2 * bell; f.headDyOff += 3 * bell
-        case .lookHole: f.headDxOff += 3.5 * bell
-        case .headBob: f.headDxOff += 1.5 * sin(6 * .pi * u) * bell
-        case .headTilt: f.headDyOff -= 2.5 * bell
-        case .lookDown: f.headDyOff -= 3 * bell // 풀 관찰
-        case .doubleTake: f.lookBack = max(f.lookBack, pulse2) // 봤다가, 다시 한 번
-        case .nodYes: f.headDyOff += 1.5 * wob3
-        case .shakeNo: f.headDxOff += 2 * wob3
-        case .birdWatch: f.headDxOff += 3 * sin(.pi * u) * bell; f.headDyOff += 3 * bell // 새를 따라가는 시선
-        case .stargaze: f.headDyOff += 3.5 * bell; f.shoulderYOff += bell // 별 구경
-        // 팔·손
-        case .hatTouch: f.hatTouch = max(f.hatTouch, bell)
-        case .armSwing: f.armAmpBoost += 1.2 * bell
-        case .armSwingBig: f.armAmpBoost += 2.2 * bell
-        case .fistPump: f.freeHandYOff += 22 * bell; f.freeHandXOff += 4 * bell // 주먹 불끈
-        case .fistPumpDouble: f.freeHandYOff += 20 * pulse2
-        case .wave: f.freeHandYOff += 24 * bell; f.freeHandXOff += 5 * wob3 // 관객에게 인사
-        case .waveBig: f.freeHandYOff += 32 * bell; f.freeHandXOff += 12 * wob2
-        case .airDrum: f.freeHandYOff += 8 * bell + 6 * wobF // 에어 드럼
-        case .scratchHead: f.hatTouch = max(f.hatTouch, bell); f.headDxOff += 0.8 * wobF // 머리 긁적
-        case .pointAhead: f.freeHandXOff += 18 * bell; f.freeHandYOff += 8 * bell // 손가락 지목
-        case .shadowBox: f.freeHandXOff += 17 * wobF; f.freeHandYOff += 6 * abs(wobF); f.shoulderXOff += 2 * wob3; f
-            .skip = max(
-                f.skip,
-                0.25 * bell
-            ) // 섀도복싱
-        case .palmCheck: f.freeHandYOff += 10 * bell; f.headDyOff -= 1.5 * bell // 손금 보기
-        // 상체·자세
-        case .shrug: f.shoulderYOff += 2.5 * bell
-        case .slump: f.shoulderYOff -= 2 * bell
-        case .stretch:
-            f.shoulderYOff += 1.5 * bell
-            f.headDyOff += 2 * bell
-            f.gripLift += 0.4 * bell
-        case .chestPuff: // 가슴 활짝 — 으스대기
-            f.shoulderYOff += 2.5 * bell
-            f.shoulderXOff -= 1.5 * bell
-            f.headDyOff += bell
-        case .leanBack: f.shoulderXOff -= 3.5 * bell; f.headDyOff += 0.5 * bell
-        case .leanForward: f.shoulderXOff += 3 * bell; f.headDyOff -= bell
-        case .bowSlight: // 목례
-            f.shoulderXOff += 2 * bell
-            f.shoulderYOff -= 2.5 * bell
-            f.headDyOff -= 2 * bell
-        case .squatDip: f.hipYOff -= 4 * bell
-        case .squatDeep: f.hipYOff -= 7 * bell
-        case .torsoTwist: f.shoulderXOff += 2.5 * wob2
-        case .shoulderRoll: f.shoulderYOff += 1.8 * wob2
-        case .neckStretch: f.headDxOff += 2 * sin(2 * .pi * u) * bell; f.headDyOff += bell
-        case .backArch: // 허리 젖혀 기지개
-            f.shoulderXOff -= 2.5 * bell
-            f.shoulderYOff += 1.5 * bell
-            f.hipXOff += 2 * bell
-        case .wiggle: f.hipXOff += 3.5 * wobF; f.shoulderXOff += 0.8 * wobF
-        // 리듬·스텝
-        case .skip, .hopSmall: f.skip = max(f.skip, bell)
-        case .skipJoy: f.skip = max(f.skip, bell); f.freeHandYOff += 14 * bell; f.hipYOff += 1.2 * pulse2
-        case .hipSway: f.hipXOff += 3.5 * wob2; f.shoulderXOff -= 0.8 * wob2
-        case .bounce: f.hipYOff += 2 * (1 - cos(4 * .pi * u)) / 2 * bell
-        case .moonBounce: // 달 위를 걷는 듯한 느린 큰 바운스
-            f.hipYOff += 5 * (1 - cos(2 * .pi * u)) / 2 * bell
-            f.skip = max(f.skip, 0.7 * bell)
-        case .strut: // 으스대는 걸음
-            f.shoulderYOff += 2 * bell
-            f.hipXOff += 1.5 * wob2
-            f.armAmpBoost += bell
-        case .shimmy: f.shoulderXOff += 2.2 * wobF; f.shoulderYOff += 1.5 * wobF; f.hipXOff += 1.5 * wobF
-        case .grooveNod: f.headDxOff += 1.5 * wob3; f.hipXOff += 1.5 * wob3 // 그루브 타기
-        case .doubleHop: f.skip = max(f.skip, pulse2)
-        case .danceStep: f.hipXOff += 4.5 * wob2; f.freeHandYOff += 12 * wob2; f.skip = max(f.skip, 0.3 * bell)
-        case .waddle: f.hipXOff += 3 * wob3; f.shoulderXOff -= wob3 // 뒤뚱뒤뚱
-        case .springStep: f.skip = max(f.skip, 0.5 * bell); f.hipYOff += 1.5 * bell
-        case .tipToe: f.hipYOff += 2 * bell; f.skip = max(f.skip, 0.3 * bell) // 발끝 살금살금
-        case .marchStep: f.armAmpBoost += 2 * bell; f.skip = max(f.skip, 0.4 * bell) // 행진
-        case .slideGlide: f.armAmpBoost -= 0.6 * bell; f.shoulderXOff -= bell // 미끄러지듯 여유
-        // 감정 표현
-        case .cheer: // 환호
-            f.freeHandYOff += 32 * bell
-            f.headDyOff += 3 * bell
-            f.skip = max(f.skip, 0.8 * bell)
-        case .celebrate: f.freeHandYOff += 30 * pulse2; f.hipYOff += 2.2 * (1 - cos(4 * .pi * u)) / 2 * bell; f
-            .skip = max(
-                f.skip,
-                0.4 * bell
-            )
-        case .facepalm: // 아이고…
-            f.hatTouch = max(f.hatTouch, bell)
-            f.headDyOff -= 2.5 * bell
-            f.shoulderYOff -= 1.5 * bell
-        case .dejected: // 낙담 — 어깨도 팔도 축
-            f.shoulderYOff -= 2.5 * bell
-            f.headDyOff -= 3 * bell
-            f.armAmpBoost -= 0.7 * bell
-        case .determined: f.headDyOff += bell; f.freeHandYOff += 10 * bell; f.shoulderYOff += 1.5 * bell
-        case .nervous: f.headDxOff += 2.5 * wobF; f.shoulderYOff += 0.5 * wobF // 안절부절 두리번
-        case .whistle: f.headDyOff += 1.5 * bell; f.hipXOff += 1.2 * wob3 // 휘파람 스텝
-        case .yawn: // 하품 — 손이 입으로, 고개 젖힘
-            f.freeHandYOff += 16 * bell
-            f.headDyOff += 2 * bell
-            f.shoulderYOff += bell
-        case .laugh: f.shoulderYOff += 1.2 * wobF; f.headDyOff += wobF // 어깨 들썩 웃음
-        case .grumble: f.headDxOff += wob3; f.headDyOff -= 1.5 * bell; f.shoulderYOff -= bell
-        case .psyched: f.skip = max(f.skip, bell); f.freeHandYOff += 20 * pulse3; f.hipYOff += 1.5 * pulse3 // 신남 폭발
-        case .zen: f.shoulderYOff += 1.5 * sin(.pi * u); f.headDyOff += sin(.pi * u) // 깊은 호흡
-        case .sneeze: // 에취
-            f.headDyOff -= 3 * bell
-            f.shoulderXOff += 2 * bell
-            f.hipYOff -= bell
-        case .hiccup: f.hipYOff += 1.2 * pulse2; f.headDyOff += 0.8 * wob2
-        // 관찰·잡동사니
-        case .butterflyWatch: f.headDxOff += 3 * sin(2 * .pi * u) * bell; f.headDyOff += 2.5 * bell // 나비 쫓기
-        case .windCheck: // 풀잎 던져 바람 읽기
-            f.freeHandYOff += 20 * bell
-            f.headDxOff += 2 * bell
-            f.headDyOff += 2 * bell
-        case .distanceScan: // 손차양으로 먼 곳 살피기
-            f.freeHandYOff += 14 * bell
-            f.freeHandXOff += 6 * bell
-            f.headDyOff += bell
-        case .watchAdjust: f.freeHandYOff += 12 * bell; f.headDyOff -= 2 * bell // 손목시계 확인
-        case .kneeSlap: f.freeHandYOff -= 12 * bell; f.shoulderXOff += 2 * bell // 무릎 탁!
-        case .chinStroke: f.hatTouch = max(f.hatTouch, 0.7 * bell); f.headDxOff += bell // 턱 쓰다듬기
-        case .pocketPat: f.freeHandYOff -= 8 * pulse3 // 주머니 톡톡 (공 어디 갔지)
-        case .stumbleCatch: // 살짝 비틀 — 그리고 아무 일 없었다는 듯
-            f.hipXOff += 3 * bell * (1 - u)
-            f.shoulderXOff += 3 * bell * (1 - u)
-        case .skyPoint: // 하늘 지목 — 저 새 봐라
-            f.freeHandXOff += 10 * bell
-            f.freeHandYOff += 28 * bell
-            f.headDyOff += 4 * bell
-        case .crowdWave: f.freeHandYOff += 27 * sin(.pi * u) * bell; f.freeHandXOff += 14 * sin(2 * .pi * u) * bell; f
-            .hipYOff += 1.2 * abs(sin(2 * .pi * u)) * bell
-        case .tada: // 짜잔 — 양팔 펼치기
-            f.freeHandXOff -= 9 * bell
-            f.freeHandYOff += 14 * bell
-            f.shoulderYOff += 3 * bell
-            f.headDyOff += 1.5 * bell
-        case .bowFinish: // 갤러리를 향한 정중한 인사
-            f.shoulderXOff += 3 * bell
-            f.shoulderYOff -= 3 * bell
-            f.headDyOff -= 2.5 * bell
-        // 트월 계열은 첫 번째 switch에서 처리 후 return — default 없이 명시해 새 케이스
-        // 추가 시 컴파일러가 레시피 누락을 잡아준다 (리뷰 S-3)
-        case .twirl, .twirlLow, .twirlDouble, .twirlReverse, .twirlTriple, .twirlHigh,
-             .clubHelicopter:
-            break
+        // ── A 클럽 곡예 ──
+        case .clubBalance: // 클럽을 손바닥 위에 수직으로 세우고 반대팔로 균형 — 걸음 멈춤, 흔들흔들
+            let w = env(u, in: 0.2, out: 0.25)
+            f.clubUpBlend = max(f.clubUpBlend, w)
+            f.setClubHand(angle: 1.3, reach: 0.6, w: w)
+            f.setFreeHand(angle: 1.9, reach: 0.8, w: w)
+            f.headDyOff += 3 * w
+            f.hipXOff += 1.5 * sin(4 * .pi * u) * w
+        case .clubDrag: // 지친 골퍼 — 클럽 헤드를 뒤로 질질 끌며 어깨 처짐
+            let w = env(u, in: 0.25, out: 0.3)
+            f.setClubHand(angle: -0.45, reach: 0.75, w: w)
+            f.setClubPhi(-2.35, w: w)
+            f.shoulderYOff -= 2 * w
+            f.headDyOff -= 2.5 * w
+            f.armAmpBoost -= 0.5 * w
+        case .clubSword: // 검처럼 앞으로 겨누고 두 번 찌르기 (몸이 앞으로 쏠린다)
+            let w = env(u, in: 0.15, out: 0.2)
+            f.setClubHand(angle: 1.5, reach: 0.6, w: w)
+            f.setClubPhi(.pi / 2, w: w)
+            let lunge = abs(sin(2 * .pi * seg(u, 0.2, 0.8))) * w
+            f.hipXOff += 6 * lunge
+            f.shoulderXOff += 3 * lunge
+            f.headDxOff += 1.5 * w
+        case .clubCane: // 지팡이 — 클럽을 앞에 짚고 구부정하게, 보폭 짧게
+            let w = env(u, in: 0.25, out: 0.3)
+            f.setClubHand(angle: 0.35, reach: 0.65, w: w)
+            f.setClubPhi(-0.25, w: w)
+            f.shoulderXOff += 5 * w
+            f.shoulderYOff -= 2 * w
+            f.hipYOff -= 3 * w
+            f.headDyOff -= 1.5 * w
+        // ── B 에어 골프 ──
+        case .airSwing: // 멈춰 서서 풀 연습 스윙: 어드레스 → 백스윙 → 다운(급가속) → 팔로스루 → 풀기
+            let w = env(u, in: 0.12, out: 0.15)
+            let addr = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.85, 0.95)))
+            f.shoulderXOff += 5 * addr
+            f.headDyOff -= 2 * addr
+            let angle: Double
+            let phi: Double
+            let reach: Double
+            if u < 0.25 {
+                angle = 0.35; phi = 0.2; reach = 0.9
+            } else if u < 0.5 {
+                let s = smoothstep(seg(u, 0.25, 0.5))
+                angle = mix(0.35, -2.0, s); phi = mix(0.2, -2.9, s); reach = mix(0.9, 0.7, s)
+            } else if u < 0.6 {
+                let s = seg(u, 0.5, 0.6)
+                angle = mix(-2.0, 0.35, s * s); phi = mixAngle(-2.9, 0.1, s * s); reach = mix(0.7, 0.9, s)
+            } else if u < 0.85 {
+                let s = smoothstep(seg(u, 0.6, 0.85))
+                angle = mix(0.35, 2.4, s); phi = mixAngle(0.1, 2.9, s); reach = mix(0.9, 0.7, s)
+            } else {
+                let s = smoothstep(seg(u, 0.85, 1))
+                angle = mix(2.4, 0.35, s); phi = mixAngle(2.9, 0.2, s); reach = mix(0.7, 0.9, s)
+            }
+            f.setClubHand(angle: angle, reach: reach, w: w)
+            f.setFreeHand(angle: angle, reach: reach - 0.03, w: w) // 두 손 다 그립에
+            f.setClubPhi(phi, w: w)
+            f.hipXOff += (u < 0.5 ? -2 * smoothstep(seg(u, 0.25, 0.5)) : 5 * smoothstep(seg(u, 0.5, 0.75))) * w
+                * (1 - smoothstep(seg(u, 0.85, 1)))
+        case .airPutt: // 퍼팅 자세로 두 번 스트로크 — 상체 숙이고 클럽 펜듈럼
+            let w = env(u, in: 0.2, out: 0.2)
+            f.shoulderXOff += 6 * w
+            f.headDyOff -= 2.5 * w
+            f.headDxOff += 2 * w
+            f.setClubHand(angle: 0.25, reach: 0.95, w: w)
+            f.setFreeHand(angle: 0.25, reach: 0.92, w: w)
+            let inStroke = u > 0.25 && u < 0.85 ? 1.0 : 0.0
+            f.setClubPhi(0.05 + 0.4 * sin(4 * .pi * seg(u, 0.25, 0.85)) * inStroke, w: w)
+        case .clubInspect: // 클럽을 뒤로 잡고 헤드를 얼굴 앞으로 세워 살핀다, 반대손으로 헤드를 문지른다
+            let w = env(u, in: 0.2, out: 0.25)
+            f.setClubHand(angle: -0.55, reach: 0.6, w: w)
+            f.setClubPhi(2.68, w: w)
+            f.headDxOff += 1 * w
+            f.headDyOff -= 1 * w
+            let rub = smoothstep(seg(u, 0.4, 0.5)) * (1 - smoothstep(seg(u, 0.75, 0.85)))
+            f.setFreeHand(angle: 2.5 + 0.1 * sin(12 * .pi * u), reach: 0.45, w: rub)
+        // ── C 머리·시선 ──
+        case .lookBack: // 오래 뒤돌아보며 걷는다 — 어깨도 살짝 따라간다
+            let w = env(u, in: 0.2, out: 0.25)
+            f.lookBack = max(f.lookBack, w)
+            f.shoulderXOff -= 2 * w
+        case .skyGaze: // 하늘 보며 걷다가 삐끗 — 팔을 앞으로 휘저으며 회복
+            let w = env(u, in: 0.2, out: 0.25)
+            f.headDyOff += 4 * w
+            f.headDxOff += 2 * w
+            f.armAmpBoost -= 0.5 * w
+            let st = smoothstep(seg(u, 0.6, 0.68)) * (1 - smoothstep(seg(u, 0.75, 0.9)))
+            f.hipXOff += 5 * st
+            f.shoulderXOff += 6 * st
+            f.hipYOff -= 3 * st
+            f.headDyOff -= 5 * st
+            f.setFreeHand(angle: 1.8, reach: 0.9, w: st)
+        case .doubleTake: // 봤다가, 다시 한 번(스냅) — 두 번째는 어깨가 움찔
+            let l1 = smoothstep(seg(u, 0.05, 0.15)) * (1 - smoothstep(seg(u, 0.3, 0.4)))
+            let l2 = smoothstep(seg(u, 0.5, 0.56)) * (1 - smoothstep(seg(u, 0.85, 0.95)))
+            f.lookBack = max(f.lookBack, max(l1, l2))
+            f.shoulderYOff += 2.5 * l2
+            f.shoulderXOff -= 3 * l2
+            f.headDyOff += 1 * l2
+        // ── D 팔 제스처 ──
+        case .wave: // 팔꿈치 접고 손을 머리 옆에서 앞뒤로 흔든다
+            let w = env(u, in: 0.15, out: 0.2)
+            f.setFreeHand(angle: 2.6 + 0.35 * sin(10 * .pi * u), reach: 0.55, w: w)
+            f.headDxOff += 1 * w
+            f.shoulderYOff += 1 * w
+        case .fistPump: // 웅크리며 주먹을 가슴에 모았다가 하늘로 스냅
+            let a = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.3, 0.4)))
+            let p = smoothstep(seg(u, 0.35, 0.42)) * (1 - smoothstep(seg(u, 0.8, 0.95)))
+            f.hipYOff -= 5 * a
+            f.shoulderXOff += 3 * a
+            if u < 0.38 {
+                f.setFreeHand(angle: 0.93, reach: 0.3, w: a)
+            } else {
+                f.setFreeHand(angle: 2.95, reach: 0.95, w: p)
+            }
+            f.hipYOff += 2 * p
+            f.shoulderYOff += 2 * p
+            f.headDyOff += 2 * p
+        case .skyPoint: // 팔 쭉 뻗어 하늘 지목, 고개 위로, 클럽 손은 허리에
+            let w = env(u, in: 0.15, out: 0.25)
+            f.setFreeHand(angle: 2.35, reach: 0.95, w: w)
+            f.headDyOff += 4 * w
+            f.headDxOff += 3 * w
+            f.setClubHand(angle: -0.15, reach: 0.62, w: w)
+            f.setClubPhi(-0.9, w: w)
+            f.shoulderXOff -= 2 * w
+        case .facepalm: // 아이고… 손으로 얼굴, 고개 푹, 어깨 처짐
+            let w = env(u, in: 0.2, out: 0.3)
+            f.setFreeHand(angle: 2.75, reach: 0.37, w: w)
+            f.headDyOff -= 3 * w
+            f.headDxOff += 1.5 * w
+            f.shoulderYOff -= 2 * w
+            f.shoulderXOff += 2 * w
+        case .shrug: // 양손 벌려 손바닥 위로 + 어깨 으쓱, 고개 갸웃
+            let w = env(u, in: 0.2, out: 0.25)
+            f.shoulderYOff += 3 * w
+            f.headDxOff -= 1.5 * w
+            f.headDyOff -= 1 * w
+            f.setFreeHand(angle: 1.35, reach: 0.5, w: w)
+            f.setClubHand(angle: -1.35, reach: 0.5, w: w)
+            f.setClubPhi(-0.6, w: w)
+        case .stretch: // 양팔(클럽까지) 하늘로 쭉, 허리 젖히고 기지개
+            let w = env(u, in: 0.3, out: 0.3)
+            f.setFreeHand(angle: 3.0, reach: 0.95, w: w)
+            f.setClubHand(angle: 3.05, reach: 0.95, w: w)
+            f.setClubPhi(2.9, w: w)
+            f.shoulderXOff -= 3 * w
+            f.headDyOff += 2 * w
+            f.headDxOff -= 2 * w
+            f.hipYOff += 1 * w
+            f.armAmpBoost -= 1 * w
+        case .chinStroke: // 턱 쓰다듬으며 생각에 잠긴 느린 걸음
+            let w = env(u, in: 0.25, out: 0.3)
+            f.setFreeHand(angle: 2.45, reach: 0.23 + 0.03 * sin(6 * .pi * u), w: w)
+            f.headDyOff -= 1 * w
+            f.headDxOff -= 1 * w
+            f.shoulderXOff += 1 * w
+            f.armAmpBoost -= 0.8 * w
+        // ── E 상체·자세 ──
+        case .bow: // 멈춰 서서 정중히 허리 굽혀 인사 — 팔은 아래로 늘어뜨린다
+            let b = env(u, in: 0.3, out: 0.3)
+            f.shoulderXOff += 14 * b
+            f.shoulderYOff -= 12 * b
+            f.headDyOff -= 3 * b
+            f.headDxOff += 2 * b
+            f.setFreeHand(angle: 0.15, reach: 0.9, w: b)
+            f.setClubHand(angle: 0.3, reach: 0.85, w: b)
+            f.setClubPhi(0.2, w: b)
+            f.hipXOff -= 3 * b
+        case .leanBack: // 뒤로 젖히고 가슴 펴고 느긋한 긴 보폭 — 으스댐
+            let w = env(u, in: 0.25, out: 0.3)
+            f.shoulderXOff -= 6 * w
+            f.shoulderYOff += 1 * w
+            f.headDyOff += 1 * w
+            f.headDxOff -= 1 * w
+            f.armAmpBoost += 0.8 * w
+        case .crouchSneak: // 웅크려 살금살금 — 무릎 굽고 상체 숙임, 짧고 빠른 걸음, 클럽은 뒤로 눕힌다
+            let w = env(u, in: 0.25, out: 0.3)
+            f.hipYOff -= 10 * w
+            f.shoulderXOff += 5 * w
+            f.headDxOff += 3 * w
+            f.headDyOff -= 1 * w
+            f.setFreeHand(angle: 1.2, reach: 0.5, w: w)
+            f.setClubHand(angle: -0.5, reach: 0.5, w: w)
+            f.setClubPhi(-1.55, w: w)
+        case .yawn: // 손으로 입 가리고 고개 젖힘 → 팔 쭉 뻗는 기지개
+            let m = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.45, 0.6)))
+            let s = smoothstep(seg(u, 0.5, 0.65)) * (1 - smoothstep(seg(u, 0.85, 1)))
+            if u < 0.5 {
+                f.setFreeHand(angle: 2.42, reach: 0.3, w: m)
+            } else {
+                f.setFreeHand(angle: 2.3, reach: 0.9, w: s)
+            }
+            let k = max(m, s)
+            f.headDyOff += 2.5 * k
+            f.headDxOff -= 1.5 * k
+            f.shoulderYOff += 1.5 * k
+            f.shoulderXOff -= 2 * s
+        // ── F 리듬·스텝 ──
+        case .skip:
+            f.skip = max(f.skip, bell(u))
+        case .hopscotch: // 두 발 모아 세 번 깡충 — 팔은 옆으로
+            let w = env(u, in: 0.15, out: 0.2)
+            f.jump += 7 * abs(sin(3 * .pi * seg(u, 0.1, 0.9))) * w
+            f.setFreeHand(angle: 1.5, reach: 0.5, w: 0.5 * w)
+        case .marchStep: // 행진 — 무릎 높이, 팔 크게, 클럽은 소총처럼 세워서
+            let w = env(u, in: 0.25, out: 0.25)
+            f.skip = max(f.skip, 0.6 * w)
+            f.armAmpBoost += 2.5 * w
+            f.shoulderYOff += 1.5 * w
+            f.headDyOff += 1 * w
+            f.clubUpBlend = max(f.clubUpBlend, 0.8 * w)
+        case .tipToe: // 발끝 살금살금 — 뒤꿈치 들고 팔 벌려 균형, 잰걸음
+            let w = env(u, in: 0.3, out: 0.3)
+            f.heelLift += 3 * w
+            f.hipYOff += 3 * w
+            f.setFreeHand(angle: 1.7, reach: 0.7, w: w)
+            f.headDyOff += 1 * w
+        case .strut: // 으스대는 긴 보폭 — 어깨·힙 엇갈려 흔들기
+            let w = env(u, in: 0.3, out: 0.3)
+            f.shoulderXOff += 2.5 * sin(4 * .pi * u) * w
+            f.hipXOff -= 3 * sin(4 * .pi * u) * w
+            f.armAmpBoost += 0.6 * w
+            f.headDyOff += 1.5 * w
+            f.shoulderYOff += 1 * w
+        case .stumble: // 걸려서 앞으로 쏠리고 팔 휘저음 → 아무 일 없었다는 듯 두리번
+            let st = smoothstep(seg(u, 0.1, 0.2)) * (1 - smoothstep(seg(u, 0.45, 0.7)))
+            f.shoulderXOff += 8 * st
+            f.hipXOff += 4 * st
+            f.headDxOff += 3 * st
+            f.headDyOff -= 2 * st
+            f.setFreeHand(angle: 1.9, reach: 0.9, w: st)
+            let r = smoothstep(seg(u, 0.65, 0.8)) * (1 - smoothstep(seg(u, 0.9, 1)))
+            f.shoulderYOff -= 1.5 * r
+            f.lookBack = max(f.lookBack, 0.5 * r)
+        // ── G 감정 ──
+        case .cheer: // 양팔 V(클럽까지 하늘로) + 두 번 점프
+            let w = env(u, in: 0.15, out: 0.25)
+            f.setFreeHand(angle: 2.65, reach: 0.95, w: w)
+            f.setClubHand(angle: -2.65, reach: 0.95, w: w)
+            f.setClubPhi(2.5, w: w)
+            f.jump += 8 * abs(sin(2 * .pi * seg(u, 0.1, 0.8))) * w
+            f.headDyOff += 2 * w
+        case .dejected: // 낙담 — 어깨·고개 축, 팔 늘어뜨리고 클럽 끌며 터덜터덜
+            let w = env(u, in: 0.3, out: 0.35)
+            f.shoulderYOff -= 4 * w
+            f.headDyOff -= 4 * w
+            f.headDxOff += 1 * w
+            f.armAmpBoost -= 0.9 * w
+            f.setFreeHand(angle: 0.05, reach: 0.9, w: w)
+            f.setClubHand(angle: -0.45, reach: 0.75, w: w)
+            f.setClubPhi(-2.35, w: w)
+        case .laugh: // 고개 젖히고 어깨 들썩, 손은 배에
+            let w = env(u, in: 0.2, out: 0.25)
+            f.headDyOff += 2 * w
+            f.headDxOff -= 1 * w
+            f.shoulderYOff += 2 * abs(sin(8 * .pi * u)) * w
+            f.shoulderXOff -= 2 * w
+            f.setFreeHand(angle: 0.4, reach: 0.43, w: w)
+            f.hipYOff += 0.8 * abs(sin(8 * .pi * u)) * w
+        case .nervous: // 움츠리고 빠르게 두리번, 손은 가슴 앞에서 꼼지락, 종종걸음
+            let w = env(u, in: 0.2, out: 0.25)
+            f.headDxOff += 3 * sin(12 * .pi * u) * w
+            f.shoulderYOff -= 2 * w
+            f.shoulderXOff += 2 * w
+            f.setFreeHand(angle: 0.93 + 0.15 * sin(14 * .pi * u), reach: 0.3, w: w)
+        // ── H 관찰·잡동사니 ──
+        case .windCheck: // 멈춰서 풀 뜯어 → 위로 뿌리고 → 날아가는 걸 본다
+            let p = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.3, 0.42)))
+            let t = smoothstep(seg(u, 0.45, 0.55)) * (1 - smoothstep(seg(u, 0.7, 0.85)))
+            f.shoulderXOff += 6 * p
+            f.shoulderYOff -= 6 * p
+            f.hipYOff -= 4 * p
+            if u < 0.44 {
+                f.setFreeHand(angle: 0.5, reach: 0.95, w: p)
+            } else {
+                f.setFreeHand(angle: 2.6, reach: 0.9, w: t)
+            }
+            let watch = smoothstep(seg(u, 0.5, 0.6)) * (1 - smoothstep(seg(u, 0.85, 1)))
+            f.headDyOff += 3 * watch
+            f.headDxOff += 2 * watch
+        case .distanceScan: // 멈춰서 손차양 대고 먼 곳 훑어보기
+            let w = env(u, in: 0.2, out: 0.25)
+            f.setFreeHand(angle: 2.72, reach: 0.42, w: w)
+            f.headDyOff += 1 * w
+            f.headDxOff += (3 + 2 * sin(2 * .pi * u)) * w
+            f.shoulderXOff += 2 * w
+        case .watchCheck: // 손목시계 보고 → 서두른다 (보폭·팔 진폭 증가)
+            let l = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.45, 0.6)))
+            f.setFreeHand(angle: 1.95, reach: 0.45, w: l)
+            f.headDyOff -= 2 * l
+            f.headDxOff += 1 * l
+            let h = smoothstep(seg(u, 0.55, 0.7)) * (1 - smoothstep(seg(u, 0.9, 1)))
+            f.armAmpBoost += 1 * h
+            f.shoulderXOff += 2 * h
+        case .sneeze: // 에— (고개 젖힘) 취! (앞으로 확, 손으로 얼굴)
+            let a = smoothstep(seg(u, 0.1, 0.3)) * (1 - smoothstep(seg(u, 0.35, 0.42)))
+            f.headDyOff += 3 * a
+            f.shoulderXOff -= 2 * a
+            let s = smoothstep(seg(u, 0.4, 0.46)) * (1 - smoothstep(seg(u, 0.65, 0.85)))
+            f.headDyOff -= 4 * s
+            f.shoulderXOff += 6 * s
+            f.hipYOff -= 2 * s
+            f.setFreeHand(angle: 2.55, reach: 0.4, w: s)
+        case .twirl, .helicopter:
+            break // 첫 번째 switch에서 처리 — default 없이 명시해 새 케이스 추가 시 컴파일러가 누락을 잡는다
         }
+        _ = e
     }
 
     /// 부드러운 in-hold-out 종 모양 (0.3 경사)
-    private func bellEnv(_ u: Double) -> Double {
+    private func bell(_ u: Double) -> Double {
         smoothstep(min(1, min(u, 1 - u) / 0.3))
     }
+
+    /// 스냅-인 · 홀드 · 이즈아웃 엔벨로프
+    private func env(_ u: Double, in inW: Double = 0.15, out outW: Double = 0.2) -> Double {
+        smoothstep(min(1, u / inW)) * (1 - smoothstep(min(1, max(0, (u - (1 - outW)) / outW))))
+    }
+
+    /// 구간 [a, b] 안의 정규화 진행 (밖이면 0/1로 클램프)
+    private func seg(_ u: Double, _ a: Double, _ b: Double) -> Double {
+        min(1, max(0, (u - a) / (b - a)))
+    }
+}
+
+/// 각도 보간 — 최단 경로 (샤프트 각처럼 2π로 감기는 값)
+func mixAngle(_ a: Double, _ b: Double, _ u: Double) -> Double {
+    a + (b - a).remainder(dividingBy: 2 * .pi) * u
 }
 
 /// ═══════════════════════════════════════════════════════════════

@@ -1,173 +1,117 @@
-# 걷기 랜덤 모션 카탈로그 (100종)
-
-<img src="motions.gif" alt="걷는 동안 랜덤으로 발동하는 잔동작 — 실제 플레이" width="620">
+# 걷기 랜덤 모션 카탈로그 (37종 · 2026-09-15 재설계)
 
 스틱맨이 공을 향해 걷는 동안 확률적으로 발동하는 잉여 동작 전체 목록.
-모든 모션은 `WalkFlavors.swift`의 채널 엔벨로프 레시피로 정의되며, 발 접지 게이트(노슬립)는
-건드리지 않는다. 진폭은 `boostMotion(1.7)`로 일괄 증폭 (2026-08-20 사용자 판정 "동작이
-완전 커야" — 오프셋 채널만, 트월 회전수·기능 포즈는 보존). GIF는 `--demo-motions` 시연 모드에서 실플레이를 프레임 캡처해 스틱맨 추적 크롭으로 조립한 것.
+2026-09-15 사용자 피드백("100종이 이름만 다르고 다 비슷해") 이후 **관절 뼈대(2-bone IK) 위에서
+실루엣이 서로 다른 37종으로 재설계**했다. 구 100종은 같은 오프셋 채널(머리·어깨 몇 px, 손 위로
+몇 px)에 같은 종 모양 타이밍이었고 팔꿈치가 없어 흔들기·지목·환호가 전부 "팔 한 줄 올렸다 내리기"였다.
 
-발동 규칙: 걷기당 최대 5개, 겹치지 않게 스케줄. 어깨 캐리 중엔 클럽 모션 금지.
-별개로 아주 가끔(1~2%) [철푸덕 넘어지기](qa-report-2026-08-15.md)가 있다.
+재설계 원칙 (`WalkFlavors.swift`):
+- 손 목표를 어깨 기준 **극좌표(각도·뻗음)** 로 잡아 팔꿈치가 접히는 실루엣을 만든다 (0=아래, +앞, π=위)
+- 리듬을 다르게 — 스냅·홀드, 예비동작→본동작, 진동, 펄스
+- 일부는 **걸음 자체를 바꾼다** — 보폭 배율(케이던스는 거리 구동이라 자동 반비례), 정지, 점프, 뒤꿈치 들기
+- 발 접지 게이트(노슬립)는 건드리지 않는다. 멈추는 모션은 발동 가중치 0.35
+
+발동 규칙: 걷기당 최대 5개, 겹치지 않게 스케줄. 어깨 캐리 중엔 클럽이 필요한 모션 금지.
+별개로 아주 가끔(1~2%) [철푸덕 넘어지기](qa-report-2026-08-15.md)와 [밈 쇼피스 12종](#쇼피스-밈-모션-12)이 있다.
+시연: `--demo-motions`(37종 순서 순환). GIF 카탈로그는 재캡처 예정 — 구 100종 GIF(`motions/`)는 옛 리그 기준이라
+이 표와 맞지 않는다.
+
+## A · 클럽 곡예 (6)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| twirl | 클럽 한 바퀴 트월 | 유지 |
+| helicopter | 그립을 머리 위 앞으로 들고 두 바퀴 회전, 고개 위로 | 유지 |
+| clubBalance | 클럽을 손바닥 위에 수직으로 세우고 반대팔 벌려 균형, 흔들흔들 | **정지** |
+| clubDrag | 지친 골퍼 — 헤드를 뒤로 질질 끌고 어깨 처짐 | 유지 |
+| clubSword | 검처럼 앞으로 겨누고 두 번 찌르기 (몸이 앞으로 쏠림) | 0.8× |
+| clubCane | 지팡이처럼 앞에 짚고 구부정하게 | 0.75× |
+
+## B · 에어 골프 (3)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| airSwing | 멈춰 서서 풀 연습 스윙 — 어드레스→백스윙→급가속 다운→팔로스루→풀기 (두 손 다 그립) | **정지** |
+| airPutt | 퍼팅 자세로 상체 숙이고 펜듈럼 두 번 | **정지** |
+| clubInspect | 클럽을 뒤로 잡고 헤드를 얼굴 앞에 세워 살피며 반대손으로 문지른다 | 0.7× |
+
+## C · 머리·시선 (3)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| lookBack | 오래 뒤돌아보며 걷기, 어깨도 따라감 | 0.9× |
+| skyGaze | 하늘 보며 걷다 삐끗 — 팔 휘저으며 회복 | 유지 |
+| doubleTake | 봤다가, 다시 한 번(스냅) — 두 번째는 어깨가 움찔 | 유지 |
+
+## D · 팔 제스처 (7)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| wave | 팔꿈치 접고 손을 머리 옆에서 앞뒤로 흔든다 | 유지 |
+| fistPump | 웅크리며 주먹을 가슴에 모았다가 하늘로 스냅, 홀드 | 유지 |
+| skyPoint | 팔 쭉 뻗어 하늘 지목, 고개 위로, 클럽 손은 허리에 | 유지 |
+| facepalm | 손으로 얼굴, 고개 푹, 어깨 처짐 | 0.85× |
+| shrug | 양손 벌려 손바닥 위로 + 어깨 으쓱 + 고개 갸웃 | 유지 |
+| stretch | 양팔(클럽까지) 하늘로 쭉, 허리 젖힌 기지개 | 유지 |
+| chinStroke | 턱 쓰다듬으며 생각에 잠긴 느린 걸음 | 0.7× |
+
+## E · 상체·자세 (4)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| bow | 멈춰 서서 정중히 허리 굽혀 인사, 팔은 늘어뜨림 | **정지** |
+| leanBack | 뒤로 젖히고 가슴 펴고 느긋한 긴 보폭 — 으스댐 | 1.25× |
+| crouchSneak | 웅크려 살금살금 — 무릎 굽고 상체 숙임, 클럽은 뒤로 눕힘 | 0.55× |
+| yawn | 손으로 입 가리고 고개 젖힘 → 팔 쭉 뻗는 기지개 | 0.8× |
+
+## F · 리듬·스텝 (6)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| skip | 폴짝 | 유지 |
+| hopscotch | 두 발 모아 세 번 깡충, 팔은 옆으로 | 0.6× |
+| marchStep | 행진 — 무릎 높이, 팔 크게, 클럽은 소총처럼 세워서 | 0.9× |
+| tipToe | 발끝 살금살금 — 뒤꿈치 들고 팔 벌려 균형, 잰걸음 | 0.5× |
+| strut | 으스대는 긴 보폭 — 어깨·힙 엇갈려 흔들기 | 1.35× |
+| stumble | 걸려서 앞으로 쏠리고 팔 휘저음 → 아무 일 없었다는 듯 두리번 | 0.7× |
+
+## G · 감정 (4)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| cheer | 양팔 V(클럽까지 하늘로) + 두 번 점프 | 유지 |
+| dejected | 낙담 — 어깨·고개 축, 팔 늘어뜨리고 클럽 끌며 터덜터덜 | 0.7× |
+| laugh | 고개 젖히고 어깨 들썩, 손은 배에 | 유지 |
+| nervous | 움츠리고 빠르게 두리번, 손은 가슴 앞에서 꼼지락, 종종걸음 | 0.6× |
+
+## H · 관찰·잡동사니 (4)
+
+| 모션 | 실루엣·리듬 | 걸음 |
+|---|---|---|
+| windCheck | 멈춰서 풀 뜯어 → 위로 뿌리고 → 날아가는 걸 본다 | **정지** |
+| distanceScan | 멈춰서 손차양 대고 먼 곳 훑어보기 | **정지** |
+| watchCheck | 손목시계 보고 → 서두른다 (보폭·팔 진폭 증가) | 1→1.3× |
+| sneeze | 에— (고개 젖힘) 취! (앞으로 확, 손으로 얼굴) | 유지 |
 
 ## 쇼피스 밈 모션 (12) — 걷기를 멈추고 춘다
 
 잔동작과 달리 **걸음을 서서히 멈추고**(트립과 같은 연속 동결 램프) 2~3초 크게 추는
 희귀 이벤트. 걷기가 넉넉할 때 8%, 걷기당 최대 1개, 트립·잔동작과 겹치지 않는다.
 밈 리서치(2026-08) 기반 — 실루엣 판독성과 골프 클럽 시너지 우선, 동작은 오마주 수준으로
-추상화(특정 게임 이모트 명칭 미사용). 시연: `--demo-memes`(12종 순환).
+추상화(특정 게임 이모트 명칭 미사용). 시연: `--demo-memes`(12종 순환). 구 오프셋 채널로 작성돼 있어
+관절 리그 위에서도 그대로 동작한다 (GIF는 재캡처 예정).
 
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| whiffSpin | 헛스윙 개그 — 진지한 어드레스, 헛스윙, 아무렇지 않게 잔댄스 | <img src="motions/whiffSpin.gif" width="240"> |
-| auraFarm | 아우라 파밍 — 클럽 짚고 낮게, 스윕마다 정지 홀드 | <img src="motions/auraFarm.gif" width="240"> |
-| siuJump | 도약 세리머니 — 웅크림, 점프, 양팔 뒤로 착지 홀드 | <img src="motions/siuJump.gif" width="240"> |
-| tripleBeat | 퉁퉁퉁 — 클럽 수직 3연타 찍기, 마무리는 어깨에 척 | <img src="motions/tripleBeat.gif" width="240"> |
-| scubaDance | 스쿠버 — 한 손 코 막고 바운스, 클럽 부채질 | <img src="motions/scubaDance.gif" width="240"> |
-| heelGroove | 힐 그루브 — 뒤꿈치 바운스 8박 + 자유팔 루프 | <img src="motions/heelGroove.gif" width="240"> |
-| dabPose | 댑 — 스냅으로 고개 파묻고 클럽 팔 사선 홀드 | <img src="motions/dabPose.gif" width="240"> |
-| horseDance | 말춤 — 양손 고삐 바운스 + 올가미 (K-클래식) | <img src="motions/horseDance.gif" width="240"> |
-| coffinMarch | 관짝 행진 — 클럽 어깨에 메고 제자리 바운스 | <img src="motions/coffinMarch.gif" width="240"> |
-| clubFlip | 클럽 플립 — 던져서 수직 착지, 짜잔 | <img src="motions/clubFlip.gif" width="240"> |
-| freezeFrame | 마네킹 — 걷다가 완전 정지 3초, 끝에 두리번 | <img src="motions/freezeFrame.gif" width="240"> |
-| cheerSeesaw | 응원 시소 — 양손 교대 상하 + 힙 리듬 (삐끼삐끼풍) | <img src="motions/cheerSeesaw.gif" width="240"> |
-
-## 클럽 트월·곡예 (14)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| twirl | 클럽 한 바퀴 트월 | <img src="motions/twirl.gif" width="240"> |
-| twirlDouble | 두 바퀴 트월 | <img src="motions/twirlDouble.gif" width="240"> |
-| twirlReverse | 역방향 트월 | <img src="motions/twirlReverse.gif" width="240"> |
-| twirlTriple | 세 바퀴 — 곡예급 | <img src="motions/twirlTriple.gif" width="240"> |
-| twirlHigh | 높이 들고 트월 | <img src="motions/twirlHigh.gif" width="240"> |
-| twirlLow | 낮게 웅크려 트월 | <img src="motions/twirlLow.gif" width="240"> |
-| wristRoll | 손목 까딱까딱 | <img src="motions/wristRoll.gif" width="240"> |
-| clubRaise | 클럽 살짝 들기 | <img src="motions/clubRaise.gif" width="240"> |
-| clubTapShoulder | 어깨에 톡톡 | <img src="motions/clubTapShoulder.gif" width="240"> |
-| clubPoint | 전방 지목 — "저기다" | <img src="motions/clubPoint.gif" width="240"> |
-| clubPointHold | 길게 겨눈다 | <img src="motions/clubPointHold.gif" width="240"> |
-| clubBalance | 수직으로 세워 균형 잡기 | <img src="motions/clubBalance.gif" width="240"> |
-| clubConduct | 오케스트라 지휘 | <img src="motions/clubConduct.gif" width="240"> |
-| clubHelicopter | 헬리콥터 — 들고 두 바퀴 | <img src="motions/clubHelicopter.gif" width="240"> |
-
-## 에어 골프·클럽 장난 (6)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| airSwingMini | 걸으며 미니 연습 스윙 | <img src="motions/airSwingMini.gif" width="240"> |
-| airPutt | 퍼팅 스트로크 흉내 | <img src="motions/airPutt.gif" width="240"> |
-| clubInspect | 헤드를 눈앞에 들고 살핀다 | <img src="motions/clubInspect.gif" width="240"> |
-| clubSpinCatch | 반 바퀴 돌렸다 잡기 | <img src="motions/clubSpinCatch.gif" width="240"> |
-| clubBat | 야구 타격 자세 장난 | <img src="motions/clubBat.gif" width="240"> |
-| clubSword | 검처럼 겨누기 (잔떨림) | <img src="motions/clubSword.gif" width="240"> |
-
-## 머리·시선 (12)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| lookBack | 뒤돌아보기 | <img src="motions/lookBack.gif" width="240"> |
-| lookBackLong | 오래 뒤돌아보기 | <img src="motions/lookBackLong.gif" width="240"> |
-| lookSky | 하늘 보기 | <img src="motions/lookSky.gif" width="240"> |
-| lookHole | 홀 쪽 응시 | <img src="motions/lookHole.gif" width="240"> |
-| headBob | 머리 까딱까딱 | <img src="motions/headBob.gif" width="240"> |
-| headTilt | 갸웃 | <img src="motions/headTilt.gif" width="240"> |
-| lookDown | 풀 관찰 | <img src="motions/lookDown.gif" width="240"> |
-| doubleTake | 봤다가, 다시 한 번 | <img src="motions/doubleTake.gif" width="240"> |
-| nodYes | 끄덕끄덕 | <img src="motions/nodYes.gif" width="240"> |
-| shakeNo | 절레절레 | <img src="motions/shakeNo.gif" width="240"> |
-| birdWatch | 새를 따라가는 시선 | <img src="motions/birdWatch.gif" width="240"> |
-| stargaze | 별 구경 | <img src="motions/stargaze.gif" width="240"> |
-
-## 팔·손 (12)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| hatTouch | 모자 만지기 | <img src="motions/hatTouch.gif" width="240"> |
-| armSwing | 팔 스윙 크게 | <img src="motions/armSwing.gif" width="240"> |
-| armSwingBig | 팔 스윙 아주 크게 | <img src="motions/armSwingBig.gif" width="240"> |
-| fistPump | 주먹 불끈 | <img src="motions/fistPump.gif" width="240"> |
-| fistPumpDouble | 주먹 두 번 | <img src="motions/fistPumpDouble.gif" width="240"> |
-| wave | 손 흔들기 — 관객 인사 | <img src="motions/wave.gif" width="240"> |
-| waveBig | 크게 흔들기 | <img src="motions/waveBig.gif" width="240"> |
-| airDrum | 에어 드럼 | <img src="motions/airDrum.gif" width="240"> |
-| scratchHead | 머리 긁적 | <img src="motions/scratchHead.gif" width="240"> |
-| pointAhead | 손가락 지목 | <img src="motions/pointAhead.gif" width="240"> |
-| shadowBox | 섀도복싱 | <img src="motions/shadowBox.gif" width="240"> |
-| palmCheck | 손금 보기 | <img src="motions/palmCheck.gif" width="240"> |
-
-## 상체·자세 (14)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| shrug | 으쓱 | <img src="motions/shrug.gif" width="240"> |
-| slump | 축 처짐 | <img src="motions/slump.gif" width="240"> |
-| stretch | 기지개 | <img src="motions/stretch.gif" width="240"> |
-| chestPuff | 가슴 활짝 — 으스대기 | <img src="motions/chestPuff.gif" width="240"> |
-| leanBack | 뒤로 젖히기 | <img src="motions/leanBack.gif" width="240"> |
-| leanForward | 앞으로 기울기 | <img src="motions/leanForward.gif" width="240"> |
-| bowSlight | 목례 | <img src="motions/bowSlight.gif" width="240"> |
-| squatDip | 살짝 스쿼트 | <img src="motions/squatDip.gif" width="240"> |
-| squatDeep | 깊은 스쿼트 | <img src="motions/squatDeep.gif" width="240"> |
-| torsoTwist | 몸통 비틀기 | <img src="motions/torsoTwist.gif" width="240"> |
-| shoulderRoll | 어깨 돌리기 | <img src="motions/shoulderRoll.gif" width="240"> |
-| neckStretch | 목 스트레칭 | <img src="motions/neckStretch.gif" width="240"> |
-| backArch | 허리 젖혀 기지개 | <img src="motions/backArch.gif" width="240"> |
-| wiggle | 옴찔옴찔 | <img src="motions/wiggle.gif" width="240"> |
-
-## 리듬·스텝 (16)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| skip | 폴짝 | <img src="motions/skip.gif" width="240"> |
-| skipJoy | 신나는 폴짝 | <img src="motions/skipJoy.gif" width="240"> |
-| hipSway | 힙 흔들기 | <img src="motions/hipSway.gif" width="240"> |
-| bounce | 통통 바운스 | <img src="motions/bounce.gif" width="240"> |
-| moonBounce | 달 위를 걷듯 느린 큰 바운스 | <img src="motions/moonBounce.gif" width="240"> |
-| strut | 으스대는 걸음 | <img src="motions/strut.gif" width="240"> |
-| shimmy | 어깨 셔플 | <img src="motions/shimmy.gif" width="240"> |
-| grooveNod | 그루브 타기 | <img src="motions/grooveNod.gif" width="240"> |
-| hopSmall | 짧은 홉 | <img src="motions/hopSmall.gif" width="240"> |
-| doubleHop | 두 번 홉 | <img src="motions/doubleHop.gif" width="240"> |
-| danceStep | 댄스 스텝 | <img src="motions/danceStep.gif" width="240"> |
-| waddle | 뒤뚱뒤뚱 | <img src="motions/waddle.gif" width="240"> |
-| springStep | 스프링 스텝 | <img src="motions/springStep.gif" width="240"> |
-| tipToe | 발끝 살금살금 | <img src="motions/tipToe.gif" width="240"> |
-| marchStep | 행진 | <img src="motions/marchStep.gif" width="240"> |
-| slideGlide | 미끄러지듯 여유롭게 | <img src="motions/slideGlide.gif" width="240"> |
-
-## 감정 표현 (14)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| cheer | 환호 | <img src="motions/cheer.gif" width="240"> |
-| celebrate | 자축 세리머니 | <img src="motions/celebrate.gif" width="240"> |
-| facepalm | 아이고… | <img src="motions/facepalm.gif" width="240"> |
-| dejected | 낙담 | <img src="motions/dejected.gif" width="240"> |
-| determined | 각오 다지기 | <img src="motions/determined.gif" width="240"> |
-| nervous | 안절부절 두리번 | <img src="motions/nervous.gif" width="240"> |
-| whistle | 휘파람 스텝 | <img src="motions/whistle.gif" width="240"> |
-| yawn | 하품 | <img src="motions/yawn.gif" width="240"> |
-| laugh | 어깨 들썩 웃음 | <img src="motions/laugh.gif" width="240"> |
-| grumble | 구시렁 | <img src="motions/grumble.gif" width="240"> |
-| psyched | 신남 폭발 | <img src="motions/psyched.gif" width="240"> |
-| zen | 깊은 호흡 | <img src="motions/zen.gif" width="240"> |
-| sneeze | 에취 | <img src="motions/sneeze.gif" width="240"> |
-| hiccup | 딸꾹질 | <img src="motions/hiccup.gif" width="240"> |
-
-## 관찰·잡동사니 (12)
-
-| 모션 | 설명 | 모습 |
-|---|---|---|
-| butterflyWatch | 나비 쫓는 시선 | <img src="motions/butterflyWatch.gif" width="240"> |
-| windCheck | 풀잎 던져 바람 읽기 | <img src="motions/windCheck.gif" width="240"> |
-| distanceScan | 손차양으로 먼 곳 살피기 | <img src="motions/distanceScan.gif" width="240"> |
-| watchAdjust | 손목시계 확인 | <img src="motions/watchAdjust.gif" width="240"> |
-| kneeSlap | 무릎 탁! | <img src="motions/kneeSlap.gif" width="240"> |
-| chinStroke | 턱 쓰다듬기 | <img src="motions/chinStroke.gif" width="240"> |
-| pocketPat | 주머니 톡톡 (공 어디 갔지) | <img src="motions/pocketPat.gif" width="240"> |
-| stumbleCatch | 살짝 비틀 — 아무 일 없었다는 듯 | <img src="motions/stumbleCatch.gif" width="240"> |
-| skyPoint | 하늘 지목 — 저 새 봐라 | <img src="motions/skyPoint.gif" width="240"> |
-| crowdWave | 갤러리 웨이브 | <img src="motions/crowdWave.gif" width="240"> |
-| tada | 짜잔 — 양팔 펼치기 | <img src="motions/tada.gif" width="240"> |
-| bowFinish | 정중한 인사 | <img src="motions/bowFinish.gif" width="240"> |
+| 모션 | 설명 |
+|---|---|
+| whiffSpin | 헛스윙 개그 — 진지한 어드레스, 헛스윙, 아무렇지 않게 잔댄스 |
+| auraFarm | 아우라 파밍 — 클럽 짚고 낮게, 스윕마다 정지 홀드 |
+| siuJump | 도약 세리머니 — 웅크림, 점프, 양팔 뒤로 착지 홀드 |
+| tripleBeat | 퉁퉁퉁 — 클럽 수직 3연타 찍기, 마무리는 어깨에 척 |
+| scubaDance | 스쿠버 — 한 손 코 막고 바운스, 클럽 부채질 |
+| heelGroove | 힐 그루브 — 뒤꿈치 바운스 8박 + 자유팔 루프 |
+| dabPose | 댑 — 스냅으로 고개 파묻고 클럽 팔 사선 홀드 |
+| horseDance | 말춤 — 양손 고삐 바운스 + 올가미 (K-클래식) |
+| coffinMarch | 관짝 행진 — 클럽 어깨에 메고 제자리 바운스 |
+| clubFlip | 클럽 플립 — 던져서 수직 착지, 짜잔 |
+| freezeFrame | 마네킹 — 걷다가 완전 정지 3초, 끝에 두리번 |
+| cheerSeesaw | 응원 시소 — 양손 교대 상하 + 힙 리듬 (삐끼삐끼풍) |
