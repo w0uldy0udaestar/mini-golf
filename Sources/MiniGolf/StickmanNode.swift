@@ -98,6 +98,7 @@ struct Rig {
     var headDy = 12.0 // 어깨→머리 수직 거리
     var clubPhi = 0.2 // 샤프트 절대각 (0 = 수직 아래, + = 타겟 쪽)
     var clubLen = 31.0
+    var butt = 0.0 // 그립 위로 샤프트가 더 올라가는 길이(px) — 암록 퍼터가 리드 전완을 따라 올라가는 부분
 
     /// 원점 이동 보정 — 스틱맨 노드 원점(stickX)이 바뀔 때 화면 위치를 보존하려면 렌더 리그를 반대로 옮긴다
     /// (렌더 리그는 스무딩 상태라 타깃만 바꾸면 원점 변경량만큼 '탁' 튄다 — 2026-09-14 전환 개편)
@@ -145,6 +146,7 @@ struct Rig {
         grip = mix(grip, t.grip, k)
         handTrail = mix(handTrail, t.handTrail, k)
         clubLen = mix(clubLen, t.clubLen, k)
+        butt = mix(butt, t.butt, k)
         let dPhi = (t.clubPhi - clubPhi).remainder(dividingBy: 2 * .pi)
         clubPhi += dPhi * kc
     }
@@ -490,16 +492,17 @@ final class StickmanNode: SKNode {
         trailArmShape.path = trail
         trailArmRim.path = trail
 
-        // 클럽
+        // 클럽 — 암록 퍼터(butt > 0)는 그립 위로 샤프트가 전완을 따라 더 올라간다 (17" 그립이 팔에 밀착)
+        let buttEnd = CGPoint(x: grip.x - sin(r.clubPhi) * r.butt * dir, y: grip.y + cos(r.clubPhi) * r.butt)
         let tip = CGPoint(x: grip.x + sin(r.clubPhi) * r.clubLen * dir, y: grip.y - cos(r.clubPhi) * r.clubLen)
         let shaft = CGMutablePath()
-        shaft.move(to: grip)
+        shaft.move(to: buttEnd)
         shaft.addLine(to: tip)
         shaftShape.path = shaft
         shaftRim.path = shaft
-        // 그립 밴드: 손 쪽 8px만 진하게 — 클럽다움을 만드는 단 하나의 디테일
+        // 그립 밴드: 손 쪽 8px만 진하게 — 클럽다움을 만드는 단 하나의 디테일 (암록은 연장부 전체가 그립)
         let gripBand = CGMutablePath()
-        gripBand.move(to: grip)
+        gripBand.move(to: buttEnd)
         gripBand.addLine(to: CGPoint(
             x: grip.x + sin(r.clubPhi) * 8 * dir, y: grip.y - cos(r.clubPhi) * 8
         ))

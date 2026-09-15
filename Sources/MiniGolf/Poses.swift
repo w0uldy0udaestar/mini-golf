@@ -87,7 +87,7 @@ enum Poses {
 }
 
 /// 스윙 스타일 — 프로 선수 face-on 영상 키포인트 실측 키프레임 (2026-09-15 사용자 제안: 선수별 스윙 선택).
-/// 물리는 동일하고 연출(키프레임·템포)만 다르다. 스타일 간 차이는 판독되도록 실측 편차의 1.3배로 과장.
+/// 물리는 동일하고 연출(키프레임·템포)만 다르다. 스타일 간 차이는 판독되도록 실측 편차의 2.5배로 과장(1.3배는 구분 불가 판정).
 enum SwingStyle: String, CaseIterable {
     case rory, tiger, bryson
 
@@ -102,6 +102,65 @@ enum SwingStyle: String, CaseIterable {
     static let prefKey = "swingStyle"
     static var saved: SwingStyle {
         SwingStyle(rawValue: UserDefaults.standard.string(forKey: prefKey) ?? "") ?? .rory
+    }
+
+    // ── 트레이드마크 연출 (2026-09-15, docs/research-swing-styles.md §트레이드마크) ──
+    // 정면 2D 키포인트로는 안 잡히는 특징이 진짜 구분점이라 키프레임 밖 연출로 넣는다. 물리는 전부 동일.
+
+    /// 타이거: 굿샷 뒤 클럽 트월 (리코일된 팔로스루에서 오른손 엄지로 한 바퀴)
+    var clubTwirl: Bool {
+        self == .tiger
+    }
+
+    /// 타이거: 버디 이상 홀아웃에 어퍼컷 주먹 (이글·홀인원은 두 번)
+    var uppercut: Bool {
+        self == .tiger
+    }
+
+    /// 브라이슨: 팔을 곧게 편 채 스윙·어드레스 (호 대신 직선 — 원근 단축도 곧은 막대로)
+    var straightArms: Bool {
+        self == .bryson
+    }
+
+    /// 브라이슨: 암록 퍼팅 — 긴 퍼터(43")를 리드 전완에 밀착, 손목 없이 어깨로만 흔든다
+    var armLockPutter: Bool {
+        self == .bryson
+    }
+
+    /// 로리: 임팩트 점프 — 지면 반력으로 몸이 뜬다 (양발 이륙, 최대 px). 실측 ~5px는 리그 덤프에서 2~3px로 안 읽혀 8로 과장
+    var impactJump: Double {
+        self == .rory ? 8.0 : 0
+    }
+
+    /// 로리: 피니시 리코일 — 리드 다리 위로 탄력 있게 올라앉으며 잦아드는 반동
+    var finishRecoil: Bool {
+        self == .rory
+    }
+}
+
+/// 퍼터 키프레임 — 표준 펜듈럼(공용) / 브라이슨 암록. 물리는 같고 렌더 길이·그립 위치·스트로크 모양만 다르다
+struct PutterKeyframes {
+    let a, top, imp, fin: Pose
+    let len: Double // 렌더 길이(px) — 표준 34(실 34") · 암록 43(실 43")
+    let butt: Double // 그립 위로 샤프트가 전완을 따라 더 올라가는 길이(px) — 암록의 17" 그립
+
+    static let standard = PutterKeyframes(
+        a: Poses.ptA, top: Poses.ptTop, imp: Poses.ptImp, fin: Poses.ptFin, len: 34, butt: 0
+    )
+
+    /// 암록: 샤프트가 리드 전완과 한 직선(clubA == handA)이고 손목이 꺾이지 않아 어깨 회전만으로 흔든다.
+    /// 손은 힙 높이(전완이 짧아 보이는 만큼 곧은 팔의 원근 단축) — handD는 RigBuilder의 긴 클럽 보정(−12)을 감안한 값.
+    /// 어드레스 헤드는 공 6px 뒤·지면 2px 위로 표준 퍼터 기하와 맞췄다(직립 스탠스라 tilt 0)
+    static let armLock = PutterKeyframes(
+        a: Pose(hipDx: 0, tilt: 0, handA: 11, handD: 34, clubA: 11, heel: 0, headDx: 6),
+        top: Pose(hipDx: 0, tilt: 0, handA: -8, handD: 34, clubA: -8, heel: 0, headDx: 6),
+        imp: Pose(hipDx: 1, tilt: 0, handA: 12, handD: 34, clubA: 12, heel: 0, headDx: 6),
+        fin: Pose(hipDx: 2, tilt: 1, handA: 30, handD: 34, clubA: 30, heel: 0, headDx: 7),
+        len: 43, butt: 10
+    )
+
+    static func table(_ style: SwingStyle) -> PutterKeyframes {
+        style.armLockPutter ? armLock : standard
     }
 }
 
@@ -138,7 +197,15 @@ struct SwingKeyframes {
 
     static let brysonDriver = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -15.9, handA: 15.4, handD: 34, clubA: 12, heel: 0.0, headDx: -0.7),
-        p2: Pose(hipDx: 0.5, tilt: -14.8, handA: -65.8, handD: 34, clubA: -110, heel: 0.0, headDx: -1.5),
+        p2: Pose(
+            hipDx: 0.5,
+            tilt: -14.8,
+            handA: -65.8,
+            handD: 34,
+            clubA: -85,
+            heel: 0.0,
+            headDx: -1.5
+        ), // 손목 힌지 19° — 싱글 플레인 스윕(트레이드마크)
         p4: Pose(hipDx: -0.2, tilt: -9.1, handA: -119.4, handD: 17, clubA: -235, heel: 0.0, headDx: -5.8),
         p7: Pose(hipDx: 0.4, tilt: -16.8, handA: 29.1, handD: 34, clubA: 6, heel: 1.0, headDx: 0.6),
         p8: Pose(hipDx: 1.3, tilt: -21.2, handA: 86.0, handD: 34, clubA: 125, heel: 0.0, headDx: 2.3),
@@ -208,9 +275,11 @@ struct SwingProfile {
     let down: Double // 다운스윙 시간(초) — 풀스윙은 keys.down
     let isPutter: Bool
     let keys: SwingKeyframes // 스타일 × 클럽군 키프레임·템포
+    let putt: PutterKeyframes // 스타일별 퍼터 (표준 펜듈럼 / 암록)
 
     static func profile(for cat: ClubCategory, style: SwingStyle = .rory) -> SwingProfile {
         let k = SwingKeyframes.table(style, cat)
+        let pt = PutterKeyframes.table(style)
         return switch cat {
         // ballFwd −4: 어드레스 tilt −5→−12(어깨 −3.8px)의 보정 (2026-09-15 프로 실측 반영)
         // down = 톱 홀드 + 다운스윙 (Space → 임팩트 총 시간; 발사·rigRate·벽 스탠스 해제가 이 값을 본다)
@@ -220,7 +289,8 @@ struct SwingProfile {
                 finishScale: 1.0,
                 down: k.topHold + k.down,
                 isPutter: false,
-                keys: k
+                keys: k,
+                putt: pt
             )
         case .iron: SwingProfile(
                 topScale: 0.88,
@@ -228,7 +298,8 @@ struct SwingProfile {
                 finishScale: 0.9,
                 down: k.topHold + k.down,
                 isPutter: false,
-                keys: k
+                keys: k,
+                putt: pt
             )
         case .wedge: SwingProfile(
                 topScale: 0.72,
@@ -236,10 +307,11 @@ struct SwingProfile {
                 finishScale: 0.72,
                 down: k.topHold + k.down,
                 isPutter: false,
-                keys: k
+                keys: k,
+                putt: pt
             )
         case .putter: SwingProfile(
-                topScale: 1.0, ballFwd: 18, finishScale: 1.0, down: 0.29, isPutter: true, keys: k
+                topScale: 1.0, ballFwd: 18, finishScale: 1.0, down: 0.29, isPutter: true, keys: k, putt: pt
             ) // PGA 실측 317±35ms
         }
     }
@@ -257,7 +329,7 @@ func smoothstep(_ u: Double) -> Double {
 /// topScale: 카테고리 경계에서 움찔하지 않게 스무딩된 값을 넘길 수 있다 (기본은 프로파일 값)
 func backswingPose(heightPct: Double, profile: SwingProfile, topScale: Double? = nil) -> Pose {
     if profile.isPutter {
-        return Pose.lerp(Poses.ptA, Poses.ptTop, heightPct)
+        return Pose.lerp(profile.putt.a, profile.putt.top, heightPct)
     }
     let k = profile.keys
     let s = 0.22 + 0.78 * heightPct * (topScale ?? profile.topScale)
@@ -267,7 +339,7 @@ func backswingPose(heightPct: Double, profile: SwingProfile, topScale: Double? =
 }
 
 func finishPose(profile: SwingProfile) -> Pose {
-    profile.isPutter ? Poses.ptFin : Pose.lerp(profile.keys.p8, profile.keys.p10, profile.finishScale)
+    profile.isPutter ? profile.putt.fin : Pose.lerp(profile.keys.p8, profile.keys.p10, profile.finishScale)
 }
 
 /// 스윙 애니메이션 타임라인에서 포즈 샘플 (t: 스윙 시작 후 경과 초)
@@ -275,7 +347,7 @@ func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct _: Do
     if t < profile.down { // 다운스윙: 급가속 (퍼터는 펜듈럼 — 최하점=임팩트에서 속도 최대)
         if profile.isPutter {
             let v = t / profile.down
-            return Pose.lerp(fromPose, Poses.ptImp, v * v)
+            return Pose.lerp(fromPose, profile.putt.imp, v * v)
         }
         if t < profile.keys.topHold { // 톱 홀드: 전환 전 멈칫 (스타일 템포)
             return fromPose
@@ -303,7 +375,7 @@ func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct _: Do
     let t2 = t - profile.down
     if profile.isPutter { // 퍼터: 임팩트 → 짧은 팔로만
         let v = min(1, t2 / 0.25)
-        return Pose.lerp(Poses.ptImp, Poses.ptFin, 1 - (1 - v) * (1 - v))
+        return Pose.lerp(profile.putt.imp, profile.putt.fin, 1 - (1 - v) * (1 - v))
     }
     let k = profile.keys
     if t2 < k.follow {

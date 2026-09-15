@@ -37,7 +37,10 @@ enum Skeleton {
     /// projected: 스윙·어드레스 — 힙의 전후 이동(백스윙 −6·피니시 +16)은 3D 회전의 투영이라 다리가 사거리를
     /// 넘어도 힙을 내리지 않고 곧게 뻗게 둔다(구 곡선 다리와 같은 관용). 내리면 톱에서 3px·피니시에서 6px
     /// 주저앉아 "뒤로 쏠린 스윙"으로 읽혔다 (2026-09-15 사용자 판정). 걷기·의식은 힙을 내린다(도립 진자)
-    static func solve(_ r: inout Rig, curvedArms: Bool = false, projected: Bool = false) -> Joints {
+    /// straightArms: 브라이슨 트레이드마크 — 원근 단축 호 대신 어깨→손을 곧은 막대로 (curvedArms일 때만 의미)
+    static func solve(
+        _ r: inout Rig, curvedArms: Bool = false, straightArms: Bool = false, projected: Bool = false
+    ) -> Joints {
         var j = Joints()
 
         // 1. 몸통: 힙 고정, 어깨는 같은 기울기 방향으로 길이만 맞춘다 (머리는 어깨 상대라 따라온다)
@@ -84,10 +87,15 @@ enum Skeleton {
         r.knee2 = j.knee2
 
         // 4. 팔: 어깨→손 2-bone IK, 손은 사거리 안으로 당겨진다 (완전 신전 근처 tanh 소프트닝)
-        if curvedArms { // 원근 단축 호: 제어점 = 중점 + 작은 오프셋 (구 렌더와 동일)
+        if curvedArms { // 원근 단축 호: 제어점 = 중점 + 작은 오프셋 (구 렌더와 동일) · 직선 팔은 오프셋 0 (곧은 막대)
             j.armsCurved = true
-            j.elbowLead = CGPoint(x: (r.shoulder.x + r.grip.x) / 2 + 2, y: (r.shoulder.y + r.grip.y) / 2 + 2)
-            j.elbowTrail = CGPoint(x: (r.shoulder.x + r.handTrail.x) / 2 + 1, y: (r.shoulder.y + r.handTrail.y) / 2 - 2)
+            let bow = straightArms ? 0.0 : 1.0
+            j.elbowLead = CGPoint(
+                x: (r.shoulder.x + r.grip.x) / 2 + 2 * bow, y: (r.shoulder.y + r.grip.y) / 2 + 2 * bow
+            )
+            j.elbowTrail = CGPoint(
+                x: (r.shoulder.x + r.handTrail.x) / 2 + 1 * bow, y: (r.shoulder.y + r.handTrail.y) / 2 - 2 * bow
+            )
             return j
         }
         func arm(_ hand: inout CGPoint) -> (elbow: CGPoint, clamp: Double) {

@@ -110,3 +110,31 @@
 - 2단계(웨지·퍼터 6편)는 미착수. 브라이슨 암록 퍼팅은 퍼터 길이 변경이 필요.
 - **정면 2D 키포인트가 못 잡는 특징이 진짜 구분점이다**: 타이거의 임팩트 후 클럽 트월·주먹 불끈, 브라이슨의 직선 팔·
   직립·긴 톱 홀드, 로리의 리듬. 키프레임 밖 '트레이드마크 연출'(사용자 선택, 다음 단계)로 넣어야 한다.
+
+## 트레이드마크 연출 (2026-09-15, 2단계 — 키프레임 밖)
+
+사용자 선택: 2.5배 과장과 별개로 "정면 2D 키포인트가 못 잡는 특징"을 연출로 넣는다. 물리는 전부 동일하고
+`SwingStyle`의 특성 플래그(`clubTwirl`·`uppercut`·`straightArms`·`armLockPutter`·`impactJump`·`finishRecoil`)로
+GameScene의 피니시 홀드·스코어 반응·스윙 경로·렌더에 분기를 둔다. 관찰 플래그 `--demo-trademark`(풀샷마다 굿샷
+판정 강제 + `RIG[...]` 30Hz 리그 덤프 → 오프라인 플롯).
+
+### 근거 (웹 리서치, 2026-09-15 조회)
+
+| 선수 | 특징 | 출처 | 게임 연출 |
+|---|---|---|---|
+| 타이거 | **클럽 트월**: "리코일된 팔로스루 자세에서 출발해 오른손 엄지로 클럽을 돌린다", 잘 맞은 샷 직후의 바로미터 | [Golf.com — Tiger, JT explain the art of the club-twirl](https://golf.com/news/club-twirl-tiger-woods/) · [Golf Digest — Tiger reveals his secret to the perfect club twirl](https://www.golfdigest.com/story/tiger-woods-reveals-his-secret-to-the-perfect-club-twirl) | 굿샷(미스힛 <0.12 · 파워 ≥45%) 한정. 피니시 도달 +0.1~0.45s 감긴 클럽을 앞으로 풀어 내려 리코일 포즈(handA 32·clubA 28), +0.45~0.9s 그립 축 한 바퀴 |
+| 타이거 | **어퍼컷 주먹** (1997·2008 US Open 등) | 통념 — 별도 출처 없음 | 버디 이상 홀아웃: 트레일 손이 클럽을 놓고 뒤·아래로 코킹(0.15s)한 뒤 앞·위로 0.08s에 꽂히고 몸이 타깃 쪽으로 실린다. 이글 이상은 두 번. 이 동안 리그 추적 5→16 (5는 펀치의 반도 못 따라갔다 — 리그 덤프 실측) |
+| 브라이슨 | **곧은 팔·직립·싱글 플레인**: "어드레스부터 팔을 곧게 편다", "손목 없는 스윕으로 안정된 톱, 평행 한참 못 미침" | [National Club Golfer — Bryson swing analysis](https://www.nationalclubgolfer.com/golf-tips/learn-from-the-pros/what-makes-it-work-bryson-dechambeau-golf-swing-analysis/) · [Golf.com — Bryson lesson 'secret'](https://golf.com/news/bryson-dechambeau-gave-me-a-lesson-and-shared-a-secret-heres-how-it-can-help-you-too/) | 스윙·어드레스 팔을 호 대신 곧은 막대로 렌더(`Skeleton.solve(straightArms:)`), 드라이버 테이크어웨이 손목 힌지 44°→19°(clubA −85) |
+| 브라이슨 | **암록 퍼팅**: 43인치 퍼터, 17인치 그립을 리드 전완에 밀착, 손목 고정 | [PGA Tour — Bryson's putter](https://www.pgatour.com/article/news/equipment-report/2020/10/06/golf-clubs-equipment-a-closer-look-at-bryson-dechambeau-other-key-club-the-putter) · [Golf.com — armlock putter test](https://golf.com/gear/putters/bryson-dechambeau-armlock-sik-putter-test/) | `PutterKeyframes.armLock`: 렌더 길이 34→43, 그립 위로 샤프트 10px 연장(`Rig.butt`), 샤프트=전완 직선(clubA==handA) 어깨 회전만의 스트로크. 물리 불변 |
+| 로리 | **3:1 템포, 완전 균형 피니시**: "체중은 왼발 뒤꿈치, 오른발은 발끝", 지면 반력으로 "리코일" | [Golf Monthly — 6 things from Rory](https://www.golfmonthly.com/tips/6-things-you-can-learn-from-rory-mcilroy-183737) · [Worldwide Golf — Drive it like Rory](https://worldwide.golf/swing-sequence/drive_it_like_rory_mcilroy/) | **임팩트 점프**: 다운스윙 끝~팔로 초입 0.26s 몸 전체가 최대 8px(파워 비례) 떠오른다(양발 이륙 — 실측 ~5px는 리그 덤프에서 2~3px로 안 읽혀 과장). **피니시 리코일**: 도달 후 0.8s 상체가 리드 다리 위로 감쇠 진동(6px·1.4Hz) |
+
+제외: 이전 세션 후보였던 "브라이슨 긴 톱 홀드"는 출처가 뒷받침하지 않는다(안정된 톱이지 멈춤이 아니며 템포는 빠른 편) —
+톱 홀드는 타이거(0.08s)만 유지. 로리의 3:1 템포는 백스윙이 사용자 입력이라 게임에서 표현 불가.
+
+### 한계
+
+- 트월·주먹의 '굿샷' 판정은 결과가 아니라 발사 순간 스트라이크 품질(미스힛·파워)로 한다 — 실제 타이거도 공이 뜨자마자
+  판단하므로 인과는 맞지만, 굿샷이 러프에 떨어져도 트월은 나온다.
+- 암록 손 높이·그립 연장 길이는 실측이 아니라 스틱맨 기하(어깨 66·힙 42)에서 헤드가 공 뒤 6px·지면 2px에 오도록 역산.
+- 탭인 홀아웃은 퍼터 스윙 애니메이션(스타일 상한 0.83s)이 끝나기 전에 일어나 스코어 반응이 0.3s 늦게 시작됐다(모든 스타일) →
+  스윙 브랜치에서도 반응을 얹도록 수정. 검증은 `--demo-trademark` 리그 덤프 → 프레임 시트(스크래치패드 plot_rig.py)로 했다.
