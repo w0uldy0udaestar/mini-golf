@@ -33,14 +33,50 @@ struct Pose {
     }
 }
 
-/// P-System 키프레임 (docs/research-swing-pose.md)
+/// P-System 키프레임 (docs/research-swing-pose.md) — 2026-09-15 PGA 프로 face-on 영상 키포인트 실측으로 몸 파라미터 갱신
+/// (docs/research-swing-keypoints.md: 로리 매킬로이 아이언 스윙, MediaPipe Pose, 슬로모션 1095프레임).
+/// 실측 요지: 톱에서 힙은 타깃 쪽 +2·상체는 거의 중립(구 −6·−18 = "뒤로 흔들림"), 임팩트에 머리는 공 뒤(−3),
+/// 팔로스루에도 척추는 타깃 반대로 기움(구 +18은 타깃 쪽 과다), 피니시 손은 머리 뒤로 감김(196°)·샤프트 수평 뒤(270°).
+/// 어드레스·임팩트의 손·클럽 기하는 공 접촉이 걸려 있어 tilt 변화분(−3.8px)을 ballFwd −4로, 임팩트 힙 +5는 handA −2°로 상쇄.
 enum Poses {
-    static let p1 = Pose(hipDx: 0, tilt: -5, handA: 12, handD: 34, clubA: 12, heel: 0, headDx: 7) // 어드레스
-    static let p2 = Pose(hipDx: -2, tilt: -9, handA: -40, handD: 34, clubA: -85, heel: 0, headDx: 7) // 테이크어웨이
-    static let p4 = Pose(hipDx: -6, tilt: -18, handA: -145, handD: 28, clubA: -175, heel: 0, headDx: 6) // 톱
-    static let p7 = Pose(hipDx: 6, tilt: -12, handA: 14, handD: 34, clubA: 6, heel: 5, headDx: 7) // 임팩트
-    static let p8 = Pose(hipDx: 9, tilt: 18, handA: 85, handD: 34, clubA: 100, heel: 9, headDx: 9) // 팔로스루
-    static let p10 = Pose(hipDx: 16, tilt: 6, handA: 148, handD: 22, clubA: 300, heel: 14, headDx: 4) // 피니시
+    static let p1 = Pose(hipDx: 0, tilt: -12, handA: 12, handD: 34, clubA: 12, heel: 0, headDx: 6) // 어드레스
+    static let p2 = Pose(
+        hipDx: 0,
+        tilt: -12,
+        handA: -55,
+        handD: 34,
+        clubA: -110,
+        heel: 0,
+        headDx: 6
+    ) // 테이크어웨이 (샤프트 지면 평행 뒤)
+    static let p4 = Pose(
+        hipDx: 2,
+        tilt: -16,
+        handA: -142,
+        handD: 27,
+        clubA: -268,
+        heel: 0,
+        headDx: 5
+    ) // 톱 (샤프트 지면 평행, 타깃 향함)
+    static let p7 = Pose(hipDx: 11, tilt: -19, handA: 12, handD: 34, clubA: 6, heel: 2, headDx: -2) // 임팩트 (머리는 공 뒤)
+    static let p8 = Pose(
+        hipDx: 14,
+        tilt: -20,
+        handA: 87,
+        handD: 31,
+        clubA: 125,
+        heel: 5,
+        headDx: 0
+    ) // 팔로스루 (척추는 여전히 뒤로)
+    static let p10 = Pose(
+        hipDx: 14,
+        tilt: -14,
+        handA: 196,
+        handD: 25,
+        clubA: 270,
+        heel: 10,
+        headDx: 2
+    ) // 피니시 (손 머리 뒤, 샤프트 수평 뒤)
     // 퍼터 전용: 펜듈럼 스트로크
     static let ptA = Pose(hipDx: 0, tilt: -3, handA: 10, handD: 30, clubA: 8, heel: 0, headDx: 7)
     static let ptTop = Pose(hipDx: 0, tilt: -4, handA: -22, handD: 30, clubA: -30, heel: 0, headDx: 7)
@@ -60,9 +96,10 @@ struct SwingProfile {
 
     static func profile(for cat: ClubCategory) -> SwingProfile {
         switch cat {
-        case .wood: SwingProfile(topScale: 1.0, ballFwd: 24, finishScale: 1.0, down: 0.17, isPutter: false)
-        case .iron: SwingProfile(topScale: 0.88, ballFwd: 20, finishScale: 0.9, down: 0.17, isPutter: false)
-        case .wedge: SwingProfile(topScale: 0.72, ballFwd: 17, finishScale: 0.72, down: 0.17, isPutter: false)
+        // ballFwd −4: 어드레스 tilt −5→−12(어깨 −3.8px)의 보정 · down 0.24: 프로 실측 다운스윙 0.27s(30fps ±0.03)
+        case .wood: SwingProfile(topScale: 1.0, ballFwd: 20, finishScale: 1.0, down: 0.24, isPutter: false)
+        case .iron: SwingProfile(topScale: 0.88, ballFwd: 16, finishScale: 0.9, down: 0.24, isPutter: false)
+        case .wedge: SwingProfile(topScale: 0.72, ballFwd: 13, finishScale: 0.72, down: 0.24, isPutter: false)
         case .putter: SwingProfile(
                 topScale: 1.0,
                 ballFwd: 18,
@@ -75,9 +112,9 @@ struct SwingProfile {
 }
 
 enum SwingTiming {
-    static let follow = 0.14
-    static let finish = 0.22
-    static let total = 0.58 // 퍼터(0.29+0.25)·풀스윙(0.17+0.14+0.22) 모두 커버
+    static let follow = 0.12 // 프로 실측: 임팩트→손 타깃 쪽 최대 뻗음 0.10s
+    static let finish = 0.30 // 프로 실측: 뻗음→피니시 0.27s
+    static let total = 0.68 // 퍼터(0.29+0.25)·풀스윙(0.24+0.12+0.30) 모두 커버
 }
 
 func smoothstep(_ u: Double) -> Double {
