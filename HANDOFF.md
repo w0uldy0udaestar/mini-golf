@@ -1,12 +1,11 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-14 — 스틱맨 리그 개편 1·2·3 구현 완료, 사용자 플레이 판정 대기)
+## 현재 상태 (2026-09-15 — 선수 트레이드마크 연출 구현 완료, 리뷰 반영 후 main 머지·플레이 판정 대기)
 
-사용자 피드백 5건(2026-09-14: ①전환 탁탁 ②걷기 느리다 가속 ③고무팔 ④모션 100종 획일 ⑤서프라이즈
-밋밋) 중 **①②③을 `feature/stickman-joints`(origin 푸시됨, main 미머지)에 구현**했다.
-리서치 게이트를 먼저 통과했고(docs/research-stickman-rig.md — 사용자 지시 "기존 구현체·에셋 먼저 찾아봐"),
-각 단계는 build·lint·test(52) + `--demo` 프레임 캡처·계측 로그로 검증했다. 이해도 확인 페이지(아티팩트):
-https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
+스틱맨 리그 개편(①②③④)·프로 스윙 스타일 3종(1.3배→2.5배 과장)에 이어 **선수 트레이드마크 연출**을
+`feature/swing-trademarks`에 구현했다(4470f6b). 정면 2D 키포인트가 못 잡는 특징을 키프레임 밖 연출로 넣은 것이고
+물리는 동일하다. 각 단계는 build·lint·test(52) + `--demo-trademark` 리그 덤프 → 프레임 시트로 검증했다.
+이해도 확인 페이지(아티팩트): https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 
 - [x] ③ 관절 뼈대 — `GolfCore/TwoBoneIK`(Juckett 해석해+pole+tanh 소프트닝) + `MiniGolf/Skeleton`
       (점 리그 유지, 렌더 직전 뼈 길이 강제: 몸통 25·팔 17.5+17.5·다리 23.25+23.25). 의식 2종 재작성
@@ -25,14 +24,28 @@ https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 - [x] **선수별 스윙 스타일 3종 1단계**(f96f675): 로리·타이거·브라이슨 × 드라이버/아이언 6편 실측 → SwingKeyframes 6세트,
       ⛳️ 메뉴 "스윙 스타일"(UserDefaults `swingStyle`), --style 플래그. 편차 1.3배 과장. 문서 docs/research-swing-styles.md
 - [x] 사용자 판정 "3개 차이를 모르겠다" → 과장 2.5배 + 템포 과장 + 타이거 톱 홀드(SwingKeyframes.topHold) 적용
-- [ ] **사용자 플레이 판정 대기** (`dist/MiniGolf.app` = main 최신). 아직 약하면 EX를 더 올리거나(3.0) 아래 트레이드마크로
-- [ ] **선수 트레이드마크 연출** (사용자 선택, 미착수): 타이거 — 임팩트 후 클럽 트월·주먹 불끈(굿샷 때), 브라이슨 — 직선 팔·
-      직립 어드레스·긴 톱 홀드·암록 퍼팅(퍼터 길이), 로리 — 피니시 회전·리듬. 키프레임 밖 연출이라 GameScene의
-      applyScoreReaction/피니시 홀드에 스타일 분기를 두는 방식 권장
+- [x] **선수 트레이드마크 연출** (`feature/swing-trademarks` 4470f6b, 리서치 docs/research-swing-styles.md §트레이드마크):
+      타이거 — 굿샷(미스힛<0.12·파워≥45%, `lastShotGood`) 뒤 리코일→그립 축 트월(`trademarkTwirl`, clubRate 40)·
+      버디 이상 어퍼컷(코킹→펀치, 이글 이상 두 번, `uppercutActive`면 rigRate 16) · 브라이슨 — 팔 직선 렌더
+      (`Skeleton.solve(straightArms:)`)·드라이버 테이크어웨이 힌지 19°·암록 퍼터(`PutterKeyframes.armLock` 길이 43·
+      `Rig.butt` 10·샤프트=전완) · 로리 — 임팩트 점프 8px(`applyImpactJump`)·피니시 리코일(`applyFinishRecoil`).
+      부수 수정: 탭인 홀아웃 반응이 퍼터 스윙 애니 상한(0.83s) 때문에 0.3s 늦던 문제(전 스타일). "브라이슨 긴 톱 홀드"는
+      출처가 없어 제외
+- [ ] Code Reviewer 리뷰 반영 → `git merge --no-ff feature/swing-trademarks` → main push → `make app`(dist 갱신, 사용자 앱 재실행 필요)
+- [ ] **사용자 플레이 판정 대기** — 2.5배 과장(아직 안 해봄)과 트레이드마크를 한 번에. 약하면: 점프 8→10, 트월 트리거 완화
+      (heightPct 0.45→0.3), 암록 butt 10→14. ⛳️ 메뉴 → 스윙 스타일로 전환하며 비교, 타이거 어퍼컷은 버디 이상 홀아웃에서만
 - [ ] 2단계: 웨지·퍼터 face-on 6편 (브라이슨 암록 퍼팅은 퍼터 렌더 길이 변경 필요) · 버전 범프 0.5.0·릴리스·GIF 재캡처
 - [ ] 후속 후보: 어드레스·임팩트 샤프트 각 자동 검출(현재 미검출, 기존 기하 유지) · 선수 추가 시 gen_table.py 평균 재계산 주의
 - [ ] ⑤ 서프라이즈 — 사용자 선택: 데스크탑 연동(권장)·물리·규칙·스틱맨/생물 전부. 아이디어 15개는
       아티팩트 5절. 원칙: 결과 종류 다양화 · 예고→사건→반응 3박자 · 희귀 등급
+
+### 트레이드마크 관찰 도구 (2026-09-15)
+
+`--demo-trademark [--style tiger|rory|bryson] [--demo-pickup]` — 풀샷마다 굿샷 판정(트월 강제) + `RIG[t] mode 10점 head phi len
+butt curved dir` 30Hz 덤프 + `TRADEMARK twirl/jump`·`UPPER`(어퍼컷 위상) 로그. 덤프는 스크래치패드 `plot_rig.py`(matplotlib,
+`uv venv` + `uv pip install matplotlib`)로 프레임 시트를 그린다: `--from-mark twirl|jump|HOLED` 또는 `--from-mode swinging --nth N`.
+실행은 사용자 앱을 죽이지 않도록 `--screen 1`로 띄우고 **pid로만** 종료(run_demos.sh 패턴). 퍼터 관찰은 `--demo-pickup`
+(컵 앞 시작 → 탭인 → 홀인원 판정 → rejoice 반응).
 
 ### 재개 지점 (스윙 스타일 파이프라인)
 
