@@ -13,11 +13,12 @@ https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 - [x] ② 걷기 속도 — `GolfCore/WalkProfile` 램프 0.9s·등속·램프 1.1s. 실측 정점/평균 1.04~1.09(구 1.5)
 - [x] ① 전환 — 원점 통일(걷기 출발·도착 = 몸 자리) + StopPlan(마지막 두 걸음 발자국 계획) +
       setFacing(방향 반전 미러 보정). 실측 출발 힙 1.3px/frame·발 0.5(구 40px), 도착 힙 0.4·발 0.0(구 25px)
-- [ ] **사용자 플레이 판정** — `dist/MiniGolf.app`(make app, v0.4.1 번들 도메인 공유) 또는
-      `swift build && .build/debug/MiniGolf`. 실행 중인 v0.4.1은 ⛳️ 메뉴로 먼저 종료
-- [ ] Code Reviewer 리뷰 결과 반영 → main 머지 → 버전 범프(0.5.0)·CHANGELOG·릴리스
-- [ ] ④ 모션 재설계 — 사용자 선택: **줄여서 확 다르게 30~40종**(관절 각도 기반, 실루엣·리듬 차별화).
-      데이터 후보: Quaternius UAL(CC0)·Nature 보행 데이터셋(CC BY)·Apple Vision 포즈 추출
+- [x] ①②③ Code Reviewer 반영 후 **main 머지 완료**(b25a10e) + 핫픽스 58d72da(발 교환 배타성 크래시)
+- [x] ④ 모션 37종 재설계 — `feature/motion-redesign` (WalkFlavors 전면 교체: 극좌표 손 목표·샤프트 각·
+      jump/heelLift·gait 보폭/정지 수정자·가중치 랜덤). `--demo-motions` 37종 전부 시연·시트 확인, 크래시 0.
+      카탈로그 docs/motions.md(GIF 재캡처 예정), README·CHANGELOG(v0.5.0 미배포) 갱신. 리뷰 위임 중
+- [ ] ④ 리뷰 반영 → main 머지 → **사용자 플레이 판정**(`dist/MiniGolf.app` = 최신 브랜치 빌드) →
+      버전 범프 0.5.0·릴리스·GIF 카탈로그 재캡처
 - [ ] ⑤ 서프라이즈 — 사용자 선택: 데스크탑 연동(권장)·물리·규칙·스틱맨/생물 전부. 아이디어 15개는
       아티팩트 5절. 원칙: 결과 종류 다양화 · 예고→사건→반응 3박자 · 희귀 등급
 
@@ -72,6 +73,14 @@ https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--demo-pickup` `--demo-trip` `--demo-idle`
 `--screen N` `--seed N` `--hat` `--demo-records`
+
+### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
+
+브랜치에 미커밋 작업이 있는 상태에서 `git stash` → main 체크아웃 → `stash pop` → 파일 단위 커밋을 하면
+**브랜치 변경이 main 커밋에 섞인다**(GameScene에 재설계 hunk가 들어가 main 빌드가 깨졌고, 되돌리기 후
+브랜치 머지가 그 hunk를 다시 지웠다). 핫픽스는 ① 브랜치 작업을 먼저 커밋(WIP 가능) ② main에서 해당 hunk만
+적용 ③ **커밋 전 `git diff --cached`로 hunk 확인** ④ 가능하면 `git worktree`로 main을 따로 체크아웃.
+검증 명령은 파이프로 exit 코드를 가리지 말 것(`git revert -q`는 잘못된 옵션이라 실패했는데 파이프에 가려졌다).
 
 ## 주의사항
 
