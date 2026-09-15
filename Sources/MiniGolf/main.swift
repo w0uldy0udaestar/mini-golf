@@ -93,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
         scene.demoSurpriseForce = args.contains("--demo-surprise") // 서프라이즈 이벤트 순환 (관찰용)
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
+        if let i = args.firstIndex(of: "--style"), i + 1 < args.count, let st = SwingStyle(rawValue: args[i + 1]) {
+            scene.swingStyle = st // 스윙 스타일 지정 (관찰·캡처용, 저장 안 함)
+        }
         if let i = args.firstIndex(of: "--hat"), i + 1 < args.count, let h = Hat(rawValue: args[i + 1]) {
             scene.applyHat(h) // 모자 시각 검증용 (저장 안 함)
         }
@@ -197,6 +200,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hatItem = statusMenu.addItem(withTitle: "모자", action: nil, keyEquivalent: "")
         hatMenu = NSMenu()
         hatItem.submenu = hatMenu // 항목은 열 때마다 재구성 (해금 반영)
+        let styleItem = statusMenu.addItem(withTitle: "스윙 스타일", action: nil, keyEquivalent: "")
+        styleMenu = NSMenu()
+        styleItem.submenu = styleMenu
+        rebuildStyleMenu()
         statusMenu.addItem(withTitle: "기록", action: #selector(showRecords), keyEquivalent: "").target = self
         let monitorItem = statusMenu.addItem(withTitle: "모니터", action: nil, keyEquivalent: "")
         monitorMenu = NSMenu()
@@ -221,6 +228,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleSound() {
         SoundKit.shared.enabled.toggle()
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
+    }
+
+    /// 스윙 스타일 서브메뉴 — 프로 선수 실측 키프레임 (2026-09-15)
+    private var styleMenu = NSMenu()
+    private func rebuildStyleMenu() {
+        styleMenu.removeAllItems()
+        for style in SwingStyle.allCases {
+            let item = styleMenu.addItem(withTitle: style.title, action: #selector(selectStyle(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = style.rawValue
+            item.state = scene.swingStyle == style ? .on : .off
+        }
+    }
+
+    @objc private func selectStyle(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let style = SwingStyle(rawValue: raw) else { return }
+        scene.setSwingStyle(style)
+        rebuildStyleMenu()
     }
 
     /// 모자 서브메뉴 — 해금된 것만 선택 가능, 잠긴 것은 필요 배지 수 안내
