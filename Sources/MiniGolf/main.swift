@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.scaleMode = .resizeFill
         // --demo: 자동 스윙 반복 · --demo-wall: 벽 스탠스 시나리오 강제 (모션 관찰·디버그 전용, 사운드 끔)
         let args = ProcessInfo.processInfo.arguments
-        if args.contains("--demo") || args.contains("--demo-wall") {
+        if args.contains(where: { $0.hasPrefix("--demo") }) { // 하위 플래그(--demo-pickup 등)만 줘도 관찰 모드
             scene.demoMode = true
             scene.demoWallForce = args.contains("--demo-wall")
             SoundKit.shared.muted = true // 세션 한정 — 사용자 사운드 설정 보존

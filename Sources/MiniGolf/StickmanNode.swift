@@ -97,6 +97,34 @@ struct Rig {
     var clubPhi = 0.2 // 샤프트 절대각 (0 = 수직 아래, + = 타겟 쪽)
     var clubLen = 31.0
 
+    /// 원점 이동 보정 — 스틱맨 노드 원점(stickX)이 바뀔 때 화면 위치를 보존하려면 렌더 리그를 반대로 옮긴다
+    /// (렌더 리그는 스무딩 상태라 타깃만 바꾸면 원점 변경량만큼 '탁' 튄다 — 2026-09-14 전환 개편)
+    mutating func shiftX(_ dx: Double) {
+        hip.x += dx
+        shoulder.x += dx
+        foot1.x += dx
+        foot2.x += dx
+        knee1.x += dx
+        knee2.x += dx
+        grip.x += dx
+        handTrail.x += dx
+    }
+
+    /// 방향 반전 보정 — facing이 뒤집힐 때 화면 위치를 보존하는 로컬 미러 (x·headDx·clubPhi 부호 반전).
+    /// 두 발의 정체는 호출측에서 교환한다 (다리는 같은 획이라 교환이 보이지 않고, 어드레스 스탠스에 5px로 맞는다)
+    mutating func mirrorX() {
+        hip.x = -hip.x
+        shoulder.x = -shoulder.x
+        foot1.x = -foot1.x
+        foot2.x = -foot2.x
+        knee1.x = -knee1.x
+        knee2.x = -knee2.x
+        grip.x = -grip.x
+        handTrail.x = -handTrail.x
+        headDx = -headDx
+        clubPhi = -clubPhi
+    }
+
     /// 지수 감쇠 추적 — clubPhi는 최단 각도 경로로 (트월 한 바퀴 후 되감기 방지)
     /// footRate: 걷기 중 발·무릎만 고속 추적 — 접지점이 스무딩에 밀리면 미끄러져 보인다
     /// clubRate: 팔로스루에서 클럽만 느리게 — 몸이 멈춘 뒤 클럽이 늦게 멈추는 오버랩
@@ -361,7 +389,12 @@ final class StickmanNode: SKNode {
         arc.run(.sequence([.fadeOut(withDuration: 0.13), .removeFromParent()]))
     }
 
-    func render(rig r: Rig, club: Club, prevClub: Club, headMorph: Double, visualLoft: Double, dir: Double) {
+    /// joints: Skeleton.solve가 뼈 길이를 고정해 푼 무릎·팔꿈치 — 다리·팔은 관절에서 꺾인 선으로 그린다
+    /// (구 무릎은 곡선 제어점이라 접히지 않았다 — 2026-09-14 사용자 요청 3번 "자연스러운 관절")
+    func render(
+        rig r: Rig, joints: Skeleton.Joints, club: Club, prevClub: Club,
+        headMorph: Double, visualLoft: Double, dir: Double
+    ) {
         func m(_ p: CGPoint) -> CGPoint {
             CGPoint(x: p.x * dir, y: p.y)
         } // facing → 화면 미러
@@ -372,8 +405,9 @@ final class StickmanNode: SKNode {
         headRim.position = head
 
         let f1 = m(r.foot1), f2 = m(r.foot2)
-        let k1 = m(r.knee1), k2 = m(r.knee2)
+        let k1 = m(joints.knee1), k2 = m(joints.knee2)
         let grip = m(r.grip)
+        let eLead = m(joints.elbowLead)
 
         let body = CGMutablePath()
         // 척추 (살짝 굽음)
@@ -382,28 +416,27 @@ final class StickmanNode: SKNode {
             to: hip,
             control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 2.5, y: (shoulder.y + hip.y) / 2)
         )
-        // 다리 둘 (무릎 제어점 포함)
+        // 다리 둘 — 힙→무릎→발 (round join이 관절)
         body.move(to: hip)
-        body.addQuadCurve(to: f1, control: k1)
+        body.addLine(to: k1)
+        body.addLine(to: f1)
         body.move(to: hip)
-        body.addQuadCurve(to: f2, control: k2)
-        // 리드 암
+        body.addLine(to: k2)
+        body.addLine(to: f2)
+        // 리드 암 — 어깨→팔꿈치→그립
         body.move(to: shoulder)
-        body.addQuadCurve(
-            to: grip,
-            control: CGPoint(x: (shoulder.x + grip.x) / 2 + dir * 2, y: (shoulder.y + grip.y) / 2 + 2)
-        )
+        body.addLine(to: eLead)
+        body.addLine(to: grip)
         bodyShape.path = body
         bodyRim.path = body
 
-        // 트레일 암 — 같은 어깨 관절에서 시작 (옅은 톤과 팔꿈치 굽음으로만 구분)
+        // 트레일 암 — 같은 어깨 관절에서 시작 (옅은 톤으로만 구분)
         let hTrail = m(r.handTrail)
+        let eTrail = m(joints.elbowTrail)
         let trail = CGMutablePath()
         trail.move(to: shoulder)
-        trail.addQuadCurve(
-            to: hTrail,
-            control: CGPoint(x: (shoulder.x + hTrail.x) / 2 + dir * 1.0, y: (shoulder.y + hTrail.y) / 2 - 2)
-        )
+        trail.addLine(to: eTrail)
+        trail.addLine(to: hTrail)
         trailArmShape.path = trail
         trailArmRim.path = trail
 
