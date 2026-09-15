@@ -42,7 +42,9 @@ final class GameScene: SKScene {
     var gustWind: Double? // 돌풍 중 바람 덮어쓰기 (m/s) — Ballistics.step에 전달
     var gustUntil: TimeInterval = 0
     var napping = false // 낮잠 중 — 키 입력은 깨우기로 소비
-    var napAt = Double.infinity // 조준 방치 → 낮잠 발동 시각 (aimTime)
+    var napIdle = Double.infinity // 마지막 입력 뒤 이만큼 방치하면 낮잠 (초, 조준당 1회)
+    var lastInputAim = 0.0 // 조준 중 마지막 키 입력 시각 (aimTime)
+    var demoRestartIn: Double? // --demo-restart-in T: 서프라이즈 시작 T초 뒤 새 라운드 (인터럽트 정리 관찰)
     var napStart = 0.0
     var napNode: SKNode?
     var catState: CatState?
@@ -152,7 +154,7 @@ final class GameScene: SKScene {
     var reactionKind = ReactionKind.none
     var reactionAt: TimeInterval = 0
     /// 이번 샷의 스트라이크 품질 — 타이거 트월 트리거. 결과(낙하 지점)가 아니라 발사 순간의 '느낌'(미스힛·파워)으로 판단
-    private var lastShotGood = false
+    var lastShotGood = false
     private var rigDumpLast: TimeInterval = 0
     private var jumpLogged = false // 계측: 임팩트 점프 로그 스윙당 1회
     private var twirlLogged = false // 계측: 트월 로그 스윙당 1회
@@ -346,6 +348,7 @@ final class GameScene: SKScene {
     }
 
     private func startHole() {
+        cancelSurprises() // R 새 라운드·홀 전환 중 진행 중이던 서프라이즈 정리 (리뷰 M2)
         strokes = 0
         // 티샷 기본 클럽: 파4·5 드라이버, 파3 7번 아이언 (관례 — 2026-08-15 사용자 요청. ←→ 변경 자유)
         let teeClub = hole.par == 3 ? "7I" : "DR"
@@ -412,8 +415,9 @@ final class GameScene: SKScene {
         napping = false
         napNode?.removeFromParent()
         napNode = nil
-        napAt = demoSurpriseKind == .nap || demoSurpriseForce
-            ? 0.8 : rollSurprise(hook: .aimIdle) == .nap ? Double.random(in: 12 ... 20) : .infinity
+        lastInputAim = 0
+        napIdle = demoSurpriseKind == .nap || demoSurpriseForce ? 0.8 : Double
+            .random(in: 12 ... 20) // 롤은 발동 시점에 (tickNap)
         idleKind = 0
         idleNextAt = Double.random(in: 5 ... 9)
         walkAnim = nil
@@ -1661,6 +1665,7 @@ final class GameScene: SKScene {
             return
         }
         guard mode == .aim, !isGamePaused else { return }
+        lastInputAim = aimTime // 방치 판정 기준 (리뷰 m1: 조준 경과가 아니라 입력 없는 시간)
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
         // → = 드라이버(긴 클럽) 쪽, ← = 퍼터 쪽 (2026-08-15 사용자 요청 — 오른쪽 = 멀리)
@@ -1673,6 +1678,9 @@ final class GameScene: SKScene {
 
     override func keyUp(with event: NSEvent) {
         heldKeys.remove(event.keyCode)
+        if mode == .aim {
+            lastInputAim = aimTime
+        }
     }
 
     /// ── 메인 루프 ──
@@ -1981,9 +1989,7 @@ final class GameScene: SKScene {
         renderLoft += (club.loft - renderLoft) * clubK
         if mode == .aim {
             aimTime += dt
-            if !napping, aimTime >= napAt { // 낮잠 (조준 방치 훅)
-                startNap()
-            }
+            tickNap() // 낮잠 (조준 방치 훅)
         }
         updateSurprises(dt: dt, currentTime: currentTime)
         // 벽 근접도 (0~1) — 조준·스윙 중에만 켜지고, 스무딩으로 자세가 툭 바뀌지 않는다

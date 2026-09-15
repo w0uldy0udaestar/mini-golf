@@ -131,6 +131,8 @@ extension GameScene {
             return strokes >= 1 && (remain > preShot.remain - 3 || hole.surface(at: ball.x) == .bunker)
         case .cursorCat: // 커서가 이 화면에 있어야 쫓을 게 있다
             return mouseInScene() != nil
+        case .frogRescue: // 마지막 타에 빠진 공까지 구해 주진 않는다 (onWater는 즉시 기권)
+            return strokes + 1 < Phys.maxStrokes
         default:
             return true
         }
@@ -143,6 +145,13 @@ extension GameScene {
         if demoMode {
             print("SURPRISE \(kind.rawValue) @\(Int(ball.x)) tier \(kind.tier)")
             fflush(stdout)
+            if let t = demoRestartIn { // 인터럽트 정리 관찰: T초 뒤 R과 같은 경로
+                run(.sequence([.wait(forDuration: t), .run { [weak self] in
+                    print("DEMO restart (newRound) during \(kind.rawValue)")
+                    fflush(stdout)
+                    self?.newRound()
+                }]))
+            }
         }
         switch kind {
         case .birdSteal: playBirdSteal()
@@ -160,6 +169,31 @@ extension GameScene {
         startWalk()
     }
 
+    /// 홀 시작(R 새 라운드 포함)에서 진행 중인 서프라이즈를 전부 걷어낸다 — 노드를 지우면 대기 중인 .run 클로저도 함께 사라진다.
+    /// 안 하면 새가 문 공의 드롭·멀리건의 타수 복원이 새 홀에서 실행돼 상태를 오염시켰다 (리뷰 M2)
+    func cancelSurprises() {
+        enumerateChildNodes(withName: Self.surpriseNodeName) { node, _ in node.removeFromParent() }
+        catState?.node.removeFromParent()
+        catState = nil
+        gustWind = nil
+        napping = false
+        napIdle = .infinity
+        napNode?.removeFromParent()
+        napNode = nil
+    }
+
+    static let surpriseNodeName = "surprise"
+
+    /// 조준 중 매 프레임 — 마지막 입력 뒤 napIdle초 방치하면 굴려서 발동 (카운트는 실제 발동 때만 소모, 리뷰 M1)
+    func tickNap() {
+        guard mode == .aim, !napping, aimTime - lastInputAim >= napIdle else { return }
+        if rollSurprise(hook: .aimIdle) == .nap {
+            startNap()
+        } else {
+            napIdle = .infinity // 이번 조준은 안 잔다
+        }
+    }
+
     /// 매 프레임 — 돌풍 만료·고양이 추적·낮잠 자동 기상(데모)
     func updateSurprises(dt: Double, currentTime: TimeInterval) {
         if gustWind != nil, currentTime >= gustUntil {
@@ -168,7 +202,7 @@ extension GameScene {
         if let c = catState {
             updateCat(c, dt: dt, currentTime: currentTime)
         }
-        if napping, demoMode, aimTime >= napAt + 2.5 {
+        if napping, demoMode, aimTime - napStart >= 2.5 {
             wakeUp() // 관찰 모드는 키가 없으니 스스로 깬다
         }
     }
@@ -185,6 +219,7 @@ extension GameScene {
     /// 예고 = 1초 전 그림자가 공 위를 스치고 지저귐 · 반응 = 훠이훠이(낚아채는 순간 화들짝)
     private func playBirdSteal() {
         let bird = makeBird()
+        bird.name = Self.surpriseNodeName
         let ballPos = CGPoint(x: px(ball.x), y: groundY(ball.x) + 5.5)
         // 드롭 지점: 홀 방향 ±35m 랜덤 — 도움일 수도, 배신일 수도
         let delta = Double.random(in: -35 ... 35)
@@ -265,6 +300,7 @@ extension GameScene {
     /// 두더지: 공을 1~3m 톡 — 사소한 참견. 예고 = 땅이 두 번 울렁이고 흙이 튄다 · 반응 = 화들짝
     private func playMoleNudge() {
         let mole = makeMole()
+        mole.name = Self.surpriseNodeName
         let side: Double = Bool.random() ? 1 : -1
         let moleX = ball.x - side * 1.2
         let groundPt = CGPoint(x: px(moleX), y: groundY(moleX))
@@ -277,7 +313,7 @@ extension GameScene {
         ])
         popUp.timingMode = .easeOut
         let nudgeDist = side * Double.random(in: 1.2 ... 3.0)
-        let newX = min(max(ball.x + nudgeDist, 6), hole.worldW - 6)
+        let newX = outOfWater(min(max(ball.x + nudgeDist, 6), hole.worldW - 6))
         let sink = SKAction.group([
             SKAction.move(to: CGPoint(x: groundPt.x, y: groundPt.y - 14), duration: 0.25),
             SKAction.scale(to: 0.1, duration: 0.25),
@@ -319,7 +355,11 @@ extension GameScene {
     /// 공이 물에 빠졌는데 개구리가 물고 나온다 — 벌타 면제. 예고 = 물결 두 번 · 사건 = 세 번 뛰어 둑에 놓기 · 반응 = 주먹
     private func playFrogRescue() {
         endShotTrail()
-        roundHadWater = true // 물에 들어간 건 사실 — 무입수 배지는 안 준다
+        roundHadWater = true // 물에 들어간 건 사실 — 무입수 배지는 안 주고 통계도 센다 (벌타만 면제)
+        if !demoMode {
+            Records.shared.waterBalls += 1
+            Records.shared.save()
+        }
         SoundKit.shared.splash()
         let splashPt = CGPoint(x: px(ball.x), y: groundY(ball.x))
         FX.ripple(on: self, at: splashPt)
@@ -327,6 +367,7 @@ extension GameScene {
         let bankX = dir > 0 ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
         let bankPt = CGPoint(x: px(bankX), y: groundY(bankX))
         let frog = makeFrog()
+        frog.name = Self.surpriseNodeName
         frog.position = CGPoint(x: splashPt.x, y: splashPt.y - 12)
         frog.xScale = bankPt.x < splashPt.x ? -1 : 1
         frog.alpha = 0
@@ -368,7 +409,10 @@ extension GameScene {
         }
         frog.run(.sequence([
             .wait(forDuration: 0.5),
-            .run { [weak self] in FX.ripple(on: self!, at: splashPt) },
+            .run { [weak self] in
+                guard let self else { return }
+                FX.ripple(on: self, at: splashPt)
+            },
             .wait(forDuration: 0.5),
             .run { [weak self] in
                 guard let self else { return }
@@ -415,7 +459,9 @@ extension GameScene {
         gustUntil = lastTime + 1.3
         SoundKit.shared.gust(dur: 1.3)
         toast("돌풍!", sub: sign > 0 ? "→ \(Int(strength))m/s" : "← \(Int(strength))m/s")
-        react(.startled)
+        if !(swingStyle.clubTwirl && lastShotGood) { // 타이거 트월과 리그가 겹치면 트월을 우선 (리뷰 m5)
+            react(.startled)
+        }
         // 깃발이 홱 — 깃대 흔들림
         let jolt = SKAction.sequence([
             .rotate(byAngle: -0.35 * sign, duration: 0.12),
@@ -452,6 +498,7 @@ extension GameScene {
     /// 카드가 팔랑 내려오면 직전 샷을 공짜로 다시 — 공은 원래 자리로, 타수는 하나 돌려받는다
     private func playMulligan() {
         let card = makeCard()
+        card.name = Self.surpriseNodeName
         let sx = px(stickX)
         card.position = CGPoint(x: sx - dir * 70, y: size.height * 0.92)
         card.alpha = 0
@@ -506,6 +553,7 @@ extension GameScene {
         napping = true
         napStart = aimTime
         let z = SKNode()
+        z.name = Self.surpriseNodeName
         z.zPosition = 8
         for i in 0 ..< 3 {
             let label = SKLabelNode(fontNamed: HUDFont.light)
@@ -542,6 +590,7 @@ extension GameScene {
     func wakeUp() {
         guard napping else { return }
         napping = false
+        napIdle = .infinity // 조준당 한 번 — 기상 직후 같은 프레임에 다시 잠들던 소프트락 (리뷰 C1)
         napNode?.removeFromParent()
         napNode = nil
         react(.startled)
@@ -572,6 +621,7 @@ extension GameScene {
     /// 이 게임만 할 수 있는 것 — 진짜 마우스 커서를 쫓는다. 커서가 공 근처면 앞발로 툭. 커서를 못 따라잡아도 결국 공을 건드린다
     private func playCursorCat() {
         let cat = makeCat()
+        cat.name = Self.surpriseNodeName
         let fromRight = px(ball.x) < size.width / 2
         let y = groundY(ball.x)
         cat.position = CGPoint(x: fromRight ? size.width + 40 : -40, y: y)
@@ -667,7 +717,7 @@ extension GameScene {
         let paw = c.node.childNode(withName: "paw")
         paw?.run(.sequence([.rotate(toAngle: 0.9, duration: 0.12), .rotate(toAngle: 0, duration: 0.18)]))
         let dist = facing * Double.random(in: 1.5 ... 3.0)
-        let newX = min(max(ball.x + dist / 1.0, 6), hole.worldW - 6)
+        let newX = outOfWater(min(max(ball.x + dist, 6), hole.worldW - 6))
         SoundKit.shared.bounce(speed: 2, surface: hole.surface(at: ball.x))
         ball = BallState(x: newX, y: hole.ground(at: newX))
         let roll = SKAction.move(to: CGPoint(x: px(newX), y: groundY(newX) + 5.5), duration: 0.6)
@@ -686,6 +736,12 @@ extension GameScene {
             cc.facing = leaveFacing
             catState = cc
         }]))
+    }
+
+    /// 두더지·고양이가 공을 물속으로 밀지 않게 — 워터 범위 안이면 가까운 물가 밖으로 (리뷰 m3)
+    func outOfWater(_ x: Double) -> Double {
+        guard let wr = hole.waterRange, wr.contains(x) else { return x }
+        return x - wr.lowerBound < wr.upperBound - x ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
     }
 
     /// 실제 마우스 커서를 씬 좌표로 — 이 화면 밖이면 nil
