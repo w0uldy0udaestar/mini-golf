@@ -12,8 +12,8 @@ enum Skeleton {
     static let torso = 25.0 // 힙→어깨 (직립 25.0 · 스윙 포즈 24.0(임팩트)~28.3(팔로스루 tilt 18)을 정규화)
     static let upperArm = 17.5
     static let foreArm = 17.5 // 합 35 — 어드레스 handD 34가 거의 완전 신전
-    static let thigh = 23.25
-    static let shin = 23.25 // 합 46.5 — 직립 힙 높이 43.5에서 무릎이 살짝 굽는다
+    static let thigh = 22.5
+    static let shin = 22.5 // 합 45 — 직립(힙 43.5)에서 무릎 굽힘 3.7px (46.5는 7.5px로 '할아버지 자세' — 2026-09-15 사용자 판정)
     static let legReach = (thigh + shin) * 0.995
     static let kneePole = (x: 1.0, y: 0.0) // 무릎은 바라보는 쪽(앞)으로 굽는다
     static let elbowPole = (x: -0.6, y: -0.8) // 팔꿈치는 뒤·아래로 (매달린 팔·오버헤드 모두 자연)
@@ -27,10 +27,14 @@ enum Skeleton {
         var clampLead = 0.0 // 리드 손(그립)을 사거리 안으로 당긴 양
         var clampTrail = 0.0 // 트레일 손을 당긴 양
         var legStretch = 0.0 // 힙을 바닥까지 내려도 발이 닿지 않은 잔여(비정상 — 계측용)
+        var armsCurved = false // true면 elbow는 곡선 제어점 — 렌더가 꺾인 선 대신 부드러운 호로 그린다
     }
 
     /// 리그를 제자리에서 보정하고 관절 위치를 돌려준다. 좌표는 facing 기준(+x = 바라보는 쪽).
-    static func solve(_ r: inout Rig) -> Joints {
+    /// curvedArms: 스윙·어드레스처럼 팔이 카메라 쪽(공)으로 향해 원근 단축되는 자세 — 손을 당긴 것을
+    /// 팔꿈치 굽힘으로 그리면 '배 앞에서 클럽 쥔 할아버지'가 된다(2026-09-15 사용자 판정). 이때는 팔 IK를
+    /// 건너뛰고 예전처럼 완만한 호(원근 단축)로 그린다. 다리는 항상 관절.
+    static func solve(_ r: inout Rig, curvedArms: Bool = false) -> Joints {
         var j = Joints()
 
         // 1. 몸통: 힙 고정, 어깨는 같은 기울기 방향으로 길이만 맞춘다 (머리는 어깨 상대라 따라온다)
@@ -74,7 +78,13 @@ enum Skeleton {
         r.knee1 = j.knee1
         r.knee2 = j.knee2
 
-        /// 4. 팔: 어깨→손 2-bone IK, 손은 사거리 안으로 당겨진다 (완전 신전 근처 tanh 소프트닝)
+        // 4. 팔: 어깨→손 2-bone IK, 손은 사거리 안으로 당겨진다 (완전 신전 근처 tanh 소프트닝)
+        if curvedArms { // 원근 단축 호: 제어점 = 중점 + 작은 오프셋 (구 렌더와 동일)
+            j.armsCurved = true
+            j.elbowLead = CGPoint(x: (r.shoulder.x + r.grip.x) / 2 + 2, y: (r.shoulder.y + r.grip.y) / 2 + 2)
+            j.elbowTrail = CGPoint(x: (r.shoulder.x + r.handTrail.x) / 2 + 1, y: (r.shoulder.y + r.handTrail.y) / 2 - 2)
+            return j
+        }
         func arm(_ hand: inout CGPoint) -> (elbow: CGPoint, clamp: Double) {
             let s = TwoBoneIK.solve(
                 rootX: r.shoulder.x, rootY: r.shoulder.y, targetX: hand.x, targetY: hand.y,

@@ -42,7 +42,7 @@ enum WalkFlavorKind: CaseIterable {
     /// 걸음을 멈추고 하는 모션 — 게이트가 쇼피스와 같은 연속 동결 램프를 건다. 발동 가중치도 낮다
     var stopsWalking: Bool {
         switch self {
-        case .clubBalance, .airSwing, .airPutt, .bow, .windCheck, .distanceScan: true
+        case .clubBalance, .airSwing, .airPutt, .bow, .windCheck, .distanceScan, .hopscotch, .cheer: true // 점프 둘은 제자리에서
         default: false
         }
     }
@@ -98,7 +98,7 @@ enum WalkFlavorKind: CaseIterable {
         case .clubSword, .yawn: 0.8
         case .clubCane: 0.75
         case .clubInspect, .chinStroke, .stumble, .dejected: 0.7
-        case .hopscotch, .nervous: 0.6
+        case .nervous: 0.6
         case .crouchSneak: 0.55
         case .tipToe: 0.5
         case .leanBack: 1.25
@@ -132,7 +132,6 @@ enum WalkFlavorKind: CaseIterable {
             break
         }
         guard u < 1 else { return }
-        let e = env(u)
         switch self {
         // ── A 클럽 곡예 ──
         case .clubBalance: // 클럽을 손바닥 위에 수직으로 세우고 반대팔로 균형 — 걸음 멈춤, 흔들흔들
@@ -327,11 +326,8 @@ enum WalkFlavorKind: CaseIterable {
         case .yawn: // 손으로 입 가리고 고개 젖힘 → 팔 쭉 뻗는 기지개
             let m = smoothstep(seg(u, 0.05, 0.2)) * (1 - smoothstep(seg(u, 0.45, 0.6)))
             let s = smoothstep(seg(u, 0.5, 0.65)) * (1 - smoothstep(seg(u, 0.85, 1)))
-            if u < 0.5 {
-                f.setFreeHand(angle: 2.42, reach: 0.3, w: m)
-            } else {
-                f.setFreeHand(angle: 2.3, reach: 0.9, w: s)
-            }
+            f.setFreeHand(angle: 2.42, reach: 0.3, w: m) // 두 목표를 모두 넣어 max-w로 이어간다 (분기는 u=0.5에서 불연속 — 리뷰)
+            f.setFreeHand(angle: 2.3, reach: 0.9, w: s)
             let k = max(m, s)
             f.headDyOff += 2.5 * k
             f.headDxOff -= 1.5 * k
@@ -353,8 +349,8 @@ enum WalkFlavorKind: CaseIterable {
             f.clubUpBlend = max(f.clubUpBlend, 0.8 * w)
         case .tipToe: // 발끝 살금살금 — 뒤꿈치 들고 팔 벌려 균형, 잰걸음
             let w = env(u, in: 0.3, out: 0.3)
-            f.heelLift += 3 * w
-            f.hipYOff += 3 * w
+            f.heelLift += 1.5 * w // 발가락이 없는 스틱맨은 3px면 '공중부양'으로 읽힌다 (리뷰)
+            f.hipYOff += 1.5 * w
             f.setFreeHand(angle: 1.7, reach: 0.7, w: w)
             f.headDyOff += 1 * w
         case .strut: // 으스대는 긴 보폭 — 어깨·힙 엇갈려 흔들기
@@ -451,7 +447,6 @@ enum WalkFlavorKind: CaseIterable {
         case .twirl, .helicopter:
             break // 첫 번째 switch에서 처리 — default 없이 명시해 새 케이스 추가 시 컴파일러가 누락을 잡는다
         }
-        _ = e
     }
 
     /// 부드러운 in-hold-out 종 모양 (0.3 경사)
