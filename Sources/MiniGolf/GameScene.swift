@@ -355,8 +355,14 @@ final class GameScene: SKScene {
 
     /// 두 발의 정체 교환을 렌더 리그에도 적용 — 타깃과 렌더가 같은 발을 가리켜야 스무딩이 발을 움직이지 않는다
     private func swapRenderFeet() {
-        swap(&renderRig.foot1, &renderRig.foot2)
-        swap(&renderRig.knee1, &renderRig.knee2)
+        // swap(&a.x, &a.y)는 같은 프로퍼티(renderRig)에 대한 중첩 inout 접근이라 런타임 배타성 위반으로 크래시한다
+        // (2026-09-15 시연 중 "Fatal access conflict" 실측) — 임시 변수로 교환
+        let f = renderRig.foot1
+        renderRig.foot1 = renderRig.foot2
+        renderRig.foot2 = f
+        let k = renderRig.knee1
+        renderRig.knee1 = renderRig.knee2
+        renderRig.knee2 = k
     }
 
     private func enterAim() {
@@ -792,7 +798,7 @@ final class GameScene: SKScene {
                 t += 1.1
                 continue
             }
-            let kind = WalkFlavorKind.allCases.randomElement()!
+            let kind = WalkFlavorKind.weightedRandom() // 멈추는 모션은 드물게
             let dur = kind.duration
             // 어깨에 클럽을 걸친 동안엔 클럽 손짓 불가 (클럽이 손에 없다)
             if kind.needsClub, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
@@ -1575,6 +1581,13 @@ final class GameScene: SKScene {
                     freeze = max(freeze, inR * (1 - outR * outR))
                 }
             }
+            // 잔동작 중 걸음을 멈추는 것(bow·airSwing 등)과 보폭 배율 — 쇼피스와 같은 동결 램프 (WalkFlavorKind.gait)
+            var strideScale = 1.0
+            for e in w.flavorEvents {
+                let g = e.kind.gait(u: (w.t - e.t0) / e.dur)
+                strideScale *= g.stride
+                freeze = max(freeze, g.stop)
+            }
             if freeze > 0 {
                 w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
             }
@@ -1591,7 +1604,7 @@ final class GameScene: SKScene {
                     print(String(format: "WALKV %.1f %.1f %.1f", tw, abs(stickX - w.fromX) * Double(pxPerM), w.vPx))
                 }
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
-                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot()))
+                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot())) * strideScale
                 // 지형 적응 (2026-08-15 요청): 경사에선 보폭을 줄이고, 러프·벙커는 무거운 걸음
                 let walkSurf = hole.surface(at: stickX)
                 w.stepL *= 1 - 0.3 * min(1, abs(atan(hole.slope(at: stickX))) / 0.35)
@@ -1814,16 +1827,14 @@ final class GameScene: SKScene {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
                 if demoMotionShowcase, w.t - dt < e.t0 { // 시작 프레임 — 캡처 워처에 위치 통지
-                    let info = "\(e.kind) \(Int(px(stickX))) \(Int(groundY(stickX)))"
+                    let info = "\(e.kind) \(Int(px(stickX))) \(Int(groundY(stickX))) \(String(format: "%.1f", e.dur))"
                     try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
-                    print("MOTION \(info)")
+                    print(String(format: "MOTION[%.2f] ", Date().timeIntervalSince1970) + info)
                     fflush(stdout)
                 }
                 e.kind.apply(u: u, into: &flavor)
             }
-            // 잔동작 진폭 부스트 (2026-08-20 사용자: "동작이 완전 커야") — 잔동작만.
-            // 쇼피스·트립·지형 적응은 이 뒤에 얹혀 원설계 크기 유지
-            flavor.boostMotion(1.7)
+            // (구 1.7× 진폭 부스트는 제거 — 37종은 관절 사거리 안에서 최종 크기로 직접 작성됐다, 2026-09-15)
             // 쇼피스 밈 모션 — 동결된 무대 위에 크게 얹는다 (WalkFlavors.swift ShowpieceKind)
             if let sa = w.showAt, let sk = w.showKind {
                 let su = (w.t - sa) / sk.duration
