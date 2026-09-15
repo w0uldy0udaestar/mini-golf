@@ -109,69 +109,71 @@ enum SwingStyle: String, CaseIterable {
 struct SwingKeyframes {
     let p1, p2, p4, p7, p8, p10: Pose
     let down, follow, finish: Double // 다운스윙·임팩트→최대 뻗음·→피니시 (초)
+    let topHold: Double // 톱에서 멈칫 (초) — 타이거의 전환 간격, 브라이슨은 0
 
     /// ── 실측 6세트 (docs/research-swing-styles.md): face-on 영상 MediaPipe 키포인트 → 스틱맨 단위, 세 선수 평균 대비
-    /// 편차 1.3배 과장. 어드레스·임팩트 손·클럽은 공 접촉 기하로 고정(tilt·hipDx 변화는 handA로 상쇄).
+    /// 편차 2.5배 과장(1.3배는 플레이에서 구분 불가 판정, 2026-09-15 — 템포·톱 홀드도 같은 배율). 어드레스·임팩트 손·클럽은 공 접촉 기하로 고정(tilt·hipDx 변화는 handA로
+    /// 상쇄).
     /// 샤프트 각(톱·피니시)은 영상 검출이 불안정해 선수 특징 기반 수치: 로리 톱 평행 초과·타이거 평행·브라이슨 3/4,
     /// 피니시는 로리·타이거 감김(270) vs 브라이슨 홀드오프(300). 템포 일부 추정(브라이슨 빠름). 웨지는 아이언 세트 공용.
     static let roryDriver = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -11.1, handA: 11.3, handD: 34, clubA: 12, heel: 0.0, headDx: 5.0),
-        p2: Pose(hipDx: 0.2, tilt: -12.1, handA: -63.4, handD: 34, clubA: -110, heel: 0.0, headDx: 6.1),
-        p4: Pose(hipDx: 1.5, tilt: -16.8, handA: -157.0, handD: 20.0, clubA: -275, heel: 0.0, headDx: 2.0),
-        p7: Pose(hipDx: 9.8, tilt: -25.6, handA: 20.0, handD: 34, clubA: 6, heel: 1.5, headDx: 1.3),
-        p8: Pose(hipDx: 11.7, tilt: -26.2, handA: 79.1, handD: 30.7, clubA: 125, heel: 2.2, headDx: 0.8),
-        p10: Pose(hipDx: 13.7, tilt: -24.6, handA: 140.9, handD: 24.7, clubA: 270, heel: 7.6, headDx: 2.6),
-        down: 0.24, follow: 0.12, finish: 0.3
+        p1: Pose(hipDx: 0.0, tilt: -8.4, handA: 8.9, handD: 34, clubA: 12, heel: 0.0, headDx: 6.3),
+        p2: Pose(hipDx: 0.2, tilt: -9.0, handA: -71.5, handD: 34, clubA: -110, heel: 0.0, headDx: 9.4),
+        p4: Pose(hipDx: 1.6, tilt: -15.4, handA: -174.8, handD: 21.1, clubA: -275, heel: 0.0, headDx: 2.7),
+        p7: Pose(hipDx: 12.7, tilt: -26.3, handA: 15.4, handD: 34, clubA: 6, heel: 2.4, headDx: 2.2),
+        p8: Pose(hipDx: 15.4, tilt: -26.3, handA: 81.4, handD: 28.5, clubA: 125, heel: 3.7, headDx: 0.3),
+        p10: Pose(hipDx: 18.5, tilt: -27.1, handA: 140, handD: 25.7, clubA: 270, heel: 11.3, headDx: 0.3),
+        down: 0.26, follow: 0.13, finish: 0.31, topHold: 0.0
     )
 
     static let tigerDriver = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -16.1, handA: 15.5, handD: 34, clubA: 12, heel: 0.0, headDx: 4.2),
-        p2: Pose(hipDx: 0.1, tilt: -19.2, handA: -40.2, handD: 30, clubA: -110, heel: 0.0, headDx: 1.2),
-        p4: Pose(hipDx: 2.1, tilt: -24.5, handA: -127.9, handD: 19.7, clubA: -268, heel: 0.0, headDx: 4.2),
-        p7: Pose(hipDx: 6.6, tilt: -28.5, handA: 28.5, handD: 34, clubA: 6, heel: 1.0, headDx: -0.8),
-        p8: Pose(hipDx: 7.3, tilt: -28.6, handA: 70, handD: 32.5, clubA: 125, heel: 0.0, headDx: 1.5),
-        p10: Pose(hipDx: 6.2, tilt: -20.1, handA: 147.3, handD: 19, clubA: 270, heel: 0.0, headDx: 3.2),
-        down: 0.24, follow: 0.12, finish: 0.32
+        p1: Pose(hipDx: 0.0, tilt: -17.9, handA: 17.1, handD: 34, clubA: 12, heel: 0.0, headDx: 4.9),
+        p2: Pose(hipDx: -0.1, tilt: -22.7, handA: -26.8, handD: 30, clubA: -110, heel: 0.0, headDx: -0.2),
+        p4: Pose(hipDx: 2.7, tilt: -30.2, handA: -118.9, handD: 20.6, clubA: -268, heel: 0.0, headDx: 7.0),
+        p7: Pose(hipDx: 6.6, tilt: -31.8, handA: 31.7, handD: 34, clubA: 6, heel: 1.0, headDx: -1.8),
+        p8: Pose(hipDx: 6.8, tilt: -30.9, handA: 70, handD: 31.8, clubA: 125, heel: 0.0, headDx: 1.6),
+        p10: Pose(hipDx: 4.0, tilt: -18.5, handA: 148.6, handD: 19, clubA: 270, heel: 0.0, headDx: 1.5),
+        down: 0.26, follow: 0.13, finish: 0.36, topHold: 0.08
     )
 
     static let brysonDriver = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -15.0, handA: 14.6, handD: 34, clubA: 12, heel: 0.0, headDx: 1.3),
-        p2: Pose(hipDx: 0.3, tilt: -15.1, handA: -60.5, handD: 34, clubA: -110, heel: 0.0, headDx: 0.5),
-        p4: Pose(hipDx: 0.6, tilt: -13.5, handA: -128.2, handD: 17, clubA: -235, heel: 0.0, headDx: -2.4),
-        p7: Pose(hipDx: 3.4, tilt: -20.7, handA: 27.2, handD: 34, clubA: 6, heel: 1.0, headDx: 0.5),
-        p8: Pose(hipDx: 4.4, tilt: -23.6, handA: 81.4, handD: 34, clubA: 125, heel: 0.0, headDx: 1.9),
-        p10: Pose(hipDx: 5.6, tilt: -20.6, handA: 149.8, handD: 28, clubA: 300, heel: 4.7, headDx: 9.4),
-        down: 0.21, follow: 0.1, finish: 0.26
+        p1: Pose(hipDx: 0.0, tilt: -15.9, handA: 15.4, handD: 34, clubA: 12, heel: 0.0, headDx: -0.7),
+        p2: Pose(hipDx: 0.5, tilt: -14.8, handA: -65.8, handD: 34, clubA: -110, heel: 0.0, headDx: -1.5),
+        p4: Pose(hipDx: -0.2, tilt: -9.1, handA: -119.4, handD: 17, clubA: -235, heel: 0.0, headDx: -5.8),
+        p7: Pose(hipDx: 0.4, tilt: -16.8, handA: 29.1, handD: 34, clubA: 6, heel: 1.0, headDx: 0.6),
+        p8: Pose(hipDx: 1.3, tilt: -21.2, handA: 86.0, handD: 34, clubA: 125, heel: 0.0, headDx: 2.3),
+        p10: Pose(hipDx: 2.9, tilt: -19.6, handA: 153.3, handD: 28, clubA: 300, heel: 5.6, headDx: 13.5),
+        down: 0.18, follow: 0.08, finish: 0.21, topHold: 0.0
     )
 
     static let roryIron = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -12.5, handA: 12.5, handD: 34, clubA: 12, heel: 0.0, headDx: 5.1),
-        p2: Pose(hipDx: 0.6, tilt: -12.7, handA: -62.0, handD: 33.8, clubA: -110, heel: 0.0, headDx: 5.4),
-        p4: Pose(hipDx: 1.7, tilt: -16.4, handA: -144.0, handD: 25.2, clubA: -268, heel: 0.0, headDx: 6.1),
-        p7: Pose(hipDx: 12.0, tilt: -18.8, handA: 10.1, handD: 34, clubA: 6, heel: 1.0, headDx: 0.4),
-        p8: Pose(hipDx: 15.0, tilt: -21.0, handA: 86.8, handD: 29.3, clubA: 125, heel: 4.3, headDx: 3.5),
-        p10: Pose(hipDx: 15.2, tilt: -14.6, handA: 140, handD: 25.8, clubA: 270, heel: 7.9, headDx: 4.7),
-        down: 0.24, follow: 0.12, finish: 0.3
+        p1: Pose(hipDx: 0.0, tilt: -12.7, handA: 12.6, handD: 34, clubA: 12, heel: 0.0, headDx: 6.1),
+        p2: Pose(hipDx: 1.0, tilt: -12.4, handA: -57.3, handD: 33.6, clubA: -110, heel: 0.0, headDx: 7.0),
+        p4: Pose(hipDx: 1.3, tilt: -18.8, handA: -153.4, handD: 25.0, clubA: -268, heel: 0.0, headDx: 10.3),
+        p7: Pose(hipDx: 14.6, tilt: -16.6, handA: 3.7, handD: 34, clubA: 6, heel: 1.0, headDx: -0.7),
+        p8: Pose(hipDx: 19.2, tilt: -22.3, handA: 85.6, handD: 28.8, clubA: 125, heel: 5.7, headDx: 1.7),
+        p10: Pose(hipDx: 20.5, tilt: -15.2, handA: 140, handD: 28, clubA: 270, heel: 8.8, headDx: 1.0),
+        down: 0.26, follow: 0.13, finish: 0.31, topHold: 0.0
     )
 
     static let tigerIron = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -14.6, handA: 14.3, handD: 34, clubA: 12, heel: 0.0, headDx: 3.3),
-        p2: Pose(hipDx: -0.3, tilt: -17.4, handA: -58.5, handD: 33.4, clubA: -110, heel: 0.0, headDx: 2.5),
-        p4: Pose(hipDx: 0.9, tilt: -17.0, handA: -140.3, handD: 24.7, clubA: -262, heel: 0.0, headDx: -1.9),
-        p7: Pose(hipDx: 8.3, tilt: -26.6, handA: 23.5, handD: 34, clubA: 6, heel: 1.0, headDx: 1.1),
-        p8: Pose(hipDx: 10.9, tilt: -25.2, handA: 91.8, handD: 30.0, clubA: 125, heel: 2.0, headDx: 5.8),
-        p10: Pose(hipDx: 9.6, tilt: -15.8, handA: 192.7, handD: 22.4, clubA: 270, heel: 9.3, headDx: 10.4),
-        down: 0.24, follow: 0.12, finish: 0.32
+        p1: Pose(hipDx: 0.0, tilt: -16.7, handA: 16.0, handD: 34, clubA: 12, heel: 0.0, headDx: 2.5),
+        p2: Pose(hipDx: -0.7, tilt: -21.6, handA: -50.6, handD: 32.9, clubA: -110, heel: 0.0, headDx: 1.5),
+        p4: Pose(hipDx: -0.3, tilt: -20.0, handA: -146.3, handD: 24.0, clubA: -262, heel: 0.0, headDx: -5.2),
+        p7: Pose(hipDx: 7.5, tilt: -31.5, handA: 29.7, handD: 34, clubA: 6, heel: 1.0, headDx: 0.8),
+        p8: Pose(hipDx: 11.3, tilt: -30.4, handA: 95, handD: 30.2, clubA: 125, heel: 1.3, headDx: 6.2),
+        p10: Pose(hipDx: 9.7, tilt: -17.7, handA: 200, handD: 21.5, clubA: 270, heel: 11.3, headDx: 11.9),
+        down: 0.26, follow: 0.13, finish: 0.36, topHold: 0.08
     )
 
     static let brysonIron = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -10.0, handA: 10.3, handD: 34, clubA: 12, heel: 0.0, headDx: 3.8),
-        p2: Pose(hipDx: 0.2, tilt: -8.8, handA: -80.9, handD: 34, clubA: -110, heel: 0.5, headDx: 2.9),
-        p4: Pose(hipDx: 3.7, tilt: -7.9, handA: -117.3, handD: 26.4, clubA: -230, heel: 0.0, headDx: 0.6),
-        p7: Pose(hipDx: 7.3, tilt: -18.3, handA: 17.8, handD: 34, clubA: 6, heel: 1.0, headDx: 2.9),
-        p8: Pose(hipDx: 5.4, tilt: -12.5, handA: 85.4, handD: 29.9, clubA: 125, heel: 2.0, headDx: 6.8),
-        p10: Pose(hipDx: 3.5, tilt: -11.2, handA: 152.2, handD: 21.7, clubA: 300, heel: 3.8, headDx: 11.1),
-        down: 0.21, follow: 0.1, finish: 0.26
+        p1: Pose(hipDx: 0.0, tilt: -7.8, handA: 8.4, handD: 34, clubA: 12, heel: 0.0, headDx: 3.5),
+        p2: Pose(hipDx: 0.2, tilt: -4.9, handA: -93.5, handD: 34, clubA: -110, heel: 0.9, headDx: 2.3),
+        p4: Pose(hipDx: 5.2, tilt: -2.4, handA: -102.0, handD: 27.3, clubA: -230, heel: 0.0, headDx: -0.3),
+        p7: Pose(hipDx: 5.5, tilt: -15.5, handA: 18.6, handD: 34, clubA: 6, heel: 1.4, headDx: 4.2),
+        p8: Pose(hipDx: 0.7, tilt: -5.9, handA: 83.1, handD: 30.1, clubA: 125, heel: 1.2, headDx: 8.2),
+        p10: Pose(hipDx: -2.0, tilt: -8.7, handA: 200, handD: 20.2, clubA: 300, heel: 0.9, headDx: 13.3),
+        down: 0.18, follow: 0.08, finish: 0.21, topHold: 0.0
     )
 
     static func table(_ style: SwingStyle, _ cat: ClubCategory) -> SwingKeyframes {
@@ -191,7 +193,7 @@ struct SwingKeyframes {
         for st in SwingStyle.allCases {
             for cat in [ClubCategory.wood, .iron, .wedge] {
                 let k = table(st, cat)
-                m = max(m, k.down + k.follow + k.finish)
+                m = max(m, k.topHold + k.down + k.follow + k.finish)
             }
         }
         return m
@@ -211,13 +213,28 @@ struct SwingProfile {
         let k = SwingKeyframes.table(style, cat)
         return switch cat {
         // ballFwd −4: 어드레스 tilt −5→−12(어깨 −3.8px)의 보정 (2026-09-15 프로 실측 반영)
-        case .wood: SwingProfile(topScale: 1.0, ballFwd: 20, finishScale: 1.0, down: k.down, isPutter: false, keys: k)
-        case .iron: SwingProfile(topScale: 0.88, ballFwd: 16, finishScale: 0.9, down: k.down, isPutter: false, keys: k)
+        // down = 톱 홀드 + 다운스윙 (Space → 임팩트 총 시간; 발사·rigRate·벽 스탠스 해제가 이 값을 본다)
+        case .wood: SwingProfile(
+                topScale: 1.0,
+                ballFwd: 20,
+                finishScale: 1.0,
+                down: k.topHold + k.down,
+                isPutter: false,
+                keys: k
+            )
+        case .iron: SwingProfile(
+                topScale: 0.88,
+                ballFwd: 16,
+                finishScale: 0.9,
+                down: k.topHold + k.down,
+                isPutter: false,
+                keys: k
+            )
         case .wedge: SwingProfile(
                 topScale: 0.72,
                 ballFwd: 13,
                 finishScale: 0.72,
-                down: k.down,
+                down: k.topHold + k.down,
                 isPutter: false,
                 keys: k
             )
@@ -256,10 +273,14 @@ func finishPose(profile: SwingProfile) -> Pose {
 /// 스윙 애니메이션 타임라인에서 포즈 샘플 (t: 스윙 시작 후 경과 초)
 func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct _: Double) -> Pose {
     if t < profile.down { // 다운스윙: 급가속 (퍼터는 펜듈럼 — 최하점=임팩트에서 속도 최대)
-        let u = t / profile.down
         if profile.isPutter {
-            return Pose.lerp(fromPose, Poses.ptImp, u * u)
+            let v = t / profile.down
+            return Pose.lerp(fromPose, Poses.ptImp, v * v)
         }
+        if t < profile.keys.topHold { // 톱 홀드: 전환 전 멈칫 (스타일 템포)
+            return fromPose
+        }
+        let u = (t - profile.keys.topHold) / profile.keys.down
         // 운동 사슬(kinematic sequence): 골반→몸통→팔→클럽 순차 도달.
         // 클럽은 u³로 최후에 터진다 — 손목 래그 유지 후 late release (리서치 P2)
         let impact = profile.keys.p7
