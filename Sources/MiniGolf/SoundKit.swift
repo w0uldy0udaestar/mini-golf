@@ -180,6 +180,75 @@ final class SoundKit {
         }
     }
 
+    // ── 서프라이즈 예고·사건 (2026-09-15 ⑤) — 같은 '작고 마른' 결 ──
+
+    /// 새 지저귐 — 예고 (짧은 상승 트릴 두 번)
+    func chirp() {
+        play(duration: 0.36) { t in
+            let tt = t < 0.18 ? t : t - 0.18
+            let f = 2300 + 700 * tt / 0.18
+            return sin(2 * .pi * f * tt) * exp(-tt / 0.05) * 0.07
+        }
+    }
+
+    /// 땅 울림 — 두더지 예고 (저음 두 번)
+    func thump() {
+        play(duration: 0.5) { t in
+            let tt = t < 0.25 ? t : t - 0.25
+            return sin(2 * .pi * 68 * tt) * exp(-tt / 0.07) * 0.3
+        }
+    }
+
+    /// 돌풍 — 대역 통과 노이즈 스웰
+    func gust(dur: Double) {
+        var bp = Biquad.bandpass(600, q: 0.6, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: dur) { t in
+            let u = t / dur
+            bp.retune(.bandpass, 450 + 500 * sin(.pi * u), q: 0.6, sr: self.sr)
+            return bp.process(rng.white()) * sin(.pi * u) * 0.3
+        }
+    }
+
+    /// 야옹 — 두 음이 미끄러지는 짧은 톤
+    func meow() {
+        play(duration: 0.42) { t in
+            let u = t / 0.42
+            let f = 620 + 260 * sin(.pi * u) - 180 * u
+            let env = sin(.pi * u)
+            return (sin(2 * .pi * f * t) + 0.35 * sin(2 * .pi * f * 2 * t)) * env * 0.06
+        }
+    }
+
+    /// 코골이 — 낮은 톱니 떨림
+    func snore() {
+        play(duration: 0.7) { t in
+            let u = t / 0.7
+            let f = 95 + 25 * sin(2 * .pi * 6 * t)
+            let saw = 2 * (f * t - floor(f * t + 0.5))
+            return saw * sin(.pi * u) * 0.05
+        }
+    }
+
+    /// 개굴 — 낮은 펄스 두 번
+    func ribbit() {
+        play(duration: 0.34) { t in
+            let tt = t < 0.16 ? t : t - 0.16
+            let f = 180 + 90 * exp(-tt / 0.05)
+            return sin(2 * .pi * f * tt) * exp(-tt / 0.09) * 0.14
+        }
+    }
+
+    /// 카드 팔랑 — 노이즈 펄럭임
+    func flutter() {
+        var bp = Biquad.bandpass(1800, q: 1.2, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: 0.9) { t in
+            let flap = abs(sin(2 * .pi * 5 * t))
+            return bp.process(rng.white()) * flap * (1 - t / 0.9) * 0.12
+        }
+    }
+
     // ── 합성 ──
 
     private func play(duration: Double, _ sample: (Double) -> Double) {

@@ -8,16 +8,16 @@ final class GameScene: SKScene {
     // 게임 상태
     private var course: [Hole] = []
     private var holeIdx = 0
-    private var ball = BallState(x: CourseGenerator.teeX, y: 0)
-    private var strokes = 0
+    var ball = BallState(x: CourseGenerator.teeX, y: 0)
+    var strokes = 0
     private var clubIdx = 0
-    private var heightPct = 0.6
+    var heightPct = 0.6
     private var results: [(par: Int, strokes: Int, gaveUp: Bool)] = []
-    private enum Mode { case aim, swinging, motion, walking, holed, end, surprise, ritual }
-    private var mode = Mode.aim
-    private var dir = 1.0
+    enum Mode { case aim, swinging, motion, walking, holed, end, surprise, ritual } // Surprises.swift 확장이 읽는다
+    var mode = Mode.aim
+    var dir = 1.0
     private var heldKeys = Set<UInt16>()
-    private var lastTime: TimeInterval = 0
+    var lastTime: TimeInterval = 0
     private var acc = 0.0
     private let timeScale = 2.5
     var isGamePaused = false
@@ -34,6 +34,18 @@ final class GameScene: SKScene {
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var demoTrademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그 — 트레이드마크 관찰용
     var demoClubId: String? // --club ID: 홀 시작 클럽 지정(DR·7I·SW·PT…) — 클럽별 어드레스 관찰용
+    var demoBackdrop = false // --demo-bg: 불투명 배경 (캡처 판독용)
+    // ── 서프라이즈 상태 (Surprises.swift) ──
+    var demoSurpriseKind: SurpriseKind? // --surprise KIND: 해당 훅마다 그 종류 강제 (관찰용)
+    var surpriseCounts: [SurpriseKind: Int] = [:] // 라운드당 종류별 발동 수 (등급 상한)
+    var preShot = (x: CourseGenerator.teeX, strokes: 0, remain: 0.0) // 멀리건용 직전 샷 스냅샷
+    var gustWind: Double? // 돌풍 중 바람 덮어쓰기 (m/s) — Ballistics.step에 전달
+    var gustUntil: TimeInterval = 0
+    var napping = false // 낮잠 중 — 키 입력은 깨우기로 소비
+    var napAt = Double.infinity // 조준 방치 → 낮잠 발동 시각 (aimTime)
+    var napStart = 0.0
+    var napNode: SKNode?
+    var catState: CatState?
     var surpriseCursor = 0
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
@@ -131,14 +143,14 @@ final class GameScene: SKScene {
     private var prevHeadClub = ClubTable.all[0]
     private var lastClub = ClubTable.all[0]
     private var headMorph = 1.0
-    private var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
+    var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var renderWallT = 0.0 // 벽 스탠스 근접도 (스무딩) — 뒷발 벽 딛기 자세 블렌드
     private var renderTreeT = 0.0 // 나무 캐노피 근접도 (스무딩) — 웅크린 펀치 자세 블렌드
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     /// 홀아웃 직후 스틱맨의 스코어 반응 (QA·Whimsy 리뷰 — 결과에 감정을 싣는다)
-    private enum ReactionKind { case none, rejoice, fistPump, nod, slump, dejected }
-    private var reactionKind = ReactionKind.none
-    private var reactionAt: TimeInterval = 0
+    enum ReactionKind { case none, rejoice, fistPump, nod, slump, dejected, startled, shoo, laugh } // 뒤 셋은 서프라이즈 반응
+    var reactionKind = ReactionKind.none
+    var reactionAt: TimeInterval = 0
     /// 이번 샷의 스트라이크 품질 — 타이거 트월 트리거. 결과(낙하 지점)가 아니라 발사 순간의 '느낌'(미스힛·파워)으로 판단
     private var lastShotGood = false
     private var rigDumpLast: TimeInterval = 0
@@ -148,14 +160,14 @@ final class GameScene: SKScene {
     private var idleNextAt = 6.0
     private var idleKind = 0
     private var idleStart = 0.0
-    private var stickX = CourseGenerator.teeX
+    var stickX = CourseGenerator.teeX
     private var trailPoints: [CGPoint] = []
     private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
     private var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정
     private var shotHitBumper = false // 이 샷에서 범퍼를 맞았나 — 뱅크샷 홀인 배지 판정
-    private var roundHadWater = false // 무입수 라운드 배지 판정
+    var roundHadWater = false // 무입수 라운드 배지 판정
 
-    private var hole: Hole {
+    var hole: Hole {
         course[holeIdx]
     }
 
@@ -176,7 +188,7 @@ final class GameScene: SKScene {
         toast("스윙 스타일 · \(style.title)", sub: nil)
     }
 
-    private var pxPerM: CGFloat {
+    var pxPerM: CGFloat {
         size.width / hole.worldW
     }
 
@@ -187,12 +199,12 @@ final class GameScene: SKScene {
 
     // 노드
     private let terrainNode = SKNode()
-    private let stickman = StickmanNode()
-    private let ballNode = SKShapeNode(circleOfRadius: 5.5)
-    private let shadowNode = SKShapeNode(ellipseOf: CGSize(width: 15, height: 4.5))
+    let stickman = StickmanNode()
+    let ballNode = SKShapeNode(circleOfRadius: 5.5)
+    let shadowNode = SKShapeNode(ellipseOf: CGSize(width: 15, height: 4.5))
     private let trailNode = SKShapeNode()
     private let trailUnderNode = SKShapeNode() // 궤적 언더스트로크 (밝은 배경 대비)
-    private let flagNode = SKNode()
+    let flagNode = SKNode()
     private let scoreTitle = GlassLabel(font: HUDFont.medium, size: 17, align: .right, kern: 1.0)
     private let scoreSub = GlassLabel(font: HUDFont.regular, size: 12, alpha: 0.8, align: .right)
     private let clubTitle = GlassLabel(font: HUDFont.medium, size: 17, align: .left, kern: 1.0)
@@ -204,20 +216,27 @@ final class GameScene: SKScene {
     private let powerLabel = GlassLabel(font: HUDFont.medium, size: 11, alpha: 0.85)
     private let scorecard = ScorecardNode()
 
-    private func px(_ m: Double) -> CGFloat {
+    func px(_ m: Double) -> CGFloat {
         CGFloat(m) * pxPerM
     }
 
-    private func py(_ elev: Double) -> CGFloat {
+    func py(_ elev: Double) -> CGFloat {
         groundBase + CGFloat(elev) * pxPerM
     }
 
-    private func groundY(_ xm: Double) -> CGFloat {
+    func groundY(_ xm: Double) -> CGFloat {
         py(hole.ground(at: xm))
     }
 
     override func didMove(to _: SKView) {
         backgroundColor = .clear // ⚠️ skView.backgroundColor는 설정 금지
+        if demoBackdrop { // 관찰 전용: 데스크탑 위 겹침 없이 캡처하기 위한 불투명 배경 (실플레이 경로 아님)
+            let bg = SKShapeNode(rect: CGRect(x: -100, y: -100, width: size.width + 200, height: size.height + 200))
+            bg.fillColor = NSColor(white: 0.16, alpha: 1)
+            bg.strokeColor = .clear
+            bg.zPosition = -100
+            addChild(bg)
+        }
 
         ballNode.fillColor = .white
         ballNode.lineWidth = 1.2
@@ -321,6 +340,7 @@ final class GameScene: SKScene {
         holeIdx = 0
         results = []
         roundHadWater = false
+        surpriseCounts = [:]
         scorecard.hide()
         startHole()
     }
@@ -389,6 +409,11 @@ final class GameScene: SKScene {
         mode = .aim
         aimTime = 0
         reactionKind = .none
+        napping = false
+        napNode?.removeFromParent()
+        napNode = nil
+        napAt = demoSurpriseKind == .nap || demoSurpriseForce
+            ? 0.8 : rollSurprise(hook: .aimIdle) == .nap ? Double.random(in: 12 ... 20) : .infinity
         idleKind = 0
         idleNextAt = Double.random(in: 5 ... 9)
         walkAnim = nil
@@ -800,6 +825,33 @@ final class GameScene: SKScene {
         case .dejected: // 기권: 고개 푹
             rig.shoulder.y -= 4 * bell
             rig.headDy -= 4.5 * bell
+        case .startled: // 화들짝: 뒤로 움찔, 양팔·클럽 번쩍, 고개 뒤로 — 0.12s 스냅 후 서서히 풀린다
+            let snap = min(1, u / 0.12) * (1 - smoothstep(min(1, max(0, (u - 0.45) / 0.55))))
+            rig.hip.x -= 4 * snap
+            rig.shoulder.x -= 6 * snap
+            rig.shoulder.y += 2 * snap
+            rig.handTrail = CGPoint(
+                x: mix(rig.handTrail.x, rig.shoulder.x - 6, snap),
+                y: mix(rig.handTrail.y, rig.shoulder.y + 16, snap)
+            )
+            rig.grip = CGPoint(
+                x: mix(rig.grip.x, rig.shoulder.x + 9, snap),
+                y: mix(rig.grip.y, rig.shoulder.y + 14, snap)
+            )
+            rig.headDx -= 4 * snap
+            rig.headDy += 1.5 * snap
+        case .shoo: // 훠이훠이: 트레일 팔을 앞으로 뻗어 흔든다
+            let wave = sin(2 * .pi * 3 * u)
+            rig.handTrail = CGPoint(
+                x: mix(rig.handTrail.x, rig.shoulder.x + 15 + 3 * wave, bell),
+                y: mix(rig.handTrail.y, rig.shoulder.y + 5 + 8 * abs(wave), bell)
+            )
+            rig.headDx += 2 * bell
+        case .laugh: // 낄낄: 어깨 들썩 + 고개 뒤로
+            let shake = abs(sin(2 * .pi * 4 * u)) * bell
+            rig.shoulder.y += 2.5 * shake
+            rig.headDx -= 3 * bell
+            rig.headDy += 2 * bell
         case .none:
             break
         }
@@ -852,7 +904,7 @@ final class GameScene: SKScene {
         rig.clubLen *= 1 - 0.10 * t // 초크다운
     }
 
-    private func startWalk() {
+    func startWalk() {
         endShotTrail()
         // 원점 통일 (2026-09-14 전환 개편): 포즈 리그는 공이 원점이고 몸(힙)은 공 뒤 ballFwd+5px에 선다.
         // 걷기 리그는 몸이 원점이므로, 걷기의 출발·도착을 '몸이 서는 자리'로 잡아야 전환 순간 좌표 점프가 0이다
@@ -1020,6 +1072,7 @@ final class GameScene: SKScene {
         } else {
             shotBumpers = []
         }
+        preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건 스냅샷
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
@@ -1040,6 +1093,9 @@ final class GameScene: SKScene {
         }
         mode = .motion
         SoundKit.shared.impact(cat: club.cat, lie: lie, power: heightPct)
+        if !club.isPutter, heightPct >= 0.4, let kind = rollSurprise(hook: .inFlight) { // 돌풍 (비행 훅)
+            playSurprise(kind)
+        }
         if lie == .rough || lie == .bunker { // 러프 풀잎·벙커 모래가 튄다
             FX.dust(
                 on: self,
@@ -1052,7 +1108,7 @@ final class GameScene: SKScene {
     }
 
     /// 샷이 끝나면 궤적은 잠시 여운을 남기고 사라진다
-    private func endShotTrail() {
+    func endShotTrail() {
         guard !trailPoints.isEmpty else { return }
         trailUnderNode.removeAllActions()
         trailUnderNode.run(.fadeAlpha(to: 0, duration: 1.1))
@@ -1288,7 +1344,7 @@ final class GameScene: SKScene {
 
     /// 토스트 — 기본은 화면 중앙, overFlag는 깃발 위 (홀인 스코어는 사건 지점에서 읽힌다 —
     /// 2026-08-15 사용자 요청 3번). 깃발이 화면 끝이면 잘리지 않게 안쪽으로 당긴다
-    private func toast(
+    func toast(
         _ main: String, sub: String? = nil, overFlag: Bool = false, titleScale: CGFloat = 1
     ) {
         if overFlag {
@@ -1578,7 +1634,7 @@ final class GameScene: SKScene {
         }
     }
 
-    private func updateHUD() {
+    func updateHUD() {
         let total = results.reduce(0) { $0 + ($1.strokes - $1.par) }
         let totalStr = total > 0 ? "+\(total)" : total == 0 ? "E" : "\(total)"
         let remain = abs(hole.holeX - ball.x)
@@ -1599,6 +1655,10 @@ final class GameScene: SKScene {
         case 53: NSApp.terminate(nil) // Esc
         case 15: newRound(); return // R
         default: break
+        }
+        if napping, mode == .aim { // 낮잠: 아무 키나 깨우기로 소비
+            wakeUp()
+            return
         }
         guard mode == .aim, !isGamePaused else { return }
         switch event.keyCode {
@@ -1627,7 +1687,7 @@ final class GameScene: SKScene {
                     heightPct = 0.95 // 벽 관찰: 조준 내내 풀 백스윙 프리뷰 유지 (최악 케이스 상시 노출)
                 }
                 demoWait += dt
-                if demoWait > (demoIdleForce ? 25 : 1.2) { // 아이들 관찰 모드는 조준을 길게 유지
+                if !napping, demoWait > (demoIdleForce ? 25 : 1.2) { // 아이들 관찰 모드는 조준을 길게 유지
                     demoWait = 0
                     // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
                     if demoWallForce {
@@ -1648,7 +1708,7 @@ final class GameScene: SKScene {
             }
         }
 
-        if mode == .aim {
+        if mode == .aim, !napping {
             let rate = club.isPutter ? 0.4 : 0.85
             if heldKeys.contains(126) {
                 heightPct = min(1, heightPct + rate * dt)
@@ -1815,7 +1875,7 @@ final class GameScene: SKScene {
             var lipped = false
             while acc >= Phys.dt {
                 acc -= Phys.dt
-                let event = Ballistics.step(&ball, hole: hole, bumpers: shotBumpers)
+                let event = Ballistics.step(&ball, hole: hole, bumpers: shotBumpers, wind: gustWind) // 돌풍 덮어쓰기
                 switch event {
                 case .holed, .water:
                     terminal = event
@@ -1874,7 +1934,12 @@ final class GameScene: SKScene {
             }
             switch terminal {
             case .holed: onHoled()
-            case .water: onWater()
+            case .water:
+                if let kind = rollSurprise(hook: .water) { // 개구리 구조 (워터 훅)
+                    playSurprise(kind)
+                } else {
+                    onWater()
+                }
             default:
                 if ball.phase == .rest {
                     // 벽 릴리프 (장애물 무벌타 구제 격): 스탠스·컴팩트 백스윙이 화면 안에
@@ -1887,7 +1952,7 @@ final class GameScene: SKScene {
                     }
                     if strokes >= Phys.maxStrokes {
                         giveUp()
-                    } else if let kind = rollSurprise() {
+                    } else if let kind = rollSurprise(hook: .ballRest) {
                         playSurprise(kind)
                     } else {
                         startWalk()
@@ -1916,7 +1981,11 @@ final class GameScene: SKScene {
         renderLoft += (club.loft - renderLoft) * clubK
         if mode == .aim {
             aimTime += dt
+            if !napping, aimTime >= napAt { // 낮잠 (조준 방치 훅)
+                startNap()
+            }
         }
+        updateSurprises(dt: dt, currentTime: currentTime)
         // 벽 근접도 (0~1) — 조준·스윙 중에만 켜지고, 스무딩으로 자세가 툭 바뀌지 않는다
         let wallTarget = (mode == .aim || swingAnim != nil) && !club.isPutter
             ? smoothstep(min(1, max(0, (80 - wallBehindPx) / 36)))
@@ -2074,6 +2143,12 @@ final class GameScene: SKScene {
             applyWallStance(&targetRig, t: renderWallT)
             applyLieStance(&targetRig)
             applyIdleFidget(&targetRig)
+            if napping {
+                applyNap(&targetRig)
+            }
+            if reactionKind != .none { // 낮잠에서 깬 화들짝 (조준 진입 시 리셋되므로 그 외엔 none)
+                applyScoreReaction(&targetRig, t: currentTime - reactionAt)
+            }
             // 진입 직후엔 느리게 → 연속 램프로 기민해진다 (계단식 속도 전환 = 가속 킥 = 움찔의 원인)
             rigRate = 5 + 8 * smoothstep(min(1, aimTime / 1.1))
         } else if mode == .ritual, let anim = ritualAnim {
@@ -2100,7 +2175,7 @@ final class GameScene: SKScene {
             }
             applySlopeStance(&targetRig) // 피니시 홀드 중에도 발은 경사를 딛는다 (리뷰 지적)
             applyFinishRecoil(&targetRig, ft: ft) // 로리 트레이드마크
-            if mode == .holed, reactionKind != .none {
+            if mode == .holed || mode == .surprise || mode == .motion, reactionKind != .none { // 홀아웃·서프라이즈 반응
                 applyScoreReaction(&targetRig, t: currentTime - reactionAt)
             }
             rigRate = uppercutActive ? 16 : twirl != nil ? 9 : 5
@@ -2307,197 +2382,5 @@ private extension GameScene {
             r.clubPhi = mix(r.clubPhi, -1.35, hinge)
         }
         return r
-    }
-}
-
-enum SurpriseKind: String, CaseIterable {
-    case birdSteal // 새가 공을 물고 날아가 랜덤 지점에 드롭
-    case moleNudge // 두더지가 쏙 나와 공을 톡 밀고 사라진다
-}
-
-extension GameScene {
-    /// 샷 종료 시 호출 — 발동이면 종류 반환. 홀인 직전(그린 위)은 제외 (부당함 방지)
-    func rollSurprise() -> SurpriseKind? {
-        guard hole.surface(at: ball.x) != .green else { return nil }
-        if demoSurpriseForce {
-            surpriseCursor += 1
-            return SurpriseKind.allCases[surpriseCursor % SurpriseKind.allCases.count]
-        }
-        // 8%: 라운드(≈25~35샷)에 2~3번 — "더 자주" (2026-08-21 실플레이 피드백, 초기 2.5%)
-        guard Double.random(in: 0 ..< 1) < 0.08 else { return nil }
-        return SurpriseKind.allCases.randomElement()
-    }
-
-    func playSurprise(_ kind: SurpriseKind) {
-        mode = .surprise
-        if demoMode {
-            print("SURPRISE \(kind.rawValue) @\(Int(ball.x))")
-            fflush(stdout)
-        }
-        switch kind {
-        case .birdSteal: playBirdSteal()
-        case .moleNudge: playMoleNudge()
-        }
-    }
-
-    /// ── 새 도둑: 유불리 랜덤 드롭 (골프 규칙 18-1 '외부 요인' — 놓인 자리에서 플레이) ──
-    private func playBirdSteal() {
-        let bird = makeBird()
-        let ballPos = CGPoint(x: px(ball.x), y: groundY(ball.x) + 5.5)
-        // 드롭 지점: 홀 방향 ±35m 랜덤 — 도움일 수도, 배신일 수도
-        let delta = Double.random(in: -35 ... 35)
-        var dropX = ball.x + delta
-        dropX = min(max(dropX, 8), hole.worldW - 8)
-        if hole.surface(at: dropX) == .water { // 물에는 안 떨어뜨린다 (벌타 사건은 과함)
-            dropX = ball.x - delta.magnitude * 0.4
-        }
-        let dropPos = CGPoint(x: px(dropX), y: groundY(dropX) + 5.5)
-        let entryY = size.height * 0.86
-        bird.position = CGPoint(x: ballPos.x < size.width / 2 ? size.width + 40 : -40, y: entryY)
-        addChild(bird)
-
-        let swoopIn = SKAction.move(to: ballPos, duration: 0.9)
-        swoopIn.timingMode = .easeInEaseOut
-        let carry = SKAction.move(to: CGPoint(x: dropPos.x, y: dropPos.y + 130), duration: 1.1)
-        carry.timingMode = .easeInEaseOut
-        let exitX = bird.position.x // 들어온 쪽으로 되돌아 나간다
-        let leave = SKAction.move(to: CGPoint(x: exitX, y: size.height * 0.95), duration: 0.9)
-        leave.timingMode = .easeIn
-
-        reactionKind = .dejected // 스틱맨: 아니 내 공…
-        reactionAt = lastTime
-        toast("새가 공을 물어갔다!", sub: nil)
-        bird.run(.sequence([
-            swoopIn,
-            .run { [weak self] in // 낚아채기 — 공이 새를 따라간다
-                guard let self else { return }
-                SoundKit.shared.wall(speed: 3)
-                ballNode.removeAllActions()
-                ballNode.run(SKAction.customAction(withDuration: 2.0) { [weak self, weak bird] node, _ in
-                    guard let bird else { return }
-                    node.position = CGPoint(x: bird.position.x, y: bird.position.y - 9)
-                    self?.shadowNode.isHidden = true
-                })
-            },
-            carry,
-            .run { [weak self] in // 드롭
-                guard let self else { return }
-                ball = BallState(x: dropX, y: hole.ground(at: dropX))
-                ballNode.removeAllActions()
-                let fall = SKAction.move(to: dropPos, duration: 0.42)
-                fall.timingMode = .easeIn
-                ballNode.run(.sequence([fall, .run { [weak self] in
-                    guard let self else { return }
-                    SoundKit.shared.bounce(speed: 3, surface: hole.surface(at: dropX))
-                    FX.dust(on: self, at: dropPos, surface: hole.surface(at: dropX), intensity: 0.4)
-                }]))
-            },
-            leave,
-            .removeFromParent(),
-            .run { [weak self] in self?.finishSurprise() },
-        ]))
-        // 날갯짓 — 위아래 파닥임
-        bird.run(.repeatForever(.sequence([
-            .scaleY(to: 0.55, duration: 0.12), .scaleY(to: 1.0, duration: 0.12),
-        ])))
-    }
-
-    /// ── 두더지: 공을 1~3m 톡 — 사소한 참견 ──
-    private func playMoleNudge() {
-        let mole = makeMole()
-        let side: Double = Bool.random() ? 1 : -1
-        let moleX = ball.x - side * 1.2
-        mole.position = CGPoint(x: px(moleX), y: groundY(moleX) - 14)
-        mole.setScale(0.1)
-        addChild(mole)
-        let popUp = SKAction.group([
-            SKAction.move(to: CGPoint(x: px(moleX), y: groundY(moleX) + 4), duration: 0.3),
-            SKAction.scale(to: 1, duration: 0.3),
-        ])
-        popUp.timingMode = .easeOut
-        let nudgeDist = side * Double.random(in: 1.2 ... 3.0)
-        let newX = min(max(ball.x + nudgeDist, 6), hole.worldW - 6)
-        let sink = SKAction.group([
-            SKAction.move(to: CGPoint(x: px(moleX), y: groundY(moleX) - 14), duration: 0.25),
-            SKAction.scale(to: 0.1, duration: 0.25),
-        ])
-        sink.timingMode = .easeIn
-
-        toast("두더지!", sub: nil)
-        mole.run(.sequence([
-            popUp,
-            .wait(forDuration: 0.35),
-            .run { [weak self] in // 톡 — 공이 짧게 굴러간다
-                guard let self else { return }
-                SoundKit.shared.bounce(speed: 2, surface: hole.surface(at: ball.x))
-                ball = BallState(x: newX, y: hole.ground(at: newX))
-                let roll = SKAction.move(
-                    to: CGPoint(x: px(newX), y: groundY(newX) + 5.5), duration: 0.5
-                )
-                roll.timingMode = .easeOut
-                ballNode.run(roll)
-            },
-            .wait(forDuration: 0.5),
-            sink,
-            .removeFromParent(),
-            .run { [weak self] in self?.finishSurprise() },
-        ]))
-    }
-
-    private func finishSurprise() {
-        guard mode == .surprise else { return } // 새 라운드 등으로 이미 전환됐으면 무시
-        startWalk()
-    }
-
-    /// ── 생물 셰이프: 게임 회색 실루엣 문법 ──
-    private func makeBird() -> SKNode {
-        let bird = SKNode()
-        let body = SKShapeNode(ellipseOf: CGSize(width: 16, height: 9))
-        body.fillColor = NSColor(white: 0.82, alpha: 0.95)
-        body.strokeColor = .clear
-        let wing = SKShapeNode()
-        let wp = CGMutablePath()
-        wp.move(to: CGPoint(x: -10, y: 6))
-        wp.addLine(to: CGPoint(x: -1, y: 1))
-        wp.addLine(to: CGPoint(x: 8, y: 6))
-        wing.path = wp
-        wing.strokeColor = NSColor(white: 0.82, alpha: 0.95)
-        wing.lineWidth = 2.4
-        wing.lineCap = .round
-        let beak = SKShapeNode()
-        let bp = CGMutablePath()
-        bp.move(to: CGPoint(x: 8, y: 1))
-        bp.addLine(to: CGPoint(x: 13, y: -1))
-        beak.path = bp
-        beak.strokeColor = NSColor(white: 0.7, alpha: 0.95)
-        beak.lineWidth = 2
-        beak.lineCap = .round
-        bird.addChild(body)
-        bird.addChild(wing)
-        bird.addChild(beak)
-        bird.zPosition = 5
-        return bird
-    }
-
-    private func makeMole() -> SKNode {
-        let mole = SKNode()
-        let head = SKShapeNode()
-        let hp = CGMutablePath()
-        hp.addArc(
-            center: .zero, radius: 9,
-            startAngle: 0, endAngle: .pi, clockwise: false
-        )
-        hp.closeSubpath()
-        head.path = hp
-        head.fillColor = NSColor(white: 0.55, alpha: 0.95)
-        head.strokeColor = .clear
-        let nose = SKShapeNode(circleOfRadius: 2.2)
-        nose.position = CGPoint(x: 0, y: 8)
-        nose.fillColor = NSColor(white: 0.35, alpha: 0.95)
-        nose.strokeColor = .clear
-        mole.addChild(head)
-        mole.addChild(nose)
-        mole.zPosition = 4
-        return mole
     }
 }
