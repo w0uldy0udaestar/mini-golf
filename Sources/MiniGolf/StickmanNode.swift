@@ -454,11 +454,12 @@ final class StickmanNode: SKNode {
         let eLead = m(joints.elbowLead)
 
         let body = CGMutablePath()
-        // 척추 (살짝 굽음)
+        // 척추 (거의 곧게 — 뒤로 2.5px 휘던 곡선은 앞으로 굽은 무릎과 합쳐져 걷기·어드레스가 '뒤로 기운' 실루엣으로
+        // 읽혔다. 2026-09-15 사용자 판정. 0.8은 획의 딱딱함만 덜어내는 정도)
         body.move(to: shoulder)
         body.addQuadCurve(
             to: hip,
-            control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 2.5, y: (shoulder.y + hip.y) / 2)
+            control: CGPoint(x: (shoulder.x + hip.x) / 2 - dir * 0.8, y: (shoulder.y + hip.y) / 2)
         )
         // 다리 둘 — 힙→무릎→발 (round join이 관절)
         body.move(to: hip)

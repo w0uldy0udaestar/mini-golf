@@ -33,6 +33,7 @@ final class GameScene: SKScene {
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var demoTrademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그 — 트레이드마크 관찰용
+    var demoClubId: String? // --club ID: 홀 시작 클럽 지정(DR·7I·SW·PT…) — 클럽별 어드레스 관찰용
     var surpriseCursor = 0
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
@@ -329,6 +330,9 @@ final class GameScene: SKScene {
         // 티샷 기본 클럽: 파4·5 드라이버, 파3 7번 아이언 (관례 — 2026-08-15 사용자 요청. ←→ 변경 자유)
         let teeClub = hole.par == 3 ? "7I" : "DR"
         clubIdx = ClubTable.all.firstIndex { $0.id == teeClub } ?? 0
+        if let id = demoClubId, let i = ClubTable.all.firstIndex(where: { $0.id == id }) {
+            clubIdx = i // 관찰용 클럽 고정
+        }
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
         if demoPickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
             let x = hole.holeX - 1.2 * (hole.holeX >= hole.teeX ? 1 : -1)

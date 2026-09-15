@@ -175,6 +175,8 @@ struct SwingKeyframes {
     /// 상쇄).
     /// 샤프트 각(톱·피니시)은 영상 검출이 불안정해 선수 특징 기반 수치: 로리 톱 평행 초과·타이거 평행·브라이슨 3/4,
     /// 피니시는 로리·타이거 감김(270) vs 브라이슨 홀드오프(300). 템포 일부 추정(브라이슨 빠름). 웨지는 아이언 세트 공용.
+    /// 백스윙(p2·p4) headDx는 ≥ +1로 클램프 — 실측은 타이거 아이언 톱 −5.2·브라이슨 드라이버 톱 −5.8였으나 어깨가 뒤로 기운 위에
+    /// 머리까지 뒤면 '부자연스럽게 뒤로 쏠린 어드레스'로 읽혔다 (2026-09-15 사용자 판정, 조준 프리뷰 heightPct 0.6에서).
     static let roryDriver = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -8.4, handA: 8.9, handD: 34, clubA: 12, heel: 0.0, headDx: 6.3),
         p2: Pose(hipDx: 0.2, tilt: -9.0, handA: -71.5, handD: 34, clubA: -110, heel: 0.0, headDx: 9.4),
@@ -187,7 +189,7 @@ struct SwingKeyframes {
 
     static let tigerDriver = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -17.9, handA: 17.1, handD: 34, clubA: 12, heel: 0.0, headDx: 4.9),
-        p2: Pose(hipDx: -0.1, tilt: -22.7, handA: -26.8, handD: 30, clubA: -110, heel: 0.0, headDx: -0.2),
+        p2: Pose(hipDx: -0.1, tilt: -22.7, handA: -26.8, handD: 30, clubA: -110, heel: 0.0, headDx: 1.0),
         p4: Pose(hipDx: 2.7, tilt: -30.2, handA: -118.9, handD: 20.6, clubA: -268, heel: 0.0, headDx: 7.0),
         p7: Pose(hipDx: 6.6, tilt: -31.8, handA: 31.7, handD: 34, clubA: 6, heel: 1.0, headDx: -1.8),
         p8: Pose(hipDx: 6.8, tilt: -30.9, handA: 70, handD: 31.8, clubA: 125, heel: 0.0, headDx: 1.6),
@@ -204,9 +206,9 @@ struct SwingKeyframes {
             handD: 34,
             clubA: -85,
             heel: 0.0,
-            headDx: -1.5
+            headDx: 1.0
         ), // 손목 힌지 19° — 싱글 플레인 스윕(트레이드마크)
-        p4: Pose(hipDx: -0.2, tilt: -9.1, handA: -119.4, handD: 17, clubA: -235, heel: 0.0, headDx: -5.8),
+        p4: Pose(hipDx: -0.2, tilt: -9.1, handA: -119.4, handD: 17, clubA: -235, heel: 0.0, headDx: 1.0),
         p7: Pose(hipDx: 0.4, tilt: -16.8, handA: 29.1, handD: 34, clubA: 6, heel: 1.0, headDx: 0.6),
         p8: Pose(hipDx: 1.3, tilt: -21.2, handA: 86.0, handD: 34, clubA: 125, heel: 0.0, headDx: 2.3),
         p10: Pose(hipDx: 2.9, tilt: -19.6, handA: 153.3, handD: 28, clubA: 300, heel: 5.6, headDx: 13.5),
@@ -225,8 +227,8 @@ struct SwingKeyframes {
 
     static let tigerIron = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -16.7, handA: 16.0, handD: 34, clubA: 12, heel: 0.0, headDx: 2.5),
-        p2: Pose(hipDx: -0.7, tilt: -21.6, handA: -50.6, handD: 32.9, clubA: -110, heel: 0.0, headDx: 1.5),
-        p4: Pose(hipDx: -0.3, tilt: -20.0, handA: -146.3, handD: 24.0, clubA: -262, heel: 0.0, headDx: -5.2),
+        p2: Pose(hipDx: -0.7, tilt: -21.6, handA: -50.6, handD: 32.9, clubA: -110, heel: 0.0, headDx: 3.0),
+        p4: Pose(hipDx: -0.3, tilt: -20.0, handA: -146.3, handD: 24.0, clubA: -262, heel: 0.0, headDx: 2.0),
         p7: Pose(hipDx: 7.5, tilt: -31.5, handA: 29.7, handD: 34, clubA: 6, heel: 1.0, headDx: 0.8),
         p8: Pose(hipDx: 11.3, tilt: -30.4, handA: 95, handD: 30.2, clubA: 125, heel: 1.3, headDx: 6.2),
         p10: Pose(hipDx: 9.7, tilt: -17.7, handA: 200, handD: 21.5, clubA: 270, heel: 11.3, headDx: 11.9),
@@ -236,7 +238,7 @@ struct SwingKeyframes {
     static let brysonIron = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -7.8, handA: 8.4, handD: 34, clubA: 12, heel: 0.0, headDx: 3.5),
         p2: Pose(hipDx: 0.2, tilt: -4.9, handA: -93.5, handD: 34, clubA: -110, heel: 0.9, headDx: 2.3),
-        p4: Pose(hipDx: 5.2, tilt: -2.4, handA: -102.0, handD: 27.3, clubA: -230, heel: 0.0, headDx: -0.3),
+        p4: Pose(hipDx: 5.2, tilt: -2.4, handA: -102.0, handD: 27.3, clubA: -230, heel: 0.0, headDx: 1.0),
         p7: Pose(hipDx: 5.5, tilt: -15.5, handA: 18.6, handD: 34, clubA: 6, heel: 1.4, headDx: 4.2),
         p8: Pose(hipDx: 0.7, tilt: -5.9, handA: 83.1, handD: 30.1, clubA: 125, heel: 1.2, headDx: 8.2),
         p10: Pose(hipDx: -2.0, tilt: -8.7, handA: 200, handD: 20.2, clubA: 300, heel: 0.9, headDx: 13.3),
