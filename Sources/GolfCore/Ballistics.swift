@@ -59,6 +59,49 @@ public struct BallState: Sendable {
     }
 }
 
+/// 공 종류 (2026-09-16 서프라이즈 2차 '공 바꿔치기') — 다음 한 샷만 물리 계수가 바뀐다.
+/// 고무공: 반발이 커서 착지 뒤에도 계속 튄다 · 볼링공: 무거워 공기력이 거의 안 먹고(안 뜸) 둔탁하게 떨어져 짧게 구른다.
+/// 계수는 기존 물리에 배율로만 얹는다 — 표준 공은 전부 1이라 회귀 없음
+public enum BallKind: String, Sendable, CaseIterable {
+    case standard, rubber, bowling
+
+    /// 바운스 반발 배율 (Surface.restitution에 곱한다, 결과는 0.85로 클램프)
+    public var restitutionScale: Double {
+        switch self {
+        case .standard: 1
+        case .rubber: 2.6
+        case .bowling: 0.35
+        }
+    }
+
+    /// 공기력 배율 (Phys.q = 0.5·ρ·A/m 에 곱한다 — 질량이 크면 항력·양력 모두 줄어든다).
+    /// ⚠️ 클럽 파워가 항력 모델 전제로 튜닝돼 있어 공기력을 0에 가깝게 빼면 오히려 더 멀리 간다(실측 351m > 306m) —
+    /// '안 뜸'은 발사 속도(launchScale)가 만들고, 여기서는 양력만 덜 먹게 한다
+    public var aeroScale: Double {
+        switch self {
+        case .standard: 1
+        case .rubber: 1.15
+        case .bowling: 0.55
+        }
+    }
+
+    /// 굴림 감속 배율 — 볼링공은 잔디에 박혀 금방 선다
+    public var rollScale: Double {
+        switch self {
+        case .standard, .rubber: 1
+        case .bowling: 1.6
+        }
+    }
+
+    /// 발사 속도 배율 — 무거운 공은 클럽페이스에서 느리게 떠난다 (충돌 운동량 보존: 질량비가 크면 공 속도가 크게 준다)
+    public var launchScale: Double {
+        switch self {
+        case .standard, .rubber: 1
+        case .bowling: 0.5
+        }
+    }
+}
+
 /// 스텝 결과 이벤트 — holed/water는 종결, 나머지는 연출(사운드·이펙트)용 신호
 public enum StepEvent: Sendable, Equatable {
     case none
@@ -82,7 +125,7 @@ public struct Bumper: Sendable, Equatable {
         self.h = h
     }
 
-    func contains(_ px: Double, _ py: Double) -> Bool {
+    public func contains(_ px: Double, _ py: Double) -> Bool {
         px > x && px < x + w && py > y && py < y + h
     }
 }
@@ -100,11 +143,13 @@ public enum Ballistics {
         dir: Double,
         mishit: Double = 0,
         punch: Double = 0,
-        slope: Double = 0
+        slope: Double = 0,
+        kind: BallKind = .standard
     ) {
         // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
         var v0 = club.power * lie.powerFactor * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
+        v0 *= club.isPutter ? 1 : kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다 — 퍼터는 면제 (0.16x '죽은 샷' 방지, 리뷰 m4)
         let slopeDeg = abs(atan(slope)) * 180 / .pi
         v0 *= 1 - min(0.12, 0.006 * slopeDeg) // 경사 라이 스피드 손실 (~0.6%/도, 실측 — 3eccc4f 복원)
         let loft = max(
@@ -211,8 +256,10 @@ public enum Ballistics {
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다.
     /// bumpers: 창 범퍼 모드의 앱 창 사각형들 (비행 중에만 반사 — 240Hz 스텝이라 터널링 없음)
     /// wind: 바람 덮어쓰기(m/s) — 돌풍 서프라이즈가 비행 중 잠시 넘긴다 (nil이면 홀 바람)
+    /// kind: 공 종류 — 공 바꿔치기 서프라이즈의 고무공·볼링공 (표준은 배율 전부 1)
     public static func step(
-        _ b: inout BallState, hole: Hole, bumpers: [Bumper] = [], dt: Double = Phys.dt, wind: Double? = nil
+        _ b: inout BallState, hole: Hole, bumpers: [Bumper] = [], dt: Double = Phys.dt, wind: Double? = nil,
+        kind: BallKind = .standard
     ) -> StepEvent {
         var ev = StepEvent.none
         switch b.phase {
@@ -227,8 +274,9 @@ public enum Ballistics {
             let spinRatio = min(Phys.ballRadius * omega / v, Phys.spinRatioMax)
             let cl = min(Phys.clMax, Phys.clBase + Phys.clSlope * spinRatio)
             // 항력(상대속도 반대) + 마그누스 양력(상대속도 수직, 백스핀=위) + 중력
-            let ax = -Phys.q * Phys.cd * v * rvx + Phys.q * cl * v * -b.vy * b.spinSign
-            let ay = -Phys.g - Phys.q * Phys.cd * v * b.vy + Phys.q * cl * v * rvx * b.spinSign
+            let q = Phys.q * kind.aeroScale // 볼링공은 무거워 공기력이 거의 안 먹는다
+            let ax = -q * Phys.cd * v * rvx + q * cl * v * -b.vy * b.spinSign
+            let ay = -Phys.g - q * Phys.cd * v * b.vy + q * cl * v * rvx * b.spinSign
             let prevX = b.x, prevY = b.y
             b.vx += ax * dt
             b.vy += ay * dt
@@ -267,7 +315,7 @@ public enum Ballistics {
                     ev = .bounce(speed: -vn, surface: surfType)
                     var vt = b.vx * tx + b.vy * ty
                     // 속도 의존 반발 — 강한 낙하일수록 잔디에 파묻힌다
-                    let e = surfType.restitution * (1 - min(0.55, -vn / 60))
+                    let e = min(0.85, surfType.restitution * kind.restitutionScale * (1 - min(0.55, -vn / 60)))
                     // 접지점 상대속도로 구름/미끄러짐 판정. 구름이면 (5/7, 2/7) 각운동량 보존 해 —
                     // 릴리스·체크·백업 세 상태가 추가 튜닝 없이 이 식에서 저절로 나온다 (Biber 2023)
                     var w = Phys.ballRadius * b.spin * .pi / 30 * b.spinSign // 스핀 표면속도 (백스핀 +)
@@ -309,7 +357,7 @@ public enum Ballistics {
             }
             let s = hole.slope(at: b.x)
             b.vx -= Phys.g * s * 0.85 * dt // 경사 중력: 그린 브레이크의 원천
-            let dv = surfType.roll * dt
+            let dv = surfType.roll * kind.rollScale * dt
             if abs(b.vx) <= dv {
                 b.vx = 0
             } else {

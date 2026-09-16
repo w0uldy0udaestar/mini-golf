@@ -756,6 +756,74 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertEqual(a.spin, b.spin)
     }
 
+    // ── 공 바꿔치기 (BallKind) ──
+
+    /// 평지 풀샷을 공 종류별로 시뮬레이션 → (총거리, 첫 착지 뒤 최고점, 바운스 횟수, 종결 여부)
+    private func simulateKind(_ kind: BallKind, club id: String = "7I")
+        -> (total: Double, reboundApex: Double, bounces: Int, rested: Bool) {
+        let hole = Hole.flatTest()
+        var b = BallState(x: 50, y: 0)
+        Ballistics.launch(&b, club: club(id), heightPct: 1, lie: .fairway, dir: 1, kind: kind)
+        var bounces = 0
+        var reboundApex = 0.0
+        var t = 0.0
+        while b.phase != .rest, t < 60 {
+            if case .bounce = Ballistics.step(&b, hole: hole, kind: kind) {
+                bounces += 1
+            }
+            if bounces >= 1 {
+                reboundApex = max(reboundApex, b.y)
+            }
+            t += Phys.dt
+        }
+        return (b.x - 50, reboundApex, bounces, b.phase == .rest)
+    }
+
+    func testStandardKindIsIdentity() {
+        let a = simulate(club: club("7I"))
+        let k = simulateKind(.standard)
+        XCTAssertEqual(a.total, k.total, accuracy: 1e-9, "표준 공은 kind 기본값과 동일해야 한다")
+    }
+
+    func testRubberBallReboundsHigherAndMore() {
+        let std = simulateKind(.standard)
+        let rubber = simulateKind(.rubber)
+        XCTAssertGreaterThan(rubber.reboundApex, std.reboundApex * 2, "고무공은 첫 착지 뒤 훨씬 높게 튀어야 한다")
+        XCTAssertGreaterThan(rubber.bounces, std.bounces, "고무공은 더 여러 번 튄다")
+        XCTAssertTrue(rubber.rested, "고무공도 60초 안에 멈춰야 한다")
+    }
+
+    func testBowlingBallFliesShortAndStops() {
+        let std = simulateKind(.standard, club: "DR")
+        let bowl = simulateKind(.bowling, club: "DR")
+        XCTAssertLessThan(bowl.total, std.total * 0.6, "볼링공 드라이버는 표준의 60% 미만이어야 한다")
+        XCTAssertLessThan(bowl.reboundApex, 0.6, "볼링공은 거의 안 튄다")
+        XCTAssertTrue(bowl.rested, "볼링공도 60초 안에 멈춰야 한다")
+    }
+
+    // ── 핀 이동 ──
+
+    func testMovingPinStaysOnGreenAndKeepsEverythingElse() {
+        for seed: UInt32 in [1, 7, 42] {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                let far = h.movingPin(to: h.greenEnd + 50) // 그린 밖 요청은 클램프
+                XCTAssertEqual(h.surface(at: far.holeX), .green)
+                XCTAssertLessThanOrEqual(far.holeX, h.greenEnd - 1.5)
+                let near = h.movingPin(to: h.greenStart - 50)
+                XCTAssertGreaterThanOrEqual(near.holeX, h.greenStart + 1.5)
+                XCTAssertEqual(far.par, h.par)
+                XCTAssertEqual(far.dist, h.dist)
+                XCTAssertEqual(far.worldW, h.worldW)
+                XCTAssertEqual(far.teeX, h.teeX)
+                XCTAssertEqual(far.wind, h.wind)
+                XCTAssertEqual(far.segments.count, h.segments.count)
+                XCTAssertEqual(far.elevation, h.elevation)
+                XCTAssertEqual(far.waterRange, h.waterRange)
+                XCTAssertEqual(far.obstacles.count, h.obstacles.count)
+            }
+        }
+    }
+
     // ── 결정론 ──
 
     func testCourseGenerationIsDeterministic() {

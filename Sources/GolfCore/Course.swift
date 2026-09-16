@@ -119,6 +119,19 @@ public struct Hole: Sendable {
         ground(at: x + 0.5) - ground(at: x - 0.5)
     }
 
+    /// 핀 이동 서프라이즈 — 컵만 그린 안 다른 자리로 옮긴 사본. 지형·세그먼트·파·거리는 그대로
+    /// (par는 홀 전장 기준이라 안 바뀐다). 그린 밖으로는 못 옮긴다 (클램프)
+    public func movingPin(to x: Double) -> Hole {
+        let nx = min(max(x, greenStart + 1.5), greenEnd - 1.5)
+        return Hole(
+            par: par, dist: dist, holeX: nx, worldW: worldW,
+            greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
+            segments: segments, elevation: elevation,
+            waterRange: waterRange, greenSlope: greenSlope,
+            teeX: teeX, obstacles: obstacles, signature: signature, wind: wind
+        )
+    }
+
     /// 물리 테스트용 평지 홀
     public static func flatTest(worldW: Double = 10000, holeX: Double = 9999, wind: Double = 0) -> Hole {
         Hole(

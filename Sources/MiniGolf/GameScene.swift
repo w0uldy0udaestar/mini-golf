@@ -49,6 +49,12 @@ final class GameScene: SKScene {
     var napNode: SKNode?
     var catState: CatState?
     var surpriseCursor = 0
+    // ── 서프라이즈 2차 (Surprises2.swift) ──
+    var ballKind = BallKind.standard // 공 바꿔치기: 다음 한 샷만 (샷이 끝나면 표준으로)
+    var tunnelArmed = false // 창 터널: 이 샷의 첫 범퍼 진입을 반사 대신 터널로
+    var tunnelTransit: TunnelTransit? // 창 속을 지나는 중 — 비행 물리 정지
+    var galleryState: GalleryState?
+    var demoBumperFracs: [[Double]] = [] // --demo-bumpers: 창이 없는 관찰 환경용 합성 범퍼 (화면 비율 x,y,w,h)
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
     private var demoWait = 0.0
@@ -163,9 +169,9 @@ final class GameScene: SKScene {
     private var idleKind = 0
     private var idleStart = 0.0
     var stickX = CourseGenerator.teeX
-    private var trailPoints: [CGPoint] = []
+    var trailPoints: [CGPoint] = [] // Surprises2(창 터널)가 진입점에서 끊는다
     private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
-    private var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정
+    var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정 (Surprises2 창 터널이 읽는다)
     private var shotHitBumper = false // 이 샷에서 범퍼를 맞았나 — 뱅크샷 홀인 배지 판정
     var roundHadWater = false // 무입수 라운드 배지 판정
 
@@ -204,8 +210,8 @@ final class GameScene: SKScene {
     let stickman = StickmanNode()
     let ballNode = SKShapeNode(circleOfRadius: 5.5)
     let shadowNode = SKShapeNode(ellipseOf: CGSize(width: 15, height: 4.5))
-    private let trailNode = SKShapeNode()
-    private let trailUnderNode = SKShapeNode() // 궤적 언더스트로크 (밝은 배경 대비)
+    let trailNode = SKShapeNode()
+    let trailUnderNode = SKShapeNode() // 궤적 언더스트로크 (밝은 배경 대비)
     let flagNode = SKNode()
     private let scoreTitle = GlassLabel(font: HUDFont.medium, size: 17, align: .right, kern: 1.0)
     private let scoreSub = GlassLabel(font: HUDFont.regular, size: 12, alpha: 0.8, align: .right)
@@ -384,6 +390,12 @@ final class GameScene: SKScene {
         } else {
             enterAim()
         }
+    }
+
+    /// 핀 이동 서프라이즈 — 홀을 사본으로 교체하고 지형·컵·깃발을 다시 그린다 (Surprises2)
+    func replaceHole(_ h: Hole) {
+        course[holeIdx] = h
+        rebuildTerrain()
     }
 
     /// 방향 전환 — 렌더 리그를 로컬 미러하고 두 발의 정체를 교환해 화면 위치를 보존한다.
@@ -1058,7 +1070,8 @@ final class GameScene: SKScene {
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
         Ballistics.launch(
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
-            mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope
+            mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
+            kind: ballKind // 공 바꿔치기 (Surprises2)
         )
         shotHitBumper = false
         // 창 범퍼 모드: 샷 순간의 창 배치를 스냅샷 — 이 샷의 비행 동안 고정 범퍼
@@ -1076,16 +1089,21 @@ final class GameScene: SKScene {
         } else {
             shotBumpers = []
         }
-        preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건 스냅샷
+        if demoMode, !demoBumperFracs.isEmpty { // --demo-bumpers: 합성 범퍼 (창 터널 관찰용, 실플레이 경로 아님)
+            shotBumpers = syntheticBumpers()
+            drawSyntheticBumpers()
+        }
+        preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건·갤러리 스냅샷
         strokes += 1
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
             // 골프처럼 한 번의 연속 동작에선 정지가 타격감이 아니라 프레임 드랍으로 보인다)
             ballNode.zRotation = CGFloat(atan2(ball.vy, ball.vx))
-            ballNode.xScale = 1.4
-            ballNode.yScale = 0.72
+            let ks = ballKind.renderScale // 바꿔치기된 공(볼링 1.75·고무 1.15)의 크기를 스쿼시가 1로 덮지 않게 (리뷰 m2)
+            ballNode.xScale = 1.4 * ks
+            ballNode.yScale = 0.72 * ks
             ballNode.run(.sequence([
-                .group([.scaleX(to: 1, duration: 0.14), .scaleY(to: 1, duration: 0.14)]),
+                .group([.scaleX(to: ks, duration: 0.14), .scaleY(to: ks, duration: 0.14)]),
                 .run { [weak self] in self?.ballNode.zRotation = 0 },
             ]))
             stickman.impactSmear()
@@ -1874,7 +1892,7 @@ final class GameScene: SKScene {
             }
         }
 
-        if mode == .motion {
+        if mode == .motion, tunnelTransit == nil { // 창 터널 통과 중엔 비행 물리 정지 (Surprises2)
             acc += dt * timeScale
             var terminal = StepEvent.none
             var landing: (speed: Double, surface: Surface, x: Double)?
@@ -1883,7 +1901,11 @@ final class GameScene: SKScene {
             var lipped = false
             while acc >= Phys.dt {
                 acc -= Phys.dt
-                let event = Ballistics.step(&ball, hole: hole, bumpers: shotBumpers, wind: gustWind) // 돌풍 덮어쓰기
+                let prevX = ball.x, prevY = ball.y
+                let event = Ballistics.step(
+                    &ball, hole: hole, bumpers: tunnelArmed ? [] : shotBumpers, // 터널 무장 중엔 반사 대신 진입 판정 (아래)
+                    wind: gustWind, kind: ballKind // 돌풍 덮어쓰기 · 공 바꿔치기
+                )
                 switch event {
                 case .holed, .water:
                     terminal = event
@@ -1907,9 +1929,17 @@ final class GameScene: SKScene {
                 if terminal != .none {
                     break
                 }
+                if tunnelArmed,
+                   enterTunnelIfInside(prevX: prevX, prevY: prevY) { // 종결(홀인·입수) 뒤에만 — 같은 스텝의 홀인을 삼키지 않게 (리뷰 M1)
+                    break
+                }
             }
             if let l = landing, l.speed > 1.4 {
-                SoundKit.shared.bounce(speed: l.speed, surface: l.surface)
+                if ballKind == .bowling { // 볼링공은 둔탁하게 (Surprises2)
+                    SoundKit.shared.thump()
+                } else {
+                    SoundKit.shared.bounce(speed: l.speed, surface: l.surface)
+                }
                 FX.dust(
                     on: self,
                     at: CGPoint(x: px(l.x), y: groundY(l.x)),
@@ -1940,6 +1970,9 @@ final class GameScene: SKScene {
             if trailPoints.count > 400 {
                 trailPoints.removeFirst()
             }
+            if terminal != .none || ball.phase == .rest { // 샷 종료 한 번 — 갤러리 판정·공 바꿔치기 복귀 (Surprises2)
+                onShotEnded(terminal: terminal)
+            }
             switch terminal {
             case .holed: onHoled()
             case .water:
@@ -1960,8 +1993,13 @@ final class GameScene: SKScene {
                     }
                     if strokes >= Phys.maxStrokes {
                         giveUp()
+                    } else if galleryWantsScene() {
+                        galleryReact() // 갤러리가 지켜본 샷 — 스틱맨 반응이 끝나면 걷기 (Surprises2)
                     } else if let kind = rollSurprise(hook: .ballRest) {
                         playSurprise(kind)
+                        if !kind.ownsScene { // 갤러리처럼 다음 샷 위에 얹히는 종류는 바로 걷는다
+                            startWalk()
+                        }
                     } else {
                         startWalk()
                     }
@@ -2242,7 +2280,7 @@ final class GameScene: SKScene {
 
         // 홀인 드롭·서프라이즈·공 줍기 연출 중에는 SKAction이 공 위치를 갖는다
         let pickupOwns = mode == .ritual && ritualAnim?.kind == .ballPickup
-        if mode != .holed, mode != .surprise, !pickupOwns {
+        if mode != .holed, mode != .surprise, !pickupOwns, tunnelTransit == nil { // 창 속 통과 중엔 공·그림자 숨김 유지
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
             let heightAbove = ball.y - hole.ground(at: ball.x)
             shadowNode.isHidden = heightAbove <= 0.2

@@ -43,28 +43,34 @@ enum SurpriseKind: String, CaseIterable {
     case mulligan // 카드가 팔랑 내려오면 직전 샷을 공짜로 다시 (규칙)
     case nap // 어드레스에서 꾸벅 잠들고, 키를 눌러야 깬다 (스틱맨)
     case cursorCat // 진짜 마우스 커서를 쫓는 고양이 — 공 옆이면 앞발로 툭 (데스크탑)
+    // 2차 (2026-09-16, Surprises2.swift — 계열별 1종)
+    case windowTunnel // 공이 앱 창 속으로 들어가 다른 창에서 나온다 (데스크탑)
+    case pinMove // 깃발이 다리를 내고 그린 위를 걸어가 컵이 옮겨진다 (규칙)
+    case ballSwap // 택배 상자에서 고무공·볼링공 — 다음 한 샷만 물리가 다르다 (물리)
+    case gallery // 관중이 몰려와 다음 샷을 보고 환호·박수·야유 (스틱맨)
+    case geese // 거위 떼가 줄지어 건너다 한 마리가 공 위에 앉는다 (생물)
 
     var tier: SurpriseTier {
         switch self {
-        case .birdSteal, .moleNudge, .nap: .common
-        case .frogRescue, .gust, .mulligan: .rare
-        case .cursorCat: .epic
+        case .birdSteal, .moleNudge, .nap, .gallery, .geese: .common
+        case .frogRescue, .gust, .mulligan, .pinMove, .ballSwap: .rare
+        case .cursorCat, .windowTunnel: .epic
         }
     }
 
     var hook: SurpriseHook {
         switch self {
-        case .birdSteal, .moleNudge, .mulligan, .cursorCat: .ballRest
-        case .gust: .inFlight
+        case .birdSteal, .moleNudge, .mulligan, .cursorCat, .pinMove, .ballSwap, .gallery, .geese: .ballRest
+        case .gust, .windowTunnel: .inFlight
         case .nap: .aimIdle
         case .frogRescue: .water
         }
     }
 
-    /// 씬을 점유하는가 (mode = .surprise, 끝나면 걷기). 돌풍·낮잠은 비행·조준 위에 얹힌다
+    /// 씬을 점유하는가 (mode = .surprise, 끝나면 걷기). 돌풍·낮잠·창 터널·갤러리는 비행·조준·다음 샷 위에 얹힌다
     var ownsScene: Bool {
         switch self {
-        case .gust, .nap: false
+        case .gust, .nap, .windowTunnel, .gallery: false
         default: true
         }
     }
@@ -133,6 +139,14 @@ extension GameScene {
             return mouseInScene() != nil
         case .frogRescue: // 마지막 타에 빠진 공까지 구해 주진 않는다 (onWater는 즉시 기권)
             return strokes + 1 < Phys.maxStrokes
+        case .windowTunnel: // 지날 창이 있어야 한다 (범퍼 모드 켜짐 + 샷 순간 스냅샷)
+            return Theme.windowBumpers && !shotBumpers.isEmpty
+        case .pinMove: // 옮길 만한 그린 폭 + 아직 먼 거리 (옮겨도 티가 나야 한다)
+            return hole.greenEnd - hole.greenStart >= 12 && abs(hole.holeX - ball.x) > 25
+        case .ballSwap: // 다음 샷이 있고, 그 샷이 의미 있을 만큼 멀 때
+            return strokes + 1 < Phys.maxStrokes && abs(hole.holeX - ball.x) > 30
+        case .gallery: // 지켜볼 샷이 남아 있어야, 이미 와 있으면 안 겹친다
+            return strokes + 1 < Phys.maxStrokes && galleryState == nil
         default:
             return true
         }
@@ -161,6 +175,11 @@ extension GameScene {
         case .mulligan: playMulligan()
         case .nap: startNap()
         case .cursorCat: playCursorCat()
+        case .windowTunnel: playWindowTunnel()
+        case .pinMove: playPinMove()
+        case .ballSwap: playBallSwap()
+        case .gallery: playGallery()
+        case .geese: playGeese()
         }
     }
 
@@ -180,6 +199,7 @@ extension GameScene {
         napIdle = .infinity
         napNode?.removeFromParent()
         napNode = nil
+        cancelSurprises2()
     }
 
     static let surpriseNodeName = "surprise"
@@ -205,6 +225,7 @@ extension GameScene {
         if napping, demoMode, aimTime - napStart >= 2.5 {
             wakeUp() // 관찰 모드는 키가 없으니 스스로 깬다
         }
+        updateSurprises2(currentTime: currentTime)
     }
 
     /// 스틱맨 반응 시작 (예고→사건→**반응**) — 홀아웃 반응과 같은 채널
