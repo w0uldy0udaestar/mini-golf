@@ -96,6 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scene.demoSurpriseKind = k // 특정 서프라이즈를 해당 훅마다 강제 (관찰용)
         }
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
+        if let i = args.firstIndex(of: "--demo-bumpers"), i + 1 < args.count { // "fx,fy,fw,fh;…" 화면 비율 — 창 터널 관찰용 합성 범퍼
+            scene.demoBumperFracs = args[i + 1].split(separator: ";")
+                .map { $0.split(separator: ",").compactMap { Double($0) } }
+        }
         scene.demoTrademarkForce = args.contains("--demo-trademark") // 풀샷마다 굿샷 판정 + 리그 덤프 (트레이드마크 관찰)
         scene.demoBackdrop = args.contains("--demo-bg") // 불투명 배경 — 캡처 판독용 (데스크탑 위 겹침 제거)
         if let i = args.firstIndex(of: "--demo-restart-in"), i + 1 < args.count, let t = Double(args[i + 1]) {

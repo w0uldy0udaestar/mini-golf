@@ -249,6 +249,100 @@ final class SoundKit {
         }
     }
 
+    // ── 서프라이즈 2차 (2026-09-16) ──
+
+    /// 창 터널 예고 — 낮은 웅웅 (두 저음이 맥놀이)
+    func hum() {
+        play(duration: 1.4) { t in
+            let u = t / 1.4
+            return (sin(2 * .pi * 110 * t) + sin(2 * .pi * 113 * t)) * sin(.pi * u) * 0.05
+        }
+    }
+
+    /// 창 터널 진입(up)·출구(down) — 사인 스윕 + 밴드패스 노이즈
+    func warp(up: Bool) {
+        var bp = Biquad.bandpass(900, q: 1.5, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: 0.45) { t in
+            let u = t / 0.45
+            let f = up ? 320 + 1100 * u * u : 1400 - 1100 * u
+            bp.retune(.bandpass, f, q: 1.5, sr: self.sr)
+            let env = sin(.pi * u)
+            return (sin(2 * .pi * f * t) * 0.6 + bp.process(rng.white()) * 1.2) * env * 0.07
+        }
+    }
+
+    /// 깃대가 뽑히는 퉁 — 짧은 현
+    func pluck() {
+        play(duration: 0.22) { t in
+            let f = 520 - 120 * t / 0.22
+            return sin(2 * .pi * f * t) * exp(-t / 0.05) * 0.12
+        }
+    }
+
+    /// 상자 뚜껑 팝 — 짧은 클릭 + 낮은 톡
+    func pop() {
+        var rng = NoiseLCG()
+        play(duration: 0.12) { t in
+            rng.white() * exp(-t / 0.006) * 0.25 + sin(2 * .pi * 240 * t) * exp(-t / 0.03) * 0.18
+        }
+    }
+
+    /// 관중 웅성거림 — 로우패스 노이즈가 느리게 일렁인다
+    func murmur() {
+        var lp = Biquad.lowpass(700, q: 0.8, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: 1.6) { t in
+            let u = t / 1.6
+            let wobble = 0.6 + 0.4 * sin(2 * .pi * 3.3 * t) * sin(2 * .pi * 1.1 * t)
+            return lp.process(rng.white()) * wobble * sin(.pi * u) * 0.11
+        }
+    }
+
+    /// 환호 — 노이즈 스웰 위에 상승 화음
+    func cheer() {
+        var bp = Biquad.bandpass(1200, q: 0.7, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: 1.1) { t in
+            let u = t / 1.1
+            let rise = 1 + 0.12 * u
+            let chord = sin(2 * .pi * 440 * rise * t) + sin(2 * .pi * 554 * rise * t) + sin(2 * .pi * 659 * rise * t)
+            let env = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85
+            return (bp.process(rng.white()) * 1.6 + chord * 0.12) * env * 0.09
+        }
+    }
+
+    /// 박수 — 클릭 다섯 번
+    func clap() {
+        var rng = NoiseLCG()
+        var bp = Biquad.bandpass(2200, q: 1.0, sr: sr)
+        play(duration: 0.95) { t in
+            let tt = t.truncatingRemainder(dividingBy: 0.19)
+            return bp.process(rng.white()) * exp(-tt / 0.012) * (1 - t / 0.95) * 0.22
+        }
+    }
+
+    /// 야유 — 낮게 내려가는 우우
+    func groan() {
+        play(duration: 0.8) { t in
+            let u = t / 0.8
+            let f = 230 - 80 * u
+            let tone = sin(2 * .pi * f * t) + 0.4 * sin(2 * .pi * f * 2 * t) + 0.2 * sin(2 * .pi * f * 3.01 * t)
+            return tone * sin(.pi * u) * 0.05
+        }
+    }
+
+    /// 거위 꽥 — 콧소리 나는 톱니 두 음
+    func honk() {
+        play(duration: 0.3) { t in
+            let u = t / 0.3
+            let f = 300 + 40 * sin(2 * .pi * 9 * t) - 60 * u
+            let saw = 2 * (f * t - floor(f * t + 0.5))
+            let sq = sin(2 * .pi * f * 2 * t) > 0 ? 0.3 : -0.3
+            return (saw * 0.7 + sq) * sin(.pi * u) * 0.06
+        }
+    }
+
     // ── 합성 ──
 
     private func play(duration: Double, _ sample: (Double) -> Double) {
