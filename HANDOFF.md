@@ -1,11 +1,12 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-16 — v0.6.0 릴리스 완료: 서프라이즈 개편 1차 + 모션 GIF 재캡처. 플레이 판정 대기)
+## 현재 상태 (2026-09-16 — 서프라이즈 2차 main 머지 완료(9cf5572). v0.7.0 미배포, 플레이 판정 대기)
 
-스틱맨 리그 개편(①②③④)·프로 스윙 스타일 3종(1.3배→2.5배 과장)에 이어 **선수 트레이드마크 연출**을
-`feature/swing-trademarks`에 구현하고 Code Reviewer(minor 3·nit 3, critical 0) 반영 후 main에 머지했다. 정면 2D 키포인트가 못 잡는 특징을 키프레임 밖 연출로 넣은 것이고
-물리는 동일하다. 각 단계는 build·lint·test(52) + `--demo-trademark` 리그 덤프 → 프레임 시트로 검증했다.
-이해도 확인 페이지(아티팩트): https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
+v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
+minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
+거위 떼(생물·common). 종류는 12개가 됐지만 라운드 상한 5는 그대로. 검증: build 경고 0·lint·test 56(신규 4) + `--demo --surprise KIND`
+강제 발동 프레임 캡처 5종 + `--demo-restart-in` 인터럽트 3종. `make app`으로 dist/MiniGolf.app 재빌드됨(미서명 로컬용).
+이해도 확인 페이지(1차 설계 아티팩트, 5절이 서프라이즈): https://claude.ai/code/artifact/a235d28e-bc9c-47e9-9c22-111744b4ff2a
 
 - [x] ③ 관절 뼈대 — `GolfCore/TwoBoneIK`(Juckett 해석해+pole+tanh 소프트닝) + `MiniGolf/Skeleton`
       (점 리그 유지, 렌더 직전 뼈 길이 강제: 몸통 25·팔 17.5+17.5·다리 23.25+23.25). 의식 2종 재작성
@@ -62,6 +63,27 @@
       (고양이·새·멀리건 도중 새 라운드 → 티에서 정상 시작·CAT 중단), 무강제 170s 라운드 14샷에 돌풍 1회·OUTBOUND 0
 - [ ] ⑤ 사용자 플레이 판정 대기 — 확률(공 정지 8%·비행 6%·워터 40%·방치 60%)과 등급 상한은 실플레이 감으로 조정.
       미검증 경로: 실제 키 입력 기상(합성 키 금지 — 사용자 플레이로만), 일시정지 중 SKAction 기반 서프라이즈는 계속 재생(기존 패턴)
+- [x] **⑥ 서프라이즈 2차** (`feature/surprises-2` 643fd1a + 리뷰 반영 0dc7ec3 → 머지 9cf5572, 카탈로그 docs/surprises.md, 코드
+      `Sources/MiniGolf/Surprises2.swift`): 창 터널(무장 샷의 첫 창 진입을 반사 대신 삼켜 진행 방향 가장 먼 창 반대편에서 같은 속도로
+      재출발, 통과 중 물리 정지·궤적 잔상) · 핀 이동(깃발이 다리 내고 그린 끝까지 걸어가 `Hole.movingPin` 사본 + `replaceHole`→지형
+      재빌드) · 공 바꿔치기(`BallKind` 고무/볼링 — launch/step 배율, 다음 샷 종료 시 `onShotEnded`에서 복귀) · 갤러리(관중 4명이 다음 샷을
+      보고 환호/박수/야유, 공 정지 샷이면 씬 1.7s 점유) · 거위 떼(홀 쪽에서 줄지어 와 둘째가 공 위에 앉고 흩어지며 알 잔류).
+      공통: `onShotEnded(terminal:)`·`afterSurprise(delay)` 타이머 노드(씬에 직접 run 금지 — 1차 M2 함정)·`cancelSurprises2()`.
+      효과음 9종. 리뷰 반영: 터널 진입을 종결 이벤트 뒤로(M1)·예고 깃발 흔들림 대상·스쿼시가 kind 스케일 유지·갤러리 퇴장/도착 전 스냅·
+      퍼터 launchScale 면제·잔상 언더스트로크 제외·무산 터널 카운트 반환·그린 안착 환호 우선.
+      **교훈**: 클럽 파워가 항력 전제로 튜닝돼 있어 볼링공 '안 뜸'을 공기력 제거로 만들면 오히려 351m > 306m — 발사 속도(0.5)로 만든다.
+      수용한 잔여: 일시정지 중 터널 통과 타이머 벽시계 만료(돌풍과 같은 패턴, 0.3~1.3s) · 볼링공 퍼팅은 굴림 ×1.6만 적용
+- [ ] ⑥ 사용자 플레이 판정 대기 — 2차 5종의 강도·빈도(터널은 창 범퍼 켜짐+창 존재 시 라운드 1회, 핀은 그린 폭만큼, 공 바꿔치기는
+      >30m에서만). 실제 창으로 터널을 보려면 화면에 중간 크기 창을 둔 채 풀샷. 판정 뒤 v0.7.0 릴리스(Makefile VERSION 0.6.0→0.7.0 ·
+      CHANGELOG v0.7.0(미배포) 확정 · `make zip` · gh release · tap)
+
+### 서프라이즈 관찰 도구 (2026-09-16)
+
+`--demo --demo-bg --surprise KIND [--seed N] [--demo-bumpers "fx,fy,fw,fh;…"] [--demo-restart-in T]`. 로그 `SURPRISE kind`·`TUNNEL armed/in/out`·
+`PIN old → new`·`BALLKIND kind`·`GALLERY verdict gain/before surface`·`GEESE scatter`. 캡처는 스크래치패드 `capture_surprise.py`(세션 한정 —
+데모 stdout의 트리거 prefix마다 `screencapture -x -C` 연사 → `sips -Z 1600`, pid로 종료). **⚠️ 화면에 실제 앱 창이 있으면 창 범퍼가
+데모 샷을 되받아쳐(BUMPER-HIT) 관찰이 오염된다** — 터널 외 관찰은 `--demo-bumpers "0.995,0.995,0.003,0.003"`(구석의 티끌 범퍼)로 실제
+창 스냅샷을 대체할 것. 터널 관찰은 `"0.3,0.28,0.1,0.3;0.6,0.33,0.08,0.28"`(공 궤적이 지나는 높이).
 
 ### 트레이드마크 관찰 도구 (2026-09-15)
 
@@ -132,8 +154,8 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 ## 실행·관찰
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
-플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--demo-pickup` `--demo-trip` `--demo-idle`
-`--screen N` `--seed N` `--hat` `--demo-records`
+플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
+`--demo-idle` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
