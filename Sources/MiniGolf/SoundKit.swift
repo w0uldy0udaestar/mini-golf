@@ -332,6 +332,18 @@ final class SoundKit {
         }
     }
 
+    /// 한숨 — 로우패스 노이즈가 내려앉는다 (좌절 반응)
+    func sigh() {
+        var lp = Biquad.lowpass(900, q: 0.7, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: 0.7) { t in
+            let u = t / 0.7
+            lp.retune(.lowpass, 900 - 600 * u, q: 0.7, sr: self.sr)
+            let env = u < 0.2 ? u / 0.2 : 1 - (u - 0.2) / 0.8
+            return lp.process(rng.white()) * env * 0.09
+        }
+    }
+
     /// 거위 꽥 — 콧소리 나는 톱니 두 음
     func honk() {
         play(duration: 0.3) { t in

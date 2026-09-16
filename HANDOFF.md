@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-16 — 서프라이즈 2차 main 머지 완료(9cf5572). v0.7.0 미배포, 플레이 판정 대기)
+## 현재 상태 (2026-09-16 — 서프라이즈 2차(9cf5572)·포즈 불변식 테스트(9f42aaa)·QA P1 잔여 3종 main 머지. v0.7.0 미배포, 플레이 판정 대기)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -77,6 +77,13 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       Package.swift). 리그 공간은 공이 원점, 헤드 팁 = 그립 + 길이×(sin φ, −cos φ), 페이스 = 팁 + 카테고리 헤드 길이(headParams 식:
       우드 4.5+0.5w·아이언 len·cos(0.9 로프트)+선폭/2). 실측 표(2026-09-16): 퍼터 어드레스 팁 x = −5.0(3인 동일)·임팩트 −2.5, 풀스윙 페이스
       x는 어드레스 0.4~5.2·임팩트 −1.6~7.7 — 대역 [−7, 7]/[−7, 11], 팁 높이 [−1.5, 6.5]. 백스윙·피니시 유한값 스모크 포함. 테스트 60개
+- [x] **품질 부채 — QA P1 잔여** (`feature/qa-p1-fun`, 2026-08-15 리포트 점검): 해결됨 = P0 밝은 배경(고대비 opt-in 결정+README 팁)·
+      스코어 감정 반응·아이들 모션·P2 문서/LICENSE. 이번에 구현(사용자 선택 3종) = HUD 표고차(`140m ↑6m`, 공→홀컵, 1m 미만 생략) ·
+      좌절 반응(워터·벙커·립아웃 **연속 2회**에 씬 1.6s 점유 + dejected + 한숨 `sigh` + "휴… 또 벙커…", 갤러리가 씬을 점유하면 양보,
+      홀인·정상 정지에 카운트 리셋) · 버디 스트릭(연속 버디 이상 2회부터 홀아웃 토스트 sub에 "버디 스트릭 ×N") · 복귀 인사(**일시정지**
+      5분 이상 뒤 재개 시 조준 중이면 shoo 손 흔들기 + "어서 와" — 포커스 상실은 일시정지가 아니라 홀드 해제만이라 ⛳️ 수동 정지 기준).
+      관찰 `--demo-setback`(모든 샷 좌절 계열)·`--demo-idle --demo-greet`(3s 뒤 정지→1s 재개)·`--demo-pickup`(홀마다 홀인원 → 스트릭).
+      프레임 3종 확인. 남긴 것: 벙커 탈출 힌트(사용자 미선택), 파워 라벨–깃대 겹침(미검증)
 - [ ] ⑥ 사용자 플레이 판정 대기 — 2차 5종의 강도·빈도(터널은 창 범퍼 켜짐+창 존재 시 라운드 1회, 핀은 그린 폭만큼, 공 바꿔치기는
       >30m에서만). 실제 창으로 터널을 보려면 화면에 중간 크기 창을 둔 채 풀샷. 판정 뒤 v0.7.0 릴리스(Makefile VERSION 0.6.0→0.7.0 ·
       CHANGELOG v0.7.0(미배포) 확정 · `make zip` · gh release · tap)
@@ -159,7 +166,7 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
