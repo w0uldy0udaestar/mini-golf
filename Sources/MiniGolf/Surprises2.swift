@@ -21,9 +21,21 @@ struct GalleryState {
     enum Phase { case arriving, watching, reacting, leaving }
     enum Verdict { case cheer, clap, groan }
     let node: SKNode
+    let targets: [CGFloat] // 관중별 관전 자리 x — 도착 전에 샷이 끝나면 여기로 스냅한다 (리뷰 m6)
     var phase: Phase
     var verdict: Verdict?
     var sceneTaken = false // 공이 멈춘 샷이면 스틱맨 반응을 위해 잠깐 씬을 점유한다 (한 번만)
+}
+
+extension BallKind {
+    /// 공 노드 렌더 배율 — applyBallStyle과 임팩트 스쿼시 복원이 같은 값을 써야 한다 (리뷰 m2)
+    var renderScale: CGFloat {
+        switch self {
+        case .standard: 1
+        case .rubber: 1.15
+        case .bowling: 1.75
+        }
+    }
 }
 
 extension GameScene {
@@ -36,6 +48,9 @@ extension GameScene {
     func onShotEnded(terminal: StepEvent) {
         if ballKind != .standard {
             revertBallKind()
+        }
+        if tunnelArmed { // 창을 한 번도 안 지나 무산된 터널 — epic 카운트(라운드 1회)를 돌려준다 (리뷰 n2)
+            surpriseCounts[.windowTunnel] = max(0, surpriseCounts[.windowTunnel, default: 1] - 1)
         }
         tunnelArmed = false
         enumerateChildNodes(withName: Self.tunnelGhostName) { node, _ in
@@ -227,13 +242,13 @@ extension GameScene {
             trailPoints = []
             return
         }
-        for src in [trailUnderNode, trailNode] {
+        for src in [trailUnderNode, trailNode] where !src.isHidden { // 언더스트로크는 고대비 모드에서만 보인다 (리뷰 m5)
             let ghost = SKShapeNode(path: path)
             ghost.name = Self.tunnelGhostName
             ghost.strokeColor = src.strokeColor
             ghost.lineWidth = src.lineWidth
             ghost.lineCap = src.lineCap
-            ghost.zPosition = src.zPosition
+            ghost.zPosition = -0.5 // 라이브 궤적처럼 스틱맨·깃발 아래
             addChild(ghost)
         }
         trailPoints = []
@@ -303,6 +318,7 @@ extension GameScene {
                 .rotate(toAngle: 0.5, duration: 0.1), .rotate(toAngle: -0.5, duration: 0.1),
             ])))
         }
+        let cloth = flagNode.children.last // 깃발 천 — legs를 붙이기 전에 잡아야 한다 (붙인 뒤엔 children.last가 legs, 리뷰 m1)
         flagNode.addChild(legs)
 
         let travelPx = Double(px(newX) - px(oldX))
@@ -318,17 +334,19 @@ extension GameScene {
         plant.timingMode = .easeIn
 
         flagNode.run(.sequence([
-            .run { [weak self] in // 예고: 부르르 ×2
-                guard let self else { return }
-                FX.flagWave(flagNode.children.last ?? flagNode)
+            .run { // 예고: 부르르 ×2 (flagNode 자체를 흔들면 removeAllActions가 이 시퀀스를 지운다)
+                if let cloth {
+                    FX.flagWave(cloth)
+                }
                 SoundKit.shared.pluck()
             },
             .wait(forDuration: 0.55),
             .run { [weak self] in
-                guard let self else { return }
-                FX.flagWave(flagNode.children.last ?? flagNode)
+                if let cloth {
+                    FX.flagWave(cloth)
+                }
                 SoundKit.shared.pluck()
-                toast("핀이…?", sub: nil)
+                self?.toast("핀이…?", sub: nil)
             },
             .wait(forDuration: 0.6),
             .run { [weak self] in
@@ -449,7 +467,7 @@ extension GameScene {
             ballNode.lineWidth = 1.2
             ballNode.strokeColor = Theme.highContrast ? NSColor(white: 0, alpha: 0.4) : .clear
         case .rubber:
-            ballNode.setScale(1.15)
+            ballNode.setScale(BallKind.rubber.renderScale)
             ballNode.fillColor = NSColor(white: 0.97, alpha: 1)
             ballNode.lineWidth = 1.2
             ballNode.strokeColor = NSColor(white: 0.45, alpha: 0.9)
@@ -459,7 +477,7 @@ extension GameScene {
             band.name = "kindMark"
             ballNode.addChild(band)
         case .bowling:
-            ballNode.setScale(1.75)
+            ballNode.setScale(BallKind.bowling.renderScale)
             ballNode.fillColor = NSColor(white: 0.3, alpha: 1)
             ballNode.lineWidth = 0.8
             ballNode.strokeColor = NSColor(white: 0.12, alpha: 0.8)
@@ -500,12 +518,14 @@ extension GameScene {
         }
         let base: CGFloat = side == -dir ? 70 : 110
         let edgeX: CGFloat = side < 0 ? -30 : size.width + 30
+        var targets: [CGFloat] = []
         for i in 0 ..< count {
             let s = makeSpectator(variant: i)
             let targetX = ballPx + CGFloat(side) * (base + CGFloat(i) * 30)
+            targets.append(targetX)
             let startX = side < 0 ? max(edgeX, targetX - 420) : min(edgeX, targetX + 420)
             s.position = CGPoint(x: startX, y: groundY(Double(startX) / Double(pxPerM)))
-            s.xScale = side < 0 ? 1 : -1 // 스틱맨 쪽을 본다
+            s.xScale = (side < 0 ? 1 : -1) * abs(s.xScale) // 스틱맨 쪽을 본다 — setScale의 키 다양성은 유지 (리뷰 n1)
             node.addChild(s)
             let dur = Double(abs(targetX - startX)) / 140 + Double(i) * 0.15
             s.run(.sequence([
@@ -517,7 +537,7 @@ extension GameScene {
             ]))
         }
         addChild(node)
-        galleryState = GalleryState(node: node, phase: .arriving, verdict: nil)
+        galleryState = GalleryState(node: node, targets: targets, phase: .arriving, verdict: nil)
         SoundKit.shared.murmur()
         toast("갤러리가 모였다", sub: "다음 샷을 지켜본다")
         afterSurprise(2.8) { [weak self] in
@@ -540,15 +560,21 @@ extension GameScene {
         let verdict: GalleryState.Verdict = switch terminal {
         case .holed: .cheer
         case .water: .groan
-        default: surface == .bunker || gain < 0.15 * before ? .groan
-            : surface == .green || gain >= 0.5 * before ? .cheer : .clap
+        default: surface == .green ? .cheer // 그린에 올리면 짧아도 환호 (리뷰 n4)
+            : surface == .bunker || gain < 0.15 * before ? .groan
+            : gain >= 0.5 * before ? .cheer : .clap
         }
+        let arriving = g.phase == .arriving
         g.phase = .reacting
         g.verdict = verdict
         galleryState = g
         for (i, s) in g.node.children.enumerated() {
             s.removeAllActions()
             s.zRotation = 0
+            if arriving, i < g.targets.count { // 도착 전에 샷이 끝났으면 관전 자리로 스냅 — 걷던 자리·홉 오프셋에 얼어붙지 않게 (리뷰 m6)
+                let tx = g.targets[i]
+                s.position = CGPoint(x: tx, y: groundY(Double(tx) / Double(pxPerM)))
+            }
             let armL = s.childNode(withName: "armL"), armR = s.childNode(withName: "armR")
             let head = s.childNode(withName: "head")
             switch verdict {
@@ -616,15 +642,17 @@ extension GameScene {
         g.phase = .leaving
         galleryState = g
         let node = g.node
+        var longest = 0.0
         for (i, s) in node.children.enumerated() {
             s.removeAllActions()
             let x0 = s.position.x
             let edgeX: CGFloat = x0 < size.width / 2 ? -40 : size.width + 40
-            s.xScale = edgeX < x0 ? 1 : -1
+            s.xScale = (edgeX < x0 ? 1 : -1) * abs(s.xScale)
             let dur = Double(abs(edgeX - x0)) / 150 + Double(i) * 0.12
+            longest = max(longest, dur)
             s.run(groundWalk(from: x0, to: edgeX, dur: dur))
         }
-        afterSurprise(4.0) { [weak self] in
+        afterSurprise(longest + 0.2) { [weak self] in // 고정 4s는 화면 중앙(≈6.7s 걷기)에서 중간 증발 (리뷰 m3)
             node.removeFromParent()
             if self?.galleryState?.node === node {
                 self?.galleryState = nil

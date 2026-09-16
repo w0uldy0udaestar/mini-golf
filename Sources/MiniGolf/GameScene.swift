@@ -1099,10 +1099,11 @@ final class GameScene: SKScene {
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
             // 골프처럼 한 번의 연속 동작에선 정지가 타격감이 아니라 프레임 드랍으로 보인다)
             ballNode.zRotation = CGFloat(atan2(ball.vy, ball.vx))
-            ballNode.xScale = 1.4
-            ballNode.yScale = 0.72
+            let ks = ballKind.renderScale // 바꿔치기된 공(볼링 1.75·고무 1.15)의 크기를 스쿼시가 1로 덮지 않게 (리뷰 m2)
+            ballNode.xScale = 1.4 * ks
+            ballNode.yScale = 0.72 * ks
             ballNode.run(.sequence([
-                .group([.scaleX(to: 1, duration: 0.14), .scaleY(to: 1, duration: 0.14)]),
+                .group([.scaleX(to: ks, duration: 0.14), .scaleY(to: ks, duration: 0.14)]),
                 .run { [weak self] in self?.ballNode.zRotation = 0 },
             ]))
             stickman.impactSmear()
@@ -1905,9 +1906,6 @@ final class GameScene: SKScene {
                     &ball, hole: hole, bumpers: tunnelArmed ? [] : shotBumpers, // 터널 무장 중엔 반사 대신 진입 판정 (아래)
                     wind: gustWind, kind: ballKind // 돌풍 덮어쓰기 · 공 바꿔치기
                 )
-                if tunnelArmed, enterTunnelIfInside(prevX: prevX, prevY: prevY) {
-                    break
-                }
                 switch event {
                 case .holed, .water:
                     terminal = event
@@ -1929,6 +1927,10 @@ final class GameScene: SKScene {
                     break
                 }
                 if terminal != .none {
+                    break
+                }
+                if tunnelArmed,
+                   enterTunnelIfInside(prevX: prevX, prevY: prevY) { // 종결(홀인·입수) 뒤에만 — 같은 스텝의 홀인을 삼키지 않게 (리뷰 M1)
                     break
                 }
             }

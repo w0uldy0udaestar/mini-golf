@@ -149,7 +149,7 @@ public enum Ballistics {
         // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
         var v0 = club.power * lie.powerFactor * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
-        v0 *= kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다
+        v0 *= club.isPutter ? 1 : kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다 — 퍼터는 면제 (0.16x '죽은 샷' 방지, 리뷰 m4)
         let slopeDeg = abs(atan(slope)) * 180 / .pi
         v0 *= 1 - min(0.12, 0.006 * slopeDeg) // 경사 라이 스피드 손실 (~0.6%/도, 실측 — 3eccc4f 복원)
         let loft = max(
