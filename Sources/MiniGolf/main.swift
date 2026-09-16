@@ -86,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
         scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
+        scene.demoSetbackForce = args.contains("--demo-setback") // 모든 샷을 좌절 계열로 (좌절 반응 관찰용)
+        scene.demoGreetForce = args.contains("--demo-greet") // 조준 3s 뒤 일시정지→재개 (포커스 복귀 인사 관찰용, --demo-idle과 함께)
         scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 37종 순서 시연 (카탈로그)
         if let i = args.firstIndex(of: "--motion-cursor"), i + 1 < args.count, let n = Int(args[i + 1]) {
             scene.motionCursor = max(0, n) // 시연을 N번째 모션부터 (부분 재캡처용, 음수 방어)

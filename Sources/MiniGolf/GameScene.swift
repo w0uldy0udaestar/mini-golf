@@ -28,6 +28,9 @@ final class GameScene: SKScene {
     var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
     var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
     var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
+    var demoSetbackForce = false // --demo-setback: 모든 샷을 좌절 계열로 — 좌절 반응 관찰용
+    var demoGreetForce = false // --demo-greet: 조준 3s 뒤 일시정지→1s 뒤 재개, 인사 임계 0 — 포커스 복귀 인사 관찰용
+    var demoGreeted = false
     var demoMotionShowcase = false // --demo-motions: 모션 37종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
@@ -174,6 +177,11 @@ final class GameScene: SKScene {
     var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정 (Surprises2 창 터널이 읽는다)
     private var shotHitBumper = false // 이 샷에서 범퍼를 맞았나 — 뱅크샷 홀인 배지 판정
     var roundHadWater = false // 무입수 라운드 배지 판정
+    // QA P1 재미 3 (2026-09-16): 좌절 반응·버디 스트릭·포커스 복귀 인사
+    var setbackStreak = 0 // 워터·벙커·립아웃 연속 횟수 — 2회째에 좌절 반응
+    var shotLipped = false // 이번 샷에 립아웃이 있었나 (정지 시 좌절 판정)
+    var birdieStreak = 0 // 연속 버디 이상 — 2회부터 홀아웃 토스트에 표시
+    var pausedAt: Date? // 5분 이상 비웠다 돌아오면 손 흔들기
 
     var hole: Hole {
         course[holeIdx]
@@ -348,6 +356,8 @@ final class GameScene: SKScene {
         holeIdx = 0
         results = []
         roundHadWater = false
+        setbackStreak = 0
+        birdieStreak = 0
         surpriseCounts = [:]
         scorecard.hide()
         startHole()
@@ -1074,6 +1084,7 @@ final class GameScene: SKScene {
             kind: ballKind // 공 바꿔치기 (Surprises2)
         )
         shotHitBumper = false
+        shotLipped = false
         // 창 범퍼 모드: 샷 순간의 창 배치를 스냅샷 — 이 샷의 비행 동안 고정 범퍼
         if Theme.windowBumpers, let screen = view?.window?.screen {
             shotBumpers = WindowBumpers.snapshot(
@@ -1160,6 +1171,8 @@ final class GameScene: SKScene {
         // 스코어 감정 계층 (QA·Whimsy 리뷰): 좋은 결과일수록 토스트가 크고, 스틱맨이 반응한다
         let diff = strokes == 1 ? -3 : strokes - hole.par // 홀인원은 최상급 취급
         reactionKind = diff <= -2 ? .rejoice : diff == -1 ? .fistPump : diff == 0 ? .nod : .slump
+        birdieStreak = diff <= -1 ? birdieStreak + 1 : 0 // 연속 버디 이상 (QA P1 재미 3)
+        setbackStreak = 0
         reactionAt = lastTime
         if diff <= -2 { // 이글·홀인원: 홀인음 뒤에 상승 차임이 얹힌다
             run(.sequence([.wait(forDuration: 0.35), .run { SoundKit.shared.chime() }]))
@@ -1170,7 +1183,8 @@ final class GameScene: SKScene {
         }
         toast(
             scoreName(strokes: strokes, par: hole.par),
-            sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m",
+            sub: "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m" +
+                (birdieStreak >= 2 ? " · 버디 스트릭 ×\(birdieStreak)" : ""),
             overFlag: true,
             titleScale: diff <= -2 ? 1.3 : diff == -1 ? 1.12 : diff <= 0 ? 1.0 : 0.88
         )
@@ -1332,8 +1346,38 @@ final class GameScene: SKScene {
         toast("워터 해저드", sub: "+1 벌타 · 드롭")
         if strokes >= Phys.maxStrokes {
             giveUp()
+        } else if noteSetback(true) {
+            playFrustration(reason: nil) // 워터 토스트는 그대로 두고 고개만 푹
         } else {
             startWalk()
+        }
+    }
+
+    /// 좌절 계열(워터·벙커·립아웃) 연속 카운트 — 2회째면 true(좌절 반응 차례)이고 카운트는 리셋된다.
+    /// 홀인·정상 정지는 카운트를 0으로 (QA P1 재미 3, 2026-08-15 Whimsy 리뷰)
+    func noteSetback(_ hit: Bool) -> Bool {
+        guard hit else {
+            setbackStreak = 0
+            return false
+        }
+        setbackStreak += 1
+        guard setbackStreak >= 2 else { return false }
+        setbackStreak = 0
+        return true
+    }
+
+    /// 좌절: 씬을 1.6s 점유하고 한숨과 함께 고개를 푹 떨군다(dejected 재활용) — 그 뒤 걷기
+    func playFrustration(reason: String?) {
+        mode = .surprise
+        react(.dejected)
+        SoundKit.shared.sigh()
+        if let reason {
+            toast("휴…", sub: reason)
+        }
+        afterSurprise(1.6) { [weak self] in self?.finishSurprise() }
+        if demoMode {
+            print("FRUSTRATION \(reason ?? "water")")
+            fflush(stdout)
         }
     }
 
@@ -1393,6 +1437,18 @@ final class GameScene: SKScene {
         pauseLabel.isHidden = !paused
         if paused {
             heldKeys.removeAll()
+            pausedAt = Date()
+        } else if let t = pausedAt { // 포커스 복귀 인사: 오래 비웠다 돌아오면 손을 흔든다 (QA P1 재미 3). 조준 중에만 — 반응이 그려지는 모드
+            pausedAt = nil
+            let away = Date().timeIntervalSince(t)
+            if mode == .aim, away >= (demoGreetForce ? 0 : 300) {
+                react(.shoo)
+                toast("어서 와", sub: nil)
+                if demoMode {
+                    print(String(format: "GREET away %.0fs", away))
+                    fflush(stdout)
+                }
+            }
         }
     }
 
@@ -1661,8 +1717,12 @@ final class GameScene: SKScene {
         let totalStr = total > 0 ? "+\(total)" : total == 0 ? "E" : "\(total)"
         let remain = abs(hole.holeX - ball.x)
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
+        // 표고차: 공→홀컵 (↑ = 오르막). 봇 실측에서 표고 지식 가치 ≈1.7타/홀인데 게임이 안 알려줬다 (QA 2026-08-15 밸런스 신호).
+        // 거리와 같은 급의 정보라 탄도 어시스트가 아니다. 1m 미만은 생략
+        let dz = hole.ground(at: hole.holeX) - hole.ground(at: ball.x)
+        let elevStr = abs(dz) < 1 ? "" : " \(dz > 0 ? "↑" : "↓")\(Int(abs(dz).rounded()))m"
         scoreTitle.setText("\(holeIdx + 1)번 홀 · 파 \(hole.par)")
-        scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lie.label) · \(Int(remain))m")
+        scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lie.label) · \(Int(remain))m" + elevStr)
         clubTitle.setText(club.name)
         let cat = club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터"
         // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
@@ -1965,6 +2025,7 @@ final class GameScene: SKScene {
             }
             if lipped {
                 SoundKit.shared.lipOut()
+                shotLipped = true
             }
             trailPoints.append(CGPoint(x: px(ball.x), y: py(ball.y) + 5.5))
             if trailPoints.count > 400 {
@@ -1991,10 +2052,14 @@ final class GameScene: SKScene {
                         ball.x = relieved
                         ball.y = hole.ground(at: ball.x)
                     }
+                    let inBunker = hole.surface(at: ball.x) == .bunker
+                    let frustrated = noteSetback(demoSetbackForce || inBunker || shotLipped)
                     if strokes >= Phys.maxStrokes {
                         giveUp()
                     } else if galleryWantsScene() {
                         galleryReact() // 갤러리가 지켜본 샷 — 스틱맨 반응이 끝나면 걷기 (Surprises2)
+                    } else if frustrated {
+                        playFrustration(reason: inBunker ? "또 벙커…" : shotLipped ? "또 립아웃…" : "또…")
                     } else if let kind = rollSurprise(hook: .ballRest) {
                         playSurprise(kind)
                         if !kind.ownsScene { // 갤러리처럼 다음 샷 위에 얹히는 종류는 바로 걷는다
@@ -2030,6 +2095,11 @@ final class GameScene: SKScene {
             tickNap() // 낮잠 (조준 방치 훅)
         }
         updateSurprises(dt: dt, currentTime: currentTime)
+        if demoGreetForce, !demoGreeted, mode == .aim, aimTime > 3 { // 관찰: 일시정지 1s 뒤 재개 → 인사
+            demoGreeted = true
+            setGamePaused(true)
+            afterSurprise(1.0) { [weak self] in self?.setGamePaused(false) }
+        }
         // 벽 근접도 (0~1) — 조준·스윙 중에만 켜지고, 스무딩으로 자세가 툭 바뀌지 않는다
         let wallTarget = (mode == .aim || swingAnim != nil) && !club.isPutter
             ? smoothstep(min(1, max(0, (80 - wallBehindPx) / 36)))
