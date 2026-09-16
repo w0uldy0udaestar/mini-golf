@@ -44,8 +44,8 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       헤드=공 뒤 5px 수치 해), 웨지 로리·타이거 실측 + 브라이슨 유도(brysonWedge). wedge 프로파일 topScale·finishScale 0.72→1.0.
       브라이슨 정면 풀웨지 영상은 6편 탐색 모두 불가(TV 줌·후방 뷰·칩샷). 문서 docs/research-swing-styles.md §2단계, 도구 refs/video/README
       리뷰(Code Reviewer, minor 3·nit 5, 블로커 0) 반영: startHole renderBallFwd 스냅·armLockPutter 플래그 제거·도구 방어 코드.
-      수용한 잔여: 걷기 도착 중 ⛳️ 스타일 전환 시 퍼터 스탠스 차(최대 10px)가 스무딩으로만 흡수됨. 후속 제안: 퍼터·웨지 테이블의
-      "어드레스 헤드 팁 ≈ (−5, 공 높이)" 불변식 유닛 테스트(Poses는 MiniGolf 타깃이라 테스트 타깃 분리 필요)
+      수용한 잔여: 걷기 도착 중 ⛳️ 스타일 전환 시 퍼터 스탠스 차(최대 10px)가 스무딩으로만 흡수됨. 후속 제안이던 포즈 불변식 테스트는
+      2026-09-16 `Tests/MiniGolfTests/PosesTests.swift`로 구현(아래 품질 부채 항목)
 - [x] **v0.5.0 릴리스** (2026-09-15): 066f399 버전 범프 → `make zip` → gh release v0.5.0(zip 639,625B, SHA 181bb4cd…) → 공개 에셋 SHA 재검증
       일치 → homebrew-tap b1cfaca(version·sha256) push. README 모션 GIF 표(구 100종 이름)는 두 번째 디스플레이가 없어 재캡처 못 함
 - [x] **README 모션 GIF 재캡처** (c9b2810): `--demo-bg` 덕에 주 화면에서 캡처. 스크래치패드 capture_motions.py(MOTION/SHOWPIECE 시작
@@ -73,6 +73,10 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       퍼터 launchScale 면제·잔상 언더스트로크 제외·무산 터널 카운트 반환·그린 안착 환호 우선.
       **교훈**: 클럽 파워가 항력 전제로 튜닝돼 있어 볼링공 '안 뜸'을 공기력 제거로 만들면 오히려 351m > 306m — 발사 속도(0.5)로 만든다.
       수용한 잔여: 일시정지 중 터널 통과 타이머 벽시계 만료(돌풍과 같은 패턴, 0.3~1.3s) · 볼링공 퍼팅은 굴림 ×1.6만 적용
+- [x] **품질 부채 — 포즈 불변식 테스트** (`feature/pose-invariant-tests`): `MiniGolfTests` 타깃(실행 파일 타깃도 `@testable import` 가능,
+      Package.swift). 리그 공간은 공이 원점, 헤드 팁 = 그립 + 길이×(sin φ, −cos φ), 페이스 = 팁 + 카테고리 헤드 길이(headParams 식:
+      우드 4.5+0.5w·아이언 len·cos(0.9 로프트)+선폭/2). 실측 표(2026-09-16): 퍼터 어드레스 팁 x = −5.0(3인 동일)·임팩트 −2.5, 풀스윙 페이스
+      x는 어드레스 0.4~5.2·임팩트 −1.6~7.7 — 대역 [−7, 7]/[−7, 11], 팁 높이 [−1.5, 6.5]. 백스윙·피니시 유한값 스모크 포함. 테스트 60개
 - [ ] ⑥ 사용자 플레이 판정 대기 — 2차 5종의 강도·빈도(터널은 창 범퍼 켜짐+창 존재 시 라운드 1회, 핀은 그린 폭만큼, 공 바꿔치기는
       >30m에서만). 실제 창으로 터널을 보려면 화면에 중간 크기 창을 둔 채 풀샷. 판정 뒤 v0.7.0 릴리스(Makefile VERSION 0.6.0→0.7.0 ·
       CHANGELOG v0.7.0(미배포) 확정 · `make zip` · gh release · tap)

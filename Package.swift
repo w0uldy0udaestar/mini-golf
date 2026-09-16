@@ -12,5 +12,7 @@ let package = Package(
         // M1: 1홀 플레이 가능한 오버레이 앱
         .executableTarget(name: "MiniGolf", dependencies: ["GolfCore"], path: "Sources/MiniGolf"),
         .testTarget(name: "GolfCoreTests", dependencies: ["GolfCore"]),
+        // 앱 타깃 안의 순수 데이터·기하(Poses·RigBuilder) 검증 — 실행 파일 타깃도 @testable import 가능 (SwiftPM 5.5+)
+        .testTarget(name: "MiniGolfTests", dependencies: ["MiniGolf"]),
     ]
 )
