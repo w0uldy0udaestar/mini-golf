@@ -95,7 +95,7 @@ Dock 아이콘은 없습니다(메뉴바 전용). 종료는 <kbd>Esc</kbd> 또�
 
 <br>
 
-## 100가지 잔동작 + 밈 쇼피스
+## 37가지 잔동작 + 밈 쇼피스
 
 <div align="center">
 
@@ -105,14 +105,14 @@ Dock 아이콘은 없습니다(메뉴바 전용). 종료는 <kbd>Esc</kbd> 또�
 
 <table>
 <tr>
-<td align="center"><img src="docs/motions/twirlTriple.gif" width="230"><br><sub><code>twirlTriple</code> — 세 바퀴 트월</sub></td>
-<td align="center"><img src="docs/motions/clubHelicopter.gif" width="230"><br><sub><code>clubHelicopter</code> — 헬리콥터</sub></td>
-<td align="center"><img src="docs/motions/moonBounce.gif" width="230"><br><sub><code>moonBounce</code> — 달에서 걷기</sub></td>
+<td align="center"><img src="docs/motions/twirl.gif" width="230"><br><sub><code>twirl</code> — 클럽 트월</sub></td>
+<td align="center"><img src="docs/motions/helicopter.gif" width="230"><br><sub><code>helicopter</code> — 헬리콥터</sub></td>
+<td align="center"><img src="docs/motions/clubSword.gif" width="230"><br><sub><code>clubSword</code> — 클럽 검술</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/motions/butterflyWatch.gif" width="230"><br><sub><code>butterflyWatch</code> — 나비 쫓기</sub></td>
-<td align="center"><img src="docs/motions/shadowBox.gif" width="230"><br><sub><code>shadowBox</code> — 섀도복싱</sub></td>
-<td align="center"><img src="docs/motions/zen.gif" width="230"><br><sub><code>zen</code> — 잠시 도를 닦는다</sub></td>
+<td align="center"><img src="docs/motions/hopscotch.gif" width="230"><br><sub><code>hopscotch</code> — 사방치기</sub></td>
+<td align="center"><img src="docs/motions/crouchSneak.gif" width="230"><br><sub><code>crouchSneak</code> — 살금살금</sub></td>
+<td align="center"><img src="docs/motions/cheer.gif" width="230"><br><sub><code>cheer</code> — 환호 점프</sub></td>
 </tr>
 </table>
 
@@ -130,8 +130,8 @@ Dock 아이콘은 없습니다(메뉴바 전용). 종료는 <kbd>Esc</kbd> 또�
 
 </div>
 
-모션은 `WalkFlavors.swift`에 **채널 엔벨로프 레시피**로 정의됩니다 — 머리·어깨·팔·클럽·상체 각 채널에
-시간 곡선을 합산하는 방식이라, 걷기 사이클이나 발 접지(노슬립) 게이트를 건드리지 않고 겹쳐 쓸 수 있습니다.
+모션은 `WalkFlavors.swift`에 **관절 위 실루엣 레시피**로 정의됩니다 — 손 목표를 어깨 기준 극좌표로 잡아
+팔꿈치가 접히고, 일부는 걸음 자체(보폭·정지·점프·발끝)를 바꿉니다. 발 접지(노슬립) 게이트는 건드리지 않습니다.
 걷기 한 번에 최대 5개가 겹치지 않게 스케줄됩니다. **밈 쇼피스**(아우라 파밍·퉁퉁퉁·스쿠버·삐끼삐끼풍…)는
 넘어지기와 같은 연속 동결 램프로 걸음을 서서히 멈추고 크게 춘 뒤 다시 걷습니다 — 걷기당 최대 1개, 8%.
 

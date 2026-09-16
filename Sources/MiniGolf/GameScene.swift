@@ -2058,7 +2058,9 @@ final class GameScene: SKScene {
                             Records.shared.save()
                         }
                         if demoMode { // 캡처 워처에 위치 통지
-                            let info = "\(sk.rawValue) \(Int(px(stickX))) \(Int(groundY(stickX)))"
+                            let info =
+                                "\(sk.rawValue) \(Int(px(stickX))) \(Int(groundY(stickX))) \(String(format: "%.1f", sk.duration))" // 캡처
+                            // 길이용 duration
                             try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
                             print("SHOWPIECE \(info)")
                             fflush(stdout)
