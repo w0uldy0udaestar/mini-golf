@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-16 — v0.5.0 릴리스 후 ⑤ 서프라이즈 1차 구현, 리뷰·머지·플레이 판정 대기)
+## 현재 상태 (2026-09-16 — v0.6.0 릴리스 완료: 서프라이즈 개편 1차 + 모션 GIF 재캡처. 플레이 판정 대기)
 
 스틱맨 리그 개편(①②③④)·프로 스윙 스타일 3종(1.3배→2.5배 과장)에 이어 **선수 트레이드마크 연출**을
 `feature/swing-trademarks`에 구현하고 Code Reviewer(minor 3·nit 3, critical 0) 반영 후 main에 머지했다. 정면 2D 키포인트가 못 잡는 특징을 키프레임 밖 연출로 넣은 것이고
@@ -47,7 +47,10 @@
       "어드레스 헤드 팁 ≈ (−5, 공 높이)" 불변식 유닛 테스트(Poses는 MiniGolf 타깃이라 테스트 타깃 분리 필요)
 - [x] **v0.5.0 릴리스** (2026-09-15): 066f399 버전 범프 → `make zip` → gh release v0.5.0(zip 639,625B, SHA 181bb4cd…) → 공개 에셋 SHA 재검증
       일치 → homebrew-tap b1cfaca(version·sha256) push. README 모션 GIF 표(구 100종 이름)는 두 번째 디스플레이가 없어 재캡처 못 함
-- [ ] README 모션 GIF 재캡처 (37종 새 이름으로, `--demo-motions` + 보조 디스플레이 캡처) — 릴리스와 무관하게 후속
+- [x] **README 모션 GIF 재캡처** (c9b2810): `--demo-bg` 덕에 주 화면에서 캡처. 스크래치패드 capture_motions.py(MOTION/SHOWPIECE 시작
+      로그 → `screencapture -R` 연사 → STICK 보간 크롭 → 배경 평탄화·32색·프레임 절반 GIF 350×280). 49종(37+12) docs/motions,
+      구 100종 GIF 73개 삭제(fc4a406). 교훈: 캡처 영역이 화면 밖으로 잘리면 폭 가정이 깨져 크롭이 어긋난다(클램프 필수)
+- [x] **v0.6.0 릴리스** (2026-09-16): gh release v0.6.0(zip 702,619B, SHA dc924fca…) 공개 SHA 일치 → homebrew-tap 0.6.0 push → brew fetch 검증
 - [ ] 후속 후보: 어드레스·임팩트 샤프트 각 자동 검출(현재 미검출, 기존 기하 유지) · 선수 추가 시 gen_table.py 평균 재계산 주의
 - [x] **⑤ 서프라이즈 1차** (`feature/surprises`, 사용자 선택 "계열별 대표 5개"): 프레임워크(등급 common/rare/epic·라운드 상한·훅 4종·
       예고→사건→반응) + 돌풍(물리)·멀리건(규칙)·낮잠(스틱맨)·커서 고양이(데스크탑, epic)·개구리 구조(생물·규칙) + 새·두더지 예고·반응.
