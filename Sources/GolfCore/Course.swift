@@ -152,6 +152,63 @@ public enum CourseGenerator {
     /// 파4 대부분은 2온 게임, 짧은 파4만 원온 도전 여지)
     static let distRange: [Int: ClosedRange<Double>] = [3: 130 ... 185, 4: 290 ... 400, 5: 460 ... 560]
 
+    // ── 표고 재예산 (2026-09-17 사용자 판정 "오르막은 탄도가 안 나오고, 협곡은 못 나오고, 내리막은 너무 쉽다") ──
+    // 구 예산 0.34×worldW(파4 114~151m)는 화면 세로 기준이라 풀샷 정점(42~67m)을 훌쩍 넘었다. 봇 실측(360홀):
+    // 테라스 순낙차 −130m·언더파 97%, 스카이 티 −108m·68%, 협곡 12타 탈출 불가 15%.
+    // 새 척도는 탄도 기준: 라이저 한 단은 그 지점 탄도 높이의 절반 이하, 순낙차는 유효거리(수평 + k·표고차)로
+    // 파 거리 범위 안에 흡수한다 — k ≈ 1.0 실측(DR·7I 착지 지대 ±20~40m에서 1.0~1.2; 라이저가 탄도 높이를
+    // 넘으면 벽을 맞고 굴러 내려와 거리 자체가 붕괴 — DR 40m 단차에서 토탈 21m).
+    static let elevK = 1.0 // 유효거리 계수(오르막): 표고차 1m ≈ 수평 1m
+    static let elevKDown = 1.5 // 내리막은 착지 뒤 굴림까지 붙어 더 쉽다 — 봇 실측(k=1.0에서 내리막이 오르막보다 0.4타 쉬움) 보정
+    /// 순낙차 → 유효거리 가산 (m). 내리막(음수)은 더 큰 계수
+    static func effectiveBonus(netRise: Double) -> Double {
+        netRise >= 0 ? elevK * netRise : elevKDown * netRise
+    }
+
+    static let elevClamp = 60.0 // 표고 절대 상한 (±)
+    static let maxRiser = 14.0 // 산정 라이저 한 단 — PW 정점 49m·7I 57m의 1/4~1/3
+    static let maxCanyonDepth = 18.0 // 협곡 깊이 상한 — 실제 깊이는 canyonDepthLimit(PW 탈출 곡선)로 더 깎인다
+
+    /// 러프에서 친 풀 PW의 거리별 높이 (m, 실측 2026-09-17: 러프 파워 0.75·스핀 0.5) — 협곡 탈출 조건의 기준 곡선.
+    /// SW는 러프에서 45m밖에 못 가고, 9I·7I는 PW보다 높으니 PW가 넘으면 아이언도 넘는다
+    static let pwRoughHeight: [(d: Double, h: Double)] = [
+        (20, 19),
+        (30, 25),
+        (40, 28),
+        (50, 25),
+        (60, 18),
+        (70, 6),
+        (80, 0),
+    ]
+    static func pwRoughHeight(at d: Double) -> Double {
+        guard let last = pwRoughHeight.last, d < last.d else { return 0 }
+        for i in 1 ..< pwRoughHeight.count where d <= pwRoughHeight[i].d {
+            let a = pwRoughHeight[i - 1], b = pwRoughHeight[i]
+            return a.h + (b.h - a.h) * (d - a.d) / (b.d - a.d)
+        }
+        return pwRoughHeight[0].h
+    }
+
+    /// 협곡 탈출 가능 깊이: 바닥 근처 발치에서 풀 PW가 반대편 림(바닥 폭 + 라이저 폭 1.65×깊이)을 2m 여유로 넘는 최대 깊이.
+    /// 구 20m·바닥 40m는 림 거리 73m에서 PW 높이 4m — 봇 12타 고착 4%의 원인
+    static func canyonDepthLimit(floorW: Double, rim: Double) -> Double {
+        var d = maxCanyonDepth
+        while d > 8, pwRoughHeight(at: floorW + 1.65 * d) < d + rim + 2 {
+            d -= 0.5
+        }
+        return d
+    }
+
+    /// 아키타입별 계획 순낙차 (그린 − 티, m). 홀 길이는 이 값을 유효거리로 상쇄해 정한다
+    static func plannedNetRise(kind: SignatureKind, par: Int, rand: inout SeededRandom) -> Double {
+        switch kind {
+        case .skyTee: -(par == 3 ? rand.next(12, 20) : rand.next(20, 32))
+        case .summitGreen: par == 3 ? rand.next(10, 16) : rand.next(20, 36)
+        case .canyon: 0
+        case .terraces: -(par == 3 ? rand.next(14, 20) : rand.next(24, 40))
+        }
+    }
+
     /// 표준 지형: 성격(완만~험준) 롤 + 랜덤 제어점 — 표고 [-10, 15] 클램프
     static func baseElevation(worldW: Double, teeEnd: Double, rand: inout SeededRandom) -> [Double] {
         let ruggedness = rand.next() // 0 = 완만, 1 = 험준
@@ -218,13 +275,11 @@ public enum CourseGenerator {
     }
 
     /// ── 시그니처 지형: 트레드(평지) + 라이저(급경사, 최대 ≈0.95) 계단 프로파일 ──
-    /// 표고 예산 0.34×worldW — 16:9~21:9 화면 세로에 들어가는 상한
-    /// (32:9 초울트라와이드는 상단이 잘릴 수 있음 — 알려진 한계)
+    /// 표고는 탄도 기준(plannedRise·maxRiser·maxCanyonDepth — 위 재예산 주석). 구 0.34×worldW 화면 예산은 폐기(2026-09-17)
     static func signatureElevation(
         kind: SignatureKind, par: Int, worldW: Double, teeEnd: Double, apronStart: Double,
-        rand: inout SeededRandom
+        plannedRise: Double, rand: inout SeededRandom
     ) -> (elev: [Double], water: ClosedRange<Double>?, risers: [ClosedRange<Double>]) {
-        let budget = 0.34 * worldW
         let riserRatio = 1.65 // 라이저 폭 = 낙차 × 1.65 → cos 보간 중앙 최대 경사 ≈ 0.95
         var nodes: [(x: Double, e: Double)] = []
         var risers: [ClosedRange<Double>] = []
@@ -257,10 +312,10 @@ public enum CourseGenerator {
         case .skyTee:
             let cliffTop = teeEnd + rand.next(8, 16)
             let room = apronStart - 32 - cliffTop
-            let teeH = max(18, min(budget * rand.next(0.82, 0.98), room / 1.9))
+            let teeH = max(10, min(-plannedRise, room / 1.9)) // 계획 낙차 12~32m (구 예산 82~98% = 100m대)
             nodes = [(0, teeH), (cliffTop, teeH)]
             var x = cliffTop
-            if teeH > 48, room > teeH * 2.2 { // 2단 절벽 — 중간 벤치가 레이업 지점이 된다
+            if teeH > 24, room > teeH * 2.2 { // 2단 절벽 — 중간 벤치가 레이업 지점이 된다
                 let d1 = teeH * rand.next(0.55, 0.68)
                 x = addRiser(from: x, rise: -d1)
                 let bench = rand.next(18, 26)
@@ -273,24 +328,25 @@ public enum CourseGenerator {
             rolls(from: x, to: worldW, around: max(0, nodes.last!.e), amp: 2.2)
 
         case .summitGreen:
-            // 오르막 완화 (2026-08-21 실플레이 판정 "올리는 게 불가능"): 라이저 ≤20m —
-            // 5I(정점 33m)~웨지까지 널리 넘길 수 있는 높이. 트레드 30~40m — 착지 관대
-            let treadW = rand.next(30, 40)
+            // 오르막 (2026-09-17 재예산): 라이저 ≤ maxRiser(14m) — 어떤 풀샷 정점(42m+)의 1/3 이하라 정점 근처가
+            // 아니어도 넘어간다. 트레드 45~60m — 실제 착지 분산(±1° ≈ ±4m)에 관대. 총 등반은 계획값(파3 10~16·파4/5 20~36)
+            var treadW = par == 3 ? rand.next(28, 36) : rand.next(45, 60) // 파3는 홀이 짧아 좁게
             let climbEnd = apronStart - 8
             // 티샷 낙하 공간 — 파3는 티샷이 곧 어프로치라 짧아도 된다 (상승량 확보 우선)
             let minTeeRun = max(par == 3 ? 35 : 60, (apronStart - teeEnd) * 0.30)
             let available = climbEnd - (teeEnd + minTeeRun)
-            var totalRise = min(budget * rand.next(0.80, 0.95), 100)
+            var totalRise = plannedRise
             func span(_ rise: Double) -> Double {
-                rise * riserRatio + Double(max(1, Int(ceil(rise / 20)))) * treadW
+                rise * riserRatio + Double(max(1, Int(ceil(rise / maxRiser)))) * treadW
             }
-            while span(totalRise) > available, totalRise > 18 {
+            while span(totalRise) > available, totalRise > 10 {
                 totalRise *= 0.87
             }
-            // 파3 최소 상승 보장 — 티런을 조금 내주더라도 다이나믹은 지킨다
-            // (climbStart는 최악에도 teeEnd+8보다 한참 오른쪽 — 기하 검산 2026-08-20)
-            totalRise = max(totalRise, 18)
-            let n = max(1, Int(ceil(totalRise / 20)))
+            totalRise = max(totalRise, par == 3 ? 8 : 12) // 최소 상승 — 다이나믹은 지킨다
+            let n = max(1, Int(ceil(totalRise / maxRiser)))
+            if span(totalRise) > available { // 그래도 안 들어가면 트레드를 줄인다 — 등반 시작이 티런 앞으로 밀리면 노드 역순 킹크 (seed 2)
+                treadW = max(20, (available - totalRise * riserRatio) / Double(n))
+            }
             let step = totalRise / Double(n)
             var x = climbEnd - span(totalRise)
             nodes = [(0, 0), (teeEnd + 8, 0)]
@@ -309,11 +365,12 @@ public enum CourseGenerator {
             }
             let top = nodes.last!.e
             // 정상 그린 뒤 백스톱 언덕 — 오버샷이 튕겨 돌아온다 (관대한 산)
-            let backstop = min(6, budget + 1 - top)
-            if worldW > climbEnd + 30, backstop > 1.5 {
-                nodes.append((climbEnd + 22, top))
-                nodes.append((climbEnd + 30, top + backstop))
-                nodes.append((worldW, top + backstop * 0.7))
+            let backstop = min(6, elevClamp - 1 - top)
+            // 그린(≈apronStart+21~33)·뒤 블렌드(+6)를 지나 시작 — 겹치면 그린 평탄화 뒤 5m 블렌드가 6m 절벽이 된다 (경사 1.2)
+            if worldW > climbEnd + 64, backstop > 1.5 {
+                nodes.append((climbEnd + 48, top))
+                nodes.append((climbEnd + 62, top + backstop)) // 14m 램프 — cos 중앙 경사 0.67
+                nodes.append((worldW, top + backstop))
             } else {
                 nodes.append((worldW, top)) // 그린은 정상 트레드 위
             }
@@ -321,13 +378,14 @@ public enum CourseGenerator {
         case .canyon:
             let midLo = teeEnd + 55
             let midHi = apronStart - 45
-            let floorW = rand.next(24, 40)
+            let floorW = rand.next(20, 32) // 바닥이 넓을수록 반대편 림이 멀어 탈출 깊이가 준다
             let rim = rand.next(0, 3)
-            // 탈출 가능 상한: 림 높이·워터 딥(1.2m)까지 합쳐 총 36m — SW 최고 탄도(정점 ≈43m)로
-            // 바닥에서 나올 수 있어야 한다 (2026-08-21 오르막 완화: 드라마는 폭으로, 좌절은 제거)
-            let depth = max(15, min(
-                budget * rand.next(0.72, 0.92),
-                36 - rim,
+            // 깊이 12~20m (2026-09-17 재예산): 구 36m는 SW 풀샷 정점(42m@37m)이 라이저 끝(59m 폭)에서 이미 하강해 벽을
+            // 맞았다 — 봇 실측 12타 탈출 불가 15%. 20m 라이저(폭 33m)는 SW·PW·9I 모두 정점 전에 넘는다.
+            // 협곡 폭 = 바닥 24~40 + 2×1.65×깊이 ≈ 64~106m — 7I 캐리(153m) 안이라 림에서 끊어 가면 넘긴다
+            let depth = max(8, min(
+                rand.next(12, maxCanyonDepth),
+                canyonDepthLimit(floorW: floorW, rim: rim), // PW 한 방으로 나온다
                 (midHi - midLo - floorW) / (2 * riserRatio)
             ))
             let gorgeW = floorW + depth * 2 * riserRatio
@@ -350,11 +408,11 @@ public enum CourseGenerator {
             let n = rand.next() < 0.5 ? 3 : 4
             let spanFrom = teeEnd + rand.next(10, 18)
             let spanTo = apronStart - 22
-            var teeH = budget * rand.next(0.75, 0.92)
-            while ((spanTo - spanFrom) - teeH * riserRatio) / Double(n) < 16, teeH > 20 {
-                teeH *= 0.87 // 트레드 최소폭(16m 착지 가능) 확보까지 축소
+            var teeH = -plannedRise // 계획 낙차 24~40m을 3~4단으로 (구 예산 75~92% = 100m대, 봇 언더파 97%)
+            while ((spanTo - spanFrom) - teeH * riserRatio) / Double(n) < 30, teeH > 16 {
+                teeH *= 0.87 // 트레드 최소폭(30m 착지 가능) 확보까지 축소
             }
-            let treadW = max(16, ((spanTo - spanFrom) - teeH * riserRatio) / Double(n))
+            let treadW = max(30, ((spanTo - spanFrom) - teeH * riserRatio) / Double(n))
             let step = teeH / Double(n)
             nodes = [(0, teeH), (spanFrom, teeH)]
             var x = spanFrom
@@ -367,8 +425,8 @@ public enum CourseGenerator {
         }
 
         var elev = interpolate(nodes: nodes, worldW: worldW)
-        for i in 0 ..< elev.count { // 예산 클램프 (+2는 그린 브레이크 여유)
-            elev[i] = max(-budget, min(budget + 2, elev[i]))
+        for i in 0 ..< elev.count { // 절대 클램프 (+2는 그린 브레이크 여유)
+            elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
         }
         return (elev, water, risers)
     }
@@ -425,7 +483,14 @@ public enum CourseGenerator {
         signatureRoll: Bool = false, preferredKind: SignatureKind? = nil
     ) -> Hole {
         let range = distRange[par]!
-        let dist = rand.next(range.lowerBound, range.upperBound)
+        // 유효거리(수평 + k·순낙차)를 파 범위에서 뽑고, 아키타입의 계획 낙차만큼 수평 거리를 보정한다 —
+        // 내리막은 길게, 오르막은 짧게 (2026-09-17: 파는 '플레이되는 거리' 기준)
+        let effDist = rand.next(range.lowerBound, range.upperBound)
+        let signature: SignatureKind? = signatureRoll
+            ? (preferredKind ?? pickSignatureKind(par: par, dist: effDist, rand: &rand))
+            : nil
+        let plannedRise = signature.map { plannedNetRise(kind: $0, par: par, rand: &rand) } ?? 0
+        let dist = effDist - effectiveBonus(netRise: plannedRise)
         let holeX = teeX + dist
         let worldW = holeX + 45
 
@@ -448,11 +513,7 @@ public enum CourseGenerator {
         segments.append(Segment(from: greenStart, to: greenEnd, type: .green))
         segments.append(Segment(from: greenEnd, to: worldW, type: .rough))
 
-        // ── 시그니처 홀: 표준 지형·클램프를 통째로 대체하는 대낙차 계단 프로파일 ──
-        // 아키타입: 덱 우선(라운드 내 4종 골고루), 파3는 지형 제약 자체 규칙
-        let signature: SignatureKind? = signatureRoll
-            ? (preferredKind ?? pickSignatureKind(par: par, dist: dist, rand: &rand))
-            : nil
+        // ── 시그니처 홀: 표준 지형·클램프를 통째로 대체하는 계단 프로파일 (아키타입은 위에서 결정) ──
         var sigWater: ClosedRange<Double>? = nil
         var sigRisers: [ClosedRange<Double>] = []
 
@@ -461,7 +522,8 @@ public enum CourseGenerator {
         var elev: [Double]
         if let sig = signature {
             (elev, sigWater, sigRisers) = signatureElevation(
-                kind: sig, par: par, worldW: worldW, teeEnd: teeEnd, apronStart: apronStart, rand: &rand
+                kind: sig, par: par, worldW: worldW, teeEnd: teeEnd, apronStart: apronStart,
+                plannedRise: plannedRise, rand: &rand
             )
             for r in sigRisers { // 라이저(급경사면)는 러프 — 공이 구르다 트레드에 멎는다
                 segments = carve(segments, from: r.lowerBound, to: r.upperBound, type: .rough)
