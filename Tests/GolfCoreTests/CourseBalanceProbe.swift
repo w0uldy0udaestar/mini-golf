@@ -49,6 +49,7 @@ final class CourseBalanceProbe: XCTestCase {
     }
 
     nonisolated(unsafe) static var steepRests = 0 // 급경사(|경사| > 0.35)에 정지한 횟수 — 0이어야 한다
+    nonisolated(unsafe) static var settleMoves: [Double] = [] // 정지 확정 스텝의 공 점프(m) — 스텝당 이동 ≤ 0.32m이므로 0.6m 초과는 settle
 
     struct HoleResult {
         let kind: String; let par: Int; let strokes: Int; let water: Int; let netRise: Double; var trace: [String] = []
@@ -98,6 +99,7 @@ final class CourseBalanceProbe: XCTestCase {
             var t = 0.0
             var ended = false
             while !ended, t < 60 {
+                let xBefore = b.x
                 switch Ballistics.step(&b, hole: hole) {
                 case .holed:
                     return HoleResult(
@@ -118,6 +120,10 @@ final class CourseBalanceProbe: XCTestCase {
                 default:
                     if b.phase == .rest {
                         ended = true
+                        let jump = abs(b.x - xBefore)
+                        if jump > 0.6 {
+                            Self.settleMoves.append(jump)
+                        }
                     }
                 }
                 t += Phys.dt
@@ -178,6 +184,8 @@ final class CourseBalanceProbe: XCTestCase {
     }
 
     func testPrintBotBalance() {
+        Self.steepRests = 0
+        Self.settleMoves = []
         var naive: [HoleResult] = []
         var aware: [HoleResult] = []
         for seed: UInt32 in 1 ... 40 {
@@ -195,8 +203,16 @@ final class CourseBalanceProbe: XCTestCase {
         for r in naive.filter({ $0.strokes >= Self.maxStrokes }).prefix(3) {
             lines.append("  STUCK \(r.kind) par\(r.par): " + r.trace.joined(separator: " | "))
         }
+        let sm = Self.settleMoves
+        lines.append(String(
+            format: "  SETTLE n=%d (%.1f%% of shots)  max %.1fm  mean %.1fm  >1m %d  >2m %d",
+            sm.count, Double(sm.count) / Double(max(1, (naive + aware).map(\.strokes).reduce(0, +))) * 100, // 두 봇 합산 타수
+            sm.max() ?? 0, sm.isEmpty ? 0 : sm.reduce(0, +) / Double(sm.count),
+            sm.filter { $0 > 1 }.count, sm.filter { $0 > 2 }.count
+        ))
         print("BOTBAL\n" + lines.joined(separator: "\n"))
-        // ── 회귀 대역 (2026-09-17 재예산 실측: 아키타입 −0.3~−0.5, 고착 ≤1%, 급경사 정지 0) ──
+        // ── 회귀 대역 (2026-09-23 리뷰 재실측: 아키타입 −0.47~−0.76(canyon이 가장 쉬움 쪽), summit 고착 1%, 급경사 정지 0.
+        //    canyon 하한 −1.0까지 여유 0.24 — 클럽 리밸런스 시 이 줄부터 본다) ──
         XCTAssertEqual(Self.steepRests, 0, "공이 급경사면에 정지함 (\(Self.steepRests)회)")
         for k in Set(naive.map(\.kind)) {
             let rs = naive.filter { $0.kind == k }

@@ -182,6 +182,7 @@ public enum CourseGenerator {
     ]
     static func pwRoughHeight(at d: Double) -> Double {
         guard let last = pwRoughHeight.last, d < last.d else { return 0 }
+        let d = max(d, pwRoughHeight[0].d) // 표 앞 외삽 금지 (호출측 최소 거리 ≈ 33m — 정점 전 구간은 첫 표값으로)
         for i in 1 ..< pwRoughHeight.count where d <= pwRoughHeight[i].d {
             let a = pwRoughHeight[i - 1], b = pwRoughHeight[i]
             return a.h + (b.h - a.h) * (d - a.d) / (b.d - a.d)
@@ -374,10 +375,11 @@ public enum CourseGenerator {
             let top = nodes.last!.e
             // 정상 그린 뒤 백스톱 언덕 — 오버샷이 튕겨 돌아온다 (관대한 산)
             let backstop = min(6, elevClamp - 1 - top)
-            // 그린(≈apronStart+21~33)·뒤 블렌드(+6)를 지나 시작 — 겹치면 그린 평탄화 뒤 5m 블렌드가 6m 절벽이 된다 (경사 1.2)
-            if worldW > climbEnd + 64, backstop > 1.5 {
-                nodes.append((climbEnd + 48, top))
-                nodes.append((climbEnd + 62, top + backstop)) // 14m 램프 — cos 중앙 경사 0.67
+            // 그린(≈apronStart+21~33)·gTo(+6)·뒤 5m 블렌드를 지나 시작 = apronStart+44 = climbEnd+52 — 겹치면 그린 평탄화 뒤
+            // 블렌드가 램프 첫 샘플을 그린 레벨로 당긴다 (구 +48은 최대 4m 겹침, 리뷰 2026-09-23)
+            if worldW > climbEnd + 68, backstop > 1.5 {
+                nodes.append((climbEnd + 52, top))
+                nodes.append((climbEnd + 66, top + backstop)) // 14m 램프 — cos 중앙 경사 0.67
                 nodes.append((worldW, top + backstop))
             } else {
                 nodes.append((worldW, top)) // 그린은 정상 트레드 위
