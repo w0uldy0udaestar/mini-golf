@@ -99,6 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
         scene.demoSettleForce = args.contains("--demo-settle") // 급경사 정착 굴림 관찰 (첫 샷을 홀 쪽 라이저 상단에 떨어뜨림 — 협곡 시드)
+        if let i = args.firstIndex(of: "--demo-power"), i + 1 < args.count, let p = Double(args[i + 1]) {
+            scene.demoPower = min(1, max(0.05, p)) // 봇 파워 고정 (풀파워 피니시 관찰 등)
+        }
         scene.demoGIRForce = args.contains("--demo-gir") // 파4·5 그린 정지면 원온/투온 연출 강제 (관찰용)
         if let i = args.firstIndex(of: "--demo-bumpers"), i + 1 < args.count { // "fx,fy,fw,fh;…" 화면 비율 — 창 터널 관찰용 합성 범퍼
             scene.demoBumperFracs = args[i + 1].split(separator: ";")

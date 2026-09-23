@@ -119,9 +119,10 @@ enum SwingStyle: String, CaseIterable {
 
     // 브라이슨 암록 퍼팅은 PutterKeyframes.brysonPutt(길이 43·butt 10·샤프트=전완)로 표현 — 별도 플래그 없음
 
-    /// 로리: 임팩트 점프 — 지면 반력으로 몸이 뜬다 (양발 이륙, 최대 px). 실측 ~5px는 리그 덤프에서 2~3px로 안 읽혀 8로 과장
+    /// 로리: 임팩트 점프 — 지면 반력으로 몸이 뜬다 (양발 이륙, 최대 px). 실측 ~5px는 리그 덤프에서 2~3px로 안 읽혀 8로 과장,
+    /// 8도 "차이가 많이 나 보이지 않음"(2026-09-23 플레이 판정) → 12
     var impactJump: Double {
-        self == .rory ? 8.0 : 0
+        self == .rory ? 12.0 : 0
     }
 
     /// 로리: 피니시 리코일 — 리드 다리 위로 탄력 있게 올라앉으며 잦아드는 반동
@@ -164,7 +165,7 @@ struct PutterKeyframes {
         top: Pose(hipDx: -1.1, tilt: -14, handA: -16.8, handD: 34, clubA: -16.8, heel: 0, headDx: 0.0),
         imp: Pose(hipDx: 0.2, tilt: -14, handA: 17.2, handD: 34, clubA: 17.2, heel: 0, headDx: 0.0),
         fin: Pose(hipDx: -2.6, tilt: -14, handA: 37.9, handD: 34, clubA: 37.9, heel: 0, headDx: 0.0),
-        len: 43, butt: 10, ballFwd: 16
+        len: 43, butt: 14, ballFwd: 16 // butt 10 → 14: 그립 위 연장부가 전완에 붙은 게 읽히도록 (2026-09-23 플레이 판정)
     )
 
     static func table(_ style: SwingStyle) -> PutterKeyframes {
@@ -237,13 +238,16 @@ struct SwingKeyframes {
         down: 0.26, follow: 0.13, finish: 0.31, topHold: 0.0
     )
 
+    /// 타이거 아이언·웨지의 tilt(척추 후방 기울기)만 과장 2.5 → 1.0(기본 포즈 대비 편차 ×0.4 — 실측 그대로): 임팩트 −31.5는
+    /// 드라이버(−31.8, 수용됨)와 같은 값이지만 짧은 클럽에서 "세컨샷부터 몸 자체가 과도하게 기울어 부자연" (2026-09-23 플레이 판정).
+    /// 나머지 채널(hipDx·handA·템포·톱 홀드)은 2.5배 유지. 구 tilt: −16.7/−21.6/−20.0/−31.5/−30.4/−17.7
     static let tigerIron = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -16.7, handA: 16.0, handD: 34, clubA: 12, heel: 0.0, headDx: 2.5),
-        p2: Pose(hipDx: -0.7, tilt: -21.6, handA: -50.6, handD: 32.9, clubA: -110, heel: 0.0, headDx: 3.0),
-        p4: Pose(hipDx: -0.3, tilt: -20.0, handA: -146.3, handD: 24.0, clubA: -262, heel: 0.0, headDx: 2.0),
-        p7: Pose(hipDx: 7.5, tilt: -31.5, handA: 29.7, handD: 34, clubA: 6, heel: 1.0, headDx: 0.8),
-        p8: Pose(hipDx: 11.3, tilt: -30.4, handA: 95, handD: 30.2, clubA: 125, heel: 1.3, headDx: 6.2),
-        p10: Pose(hipDx: 9.7, tilt: -17.7, handA: 200, handD: 21.5, clubA: 270, heel: 11.3, headDx: 11.9),
+        p1: Pose(hipDx: 0.0, tilt: -13.9, handA: 16.0, handD: 34, clubA: 12, heel: 0.0, headDx: 2.5),
+        p2: Pose(hipDx: -0.7, tilt: -15.8, handA: -50.6, handD: 32.9, clubA: -110, heel: 0.0, headDx: 3.0),
+        p4: Pose(hipDx: -0.3, tilt: -17.6, handA: -146.3, handD: 24.0, clubA: -262, heel: 0.0, headDx: 2.0),
+        p7: Pose(hipDx: 7.5, tilt: -24.0, handA: 29.7, handD: 34, clubA: 6, heel: 1.0, headDx: 0.8),
+        p8: Pose(hipDx: 11.3, tilt: -24.2, handA: 95, handD: 30.2, clubA: 125, heel: 1.3, headDx: 6.2),
+        p10: Pose(hipDx: 9.7, tilt: -15.5, handA: 200, handD: 21.5, clubA: 270, heel: 11.3, headDx: 11.9),
         down: 0.26, follow: 0.13, finish: 0.36, topHold: 0.08
     )
 
@@ -270,13 +274,14 @@ struct SwingKeyframes {
         down: 0.24, follow: 0.12, finish: 0.28, topHold: 0.0
     )
 
+    /// tilt만 편차 ×0.4 (tigerIron 주석 참조). 구 tilt: −17.0/−14.1/−23.4/−26.8/−22.5/−20.1
     static let tigerWedge = SwingKeyframes(
-        p1: Pose(hipDx: 0.0, tilt: -17.0, handA: 16.3, handD: 34, clubA: 12, heel: 0.0, headDx: 3.7),
-        p2: Pose(hipDx: -1.1, tilt: -14.1, handA: -35, handD: 30, clubA: -100, heel: 0.0, headDx: 2.2),
-        p4: Pose(hipDx: 3.7, tilt: -23.4, handA: -115.4, handD: 31.8, clubA: -230, heel: 0.0, headDx: 1.0),
-        p7: Pose(hipDx: 7.7, tilt: -26.8, handA: 24.9, handD: 34, clubA: 6, heel: 1.0, headDx: -0.1),
-        p8: Pose(hipDx: 7.7, tilt: -22.5, handA: 73.4, handD: 26.7, clubA: 120, heel: 3.0, headDx: 3.9),
-        p10: Pose(hipDx: 7.2, tilt: -20.1, handA: 200, handD: 21.5, clubA: 250, heel: 6.0, headDx: 4.0),
+        p1: Pose(hipDx: 0.0, tilt: -14.0, handA: 16.3, handD: 34, clubA: 12, heel: 0.0, headDx: 3.7),
+        p2: Pose(hipDx: -1.1, tilt: -12.8, handA: -35, handD: 30, clubA: -100, heel: 0.0, headDx: 2.2),
+        p4: Pose(hipDx: 3.7, tilt: -19.0, handA: -115.4, handD: 31.8, clubA: -230, heel: 0.0, headDx: 1.0),
+        p7: Pose(hipDx: 7.7, tilt: -22.1, handA: 24.9, handD: 34, clubA: 6, heel: 1.0, headDx: -0.1),
+        p8: Pose(hipDx: 7.7, tilt: -21.0, handA: 73.4, handD: 26.7, clubA: 120, heel: 3.0, headDx: 3.9),
+        p10: Pose(hipDx: 7.2, tilt: -16.4, handA: 200, handD: 21.5, clubA: 250, heel: 6.0, headDx: 4.0),
         down: 0.24, follow: 0.12, finish: 0.3, topHold: 0.08
     )
 
