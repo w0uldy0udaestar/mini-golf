@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — 코스 표고 재예산·공 손에 들기·온그린 연출 main 머지(32ac3f1). v0.8.0 미배포, 플레이 판정 대기)
+## 현재 상태 (2026-09-23 — 코스 재예산·줍기·온그린(32ac3f1) + 리뷰 반영·정착 굴림 렌더(3661e19) main 머지. v0.8.0 미배포, 플레이 판정 대기)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -96,8 +96,12 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       블렌드 뒤(climbEnd+48~62)로. 봇 실측(`Tests/GolfCoreTests/CourseBalanceProbe`, 40시드×9홀, 회귀 단언 포함): 아키타입별 순진 봇
       파 대비 −1.40~+1.01 → −0.47~−0.76(격차 2.41 → 0.29), 협곡 12타 고착 15% → 0%, 입수 0.99 → 0.08/홀, 급경사 정지 0. 테스트 63개.
       교훈: 낙차→거리 k≈1.0~1.2 실측(DR·7I ±20~40m), 라이저가 그 지점 탄도 높이를 넘으면 벽을 맞고 굴러 내려와 거리 자체가 붕괴.
-      **리뷰**: Code Reviewer(fable)가 월 사용 한도(429)로 중단돼 자체 검토로 대체 — 점검 목록(정착 경계·물 반환·유효거리 파생값·
-      트레드 축소 순서·봇 결정론)은 통과, 외부 리뷰는 한도 해제 뒤 재위임 권장
+      **리뷰 완료**(2026-09-23, Code Reviewer fable, 블로커·메이저 0·minor 3·nit 4 → 3661e19 반영): 산정 백스톱 램프 +52/+66(그린 뒤
+      블렌드 최대 4m 겹침 제거, 봇 표 불변) · 정착 소진 가드 · pwRoughHeight 앞 외삽 금지 · 온그린 링 surpriseNodeName · 프로브 카운터
+      리셋·회귀 대역 주석 실측(−0.47~−0.76, canyon 하한 −1.0까지 여유 0.24). **격상 발견**: 정착 스냅이 리뷰 추정(2~3m)이 아니라
+      프로브 실측 샷의 1.2%·최대 18.5m·평균 5.4m(협곡 반대편 라이저 상단에 멈춘 공이 바닥까지) → GameScene `settleRoll`로 렌더만
+      smoothstep 굴림(0.2~0.8s), 물리·밸런스 불변. `--demo-settle --seed 19` 프레임 캡처로 라이저 상단→중턱→바닥 4프레임 확인.
+      범위 밖 관찰(onHoled/giveUp 씬 직접 run 타이머 → 홀아웃 직후 R에서 1번 홀 건너뛸 가능성, 미재현)은 IDEAS에 기록
 - [x] **⑧ 홀컵 공 줍기 손에 들기 + 온그린 연출** (5c6c5e0): 줍기 1.15s 뒤 들고 보기 1.35s — 공이 Skeleton 처리 후 `drawRig.handTrail`을
       따라감(`ballHeld`), 60% 툭 던져 받기·40% 주머니. 온그린은 파4 원온·파5 투온만(사용자 선택, 파3 제외) — rejoice + 차임·환호 +
       고리·반짝임 + "원온!/투온! 이글 찬스", 갤러리·좌절보다 우선. 관찰 `--demo-pickup`·`--demo-gir`. 프레임 확인: 손에 든 공·가슴 앞 들기,
@@ -110,7 +114,7 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
 
 ### 코스 밸런스 봇 (2026-09-17)
 
-`swift test --filter CourseBalanceProbe` — `BOTBAL` 표(아키타입별 파 대비·고착·입수·순낙차, 파별, 고착 홀 샷 추적 `STUCK …`)와
+`swift test --filter CourseBalanceProbe` — `BOTBAL` 표(아키타입별 파 대비·고착·입수·순낙차, 파별, 고착 홀 샷 추적 `STUCK …`, 정착 이동량 `SETTLE n/max/mean`)와
 `ELEVK`(낙차별 클럽 토탈). 봇 정책: 25m 안쪽 퍼터(텍사스 웨지)·벙커 SW·직전 샷 이동 < 3m면 PW 탈출·클럽은 토탈 ≥ 목표 중 최소.
 지형·물리를 바꾸면 이 표부터 본다. 캡처 스크립트는 `scripts/capture-demo.py`로 저장소에 보존(2026-09-23 — 스크래치패드 유실로 두 번 재작성한 뒤):
 `/usr/bin/python3 scripts/capture-demo.py OUTDIR MAXSEC --trigger "PREFIX:dur:gap:count" -- <MiniGolf 인자>`. 첫 1s는 합성 전 회색 화면이라 트리거를 늦게.
@@ -145,17 +149,17 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 ### 재개 지점 (2026-09-23 — 다음 세션은 여기서)
 
-main = 32ac3f1 머지 + fa013a8 HANDOFF, 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 재빌드된 로컬 실행본(brew는 아직 0.7.0).
+main = 3661e19(리뷰 반영·정착 굴림 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 3661e19로 재빌드된 로컬 실행본(brew는 아직 0.7.0).
 
 1. **플레이 판정 수집** (사용자): ⑦ 재예산 지형(오르막이 넘어가는가·협곡을 나오는가·내리막 난도·실루엣이 밋밋한가) ·
+   **정착 굴림**(협곡 라이저에 멈춘 공이 바닥으로 굴러 내려가는 연출 — 순간이동으로 보이지 않는가, 0.8s 상한이 너무 빠른가) ·
    ⑧ 줍기 잔동작·온그린 강도 · ⑥ 서프라이즈 2차 · 트레이드마크 2.5배. 판정 반영 후 **v0.8.0 릴리스**(Makefile VERSION 0.7.0→0.8.0 ·
    CHANGELOG "미배포" → 날짜 · `make zip` · `gh release create` · homebrew-tap cask · tap→fetch→untap 검증 — v0.7.0 절차 그대로)
 2. 실루엣이 밋밋하면: 수직 과장 렌더 ×1.5~2 (GameScene `py(elev)`에 kY — 공·스틱맨·창 범퍼(WindowBumpers y 변환)·컵·궤적 전부 같은 변환.
    경사가 굴림보다 가팔라 보이는 이질감은 실플레이로 판정). 물리 표고는 그대로
 3. 파5가 여전히 쉬우면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
    봇 표(`swift test --filter CourseBalanceProbe`)로 전후 비교
-4. 외부 리뷰 재위임: Code Reviewer(fable)가 월 한도(429)로 중단됐던 커밋 bb6a446·98761ab·5c6c5e0 — 한도 해제 뒤 리뷰 초점은 이 파일
-   ⑦ 항목의 점검 목록(정착 경계·물 반환·유효거리 파생값·트레드 축소 순서·봇 결정론·HUD 수평 거리 표기)
+4. ~~외부 리뷰 재위임~~ 완료(2026-09-23, ⑦ 항목 참조). 정착 굴림이 약하면 `settleRoll` dur 식(0.2 + 0.035·d, 상한 0.8s)만 조정
 5. 남은 백로그: 서프라이즈 3차(스프링클러·바람 역전·캐디·정각 뻐꾸기·강아지, 라이벌 제외) · 걷기 방향 반전 제자리 돌기 · 무드 워크 ·
    벙커 탈출 힌트 · 파워 라벨–깃대 겹침 · Apple 공증 · 크로스플랫폼
 
@@ -208,7 +212,7 @@ main = 32ac3f1 머지 + fa013a8 HANDOFF, 작업 트리 클린, 원격 동기화�
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
