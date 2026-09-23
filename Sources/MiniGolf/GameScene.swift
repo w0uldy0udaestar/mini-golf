@@ -1140,7 +1140,14 @@ final class GameScene: SKScene {
         }
         preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건·갤러리 스냅샷
         strokes += 1
-        PlayLog.note(String(format: "SHOT %d %@ h%.2f from %.1f lie %@", strokes, club.id, heightPct, preShot.x, "\(lie)"))
+        PlayLog.note(String(
+            format: "SHOT %d %@ h%.2f from %.1f lie %@",
+            strokes,
+            club.id,
+            heightPct,
+            preShot.x,
+            "\(lie)"
+        ))
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
             // 골프처럼 한 번의 연속 동작에선 정지가 타격감이 아니라 프레임 드랍으로 보인다)
@@ -2158,7 +2165,8 @@ final class GameScene: SKScene {
                     let inBunker = hole.surface(at: ball.x) == .bunker
                     let frustrated = noteSetback(demoSetbackForce || inBunker || shotLipped)
                     PlayLog.note(String(
-                        format: "REST strokes %d x %.1f lie %@ label %@", strokes, ball.x, "\(hole.surface(at: ball.x))",
+                        format: "REST strokes %d x %.1f lie %@ label %@", strokes, ball.x,
+                        "\(hole.surface(at: ball.x))",
                         greenChanceLabel() ?? "-"
                     ))
                     if strokes >= Phys.maxStrokes {
