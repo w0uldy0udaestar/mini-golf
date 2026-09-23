@@ -132,6 +132,17 @@ public struct Hole: Sendable {
         )
     }
 
+    /// 바람 역전 서프라이즈 — 바람만 바꾼 사본. 지형·컵·파는 그대로 (바람은 세계 절대 좌표 m/s)
+    public func withWind(_ w: Double) -> Hole {
+        Hole(
+            par: par, dist: dist, holeX: holeX, worldW: worldW,
+            greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
+            segments: segments, elevation: elevation,
+            waterRange: waterRange, greenSlope: greenSlope,
+            teeX: teeX, obstacles: obstacles, signature: signature, wind: w
+        )
+    }
+
     /// 물리 테스트용 평지 홀
     public static func flatTest(worldW: Double = 10000, holeX: Double = 9999, wind: Double = 0) -> Hole {
         Hole(

@@ -33,6 +33,8 @@ enum SurpriseHook {
     case inFlight // 발사 직후 — 비행에 개입
     case aimIdle // 조준을 오래 방치
     case water // 공이 물에 빠짐
+    case aimStart // 조준 시작 (티샷·그린 제외) — 캐디가 걸어온다 (3차)
+    case clock // 실제 시계 정각 ±30초, 조준 중 (3차 — 뻐꾸기)
 }
 
 enum SurpriseKind: String, CaseIterable {
@@ -49,28 +51,37 @@ enum SurpriseKind: String, CaseIterable {
     case ballSwap // 택배 상자에서 고무공·볼링공 — 다음 한 샷만 물리가 다르다 (물리)
     case gallery // 관중이 몰려와 다음 샷을 보고 환호·박수·야유 (스틱맨)
     case geese // 거위 떼가 줄지어 건너다 한 마리가 공 위에 앉는다 (생물)
+    // 3차 (2026-09-23, Surprises3.swift — 계열별 1종)
+    case sprinkler // 착지점에 스프링클러가 솟아 물줄기가 공을 붙잡고 젖은 잔디가 굴림을 줄인다 (물리)
+    case windReverse // 비행 중 풍향이 뒤집힌다 — 깃발·HUD·물리 모두, 이 홀 끝까지 (규칙)
+    case caddie // 캐디가 걸어와 남은 거리에 맞는 클럽을 건네거나 한 줄 조언 (스틱맨)
+    case cuckoo // 실제 시계 정각에 뻐꾸기가 시각만큼 운다 — 밤엔 반딧불·올빼미 (데스크탑)
+    case dog // 강아지가 공을 물고 달아나 ±15m에 떨어뜨린다 (생물)
 
     var tier: SurpriseTier {
         switch self {
-        case .birdSteal, .moleNudge, .nap, .gallery, .geese: .common
-        case .frogRescue, .gust, .mulligan, .pinMove, .ballSwap: .rare
-        case .cursorCat, .windowTunnel: .epic
+        case .birdSteal, .moleNudge, .nap, .gallery, .geese, .sprinkler, .caddie, .dog: .common
+        case .frogRescue, .gust, .mulligan, .pinMove, .ballSwap, .windReverse: .rare
+        case .cursorCat, .windowTunnel, .cuckoo: .epic
         }
     }
 
     var hook: SurpriseHook {
         switch self {
-        case .birdSteal, .moleNudge, .mulligan, .cursorCat, .pinMove, .ballSwap, .gallery, .geese: .ballRest
-        case .gust, .windowTunnel: .inFlight
+        case .birdSteal, .moleNudge, .mulligan, .cursorCat, .pinMove, .ballSwap, .gallery, .geese, .dog: .ballRest
+        case .gust, .windowTunnel, .sprinkler, .windReverse: .inFlight
         case .nap: .aimIdle
         case .frogRescue: .water
+        case .caddie: .aimStart
+        case .cuckoo: .clock
         }
     }
 
     /// 씬을 점유하는가 (mode = .surprise, 끝나면 걷기). 돌풍·낮잠·창 터널·갤러리는 비행·조준·다음 샷 위에 얹힌다
+    /// (3차: 스프링클러·바람 역전은 비행, 캐디·뻐꾸기는 조준 위에 — 강아지만 점유)
     var ownsScene: Bool {
         switch self {
-        case .gust, .nap, .windowTunnel, .gallery: false
+        case .gust, .nap, .windowTunnel, .gallery, .sprinkler, .windReverse, .caddie, .cuckoo: false
         default: true
         }
     }
@@ -103,6 +114,8 @@ extension GameScene {
             case .inFlight: 0.06
             case .aimIdle: 0.6 // 12~20초 방치했을 때만 굴린다
             case .water: 0.4
+            case .aimStart: 0.07 // 캐디 — 티샷·그린을 뺀 조준(라운드 ≈15~20회)에 한 번꼴
+            case .clock: 1.0 // 뻐꾸기 — 드묾은 시계가 만든다 (정각 ±30초에 조준 중이어야)
             }
             guard !candidates.isEmpty, Double.random(in: 0 ..< 1) < chance else { return nil }
             // 등급 가중 추첨 — 흔한 것이 자주, 대형이 드물게
@@ -147,6 +160,12 @@ extension GameScene {
             return strokes + 1 < Phys.maxStrokes && abs(hole.holeX - ball.x) > 30
         case .gallery: // 지켜볼 샷이 남아 있어야, 이미 와 있으면 안 겹친다
             return strokes + 1 < Phys.maxStrokes && galleryState == nil
+        case .sprinkler: // 예측 착지점이 페어웨이·러프여야 (물·그린·벙커엔 안 솟는다)
+            return sprinklerSpot() != nil
+        case .windReverse: // 뒤집을 바람이 있어야 티가 난다
+            return abs(hole.wind) >= 1.5
+        case .caddie: // 건넬 클럽이나 할 말이 있어야 — 이미 와 있으면 안 겹친다
+            return surprise3.caddie == nil
         default:
             return true
         }
@@ -180,6 +199,11 @@ extension GameScene {
         case .ballSwap: playBallSwap()
         case .gallery: playGallery()
         case .geese: playGeese()
+        case .sprinkler: playSprinkler()
+        case .windReverse: playWindReverse()
+        case .caddie: playCaddie()
+        case .cuckoo: playCuckoo()
+        case .dog: playDog()
         }
     }
 
@@ -200,6 +224,7 @@ extension GameScene {
         napNode?.removeFromParent()
         napNode = nil
         cancelSurprises2()
+        cancelSurprises3()
     }
 
     static let surpriseNodeName = "surprise"
@@ -226,6 +251,7 @@ extension GameScene {
             wakeUp() // 관찰 모드는 키가 없으니 스스로 깬다
         }
         updateSurprises2(currentTime: currentTime)
+        updateSurprises3(dt: dt, currentTime: currentTime)
     }
 
     /// 스틱맨 반응 시작 (예고→사건→**반응**) — 홀아웃 반응과 같은 채널

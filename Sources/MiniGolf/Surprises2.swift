@@ -86,7 +86,12 @@ extension GameScene {
         let timer = SKNode()
         timer.name = Self.surpriseNodeName
         addChild(timer)
-        timer.run(.sequence([.wait(forDuration: delay), .run(block), .removeFromParent()]))
+        timer.run(.sequence([.wait(forDuration: delay), .run { [weak timer] in
+            // 같은 프레임에 정리된 타이머는 건너뛴다 — 씬 액션(데모 재시작)이 노드를 지운 프레임에도 SpriteKit은 그 액션 패스의
+            // 나머지 노드 액션을 평가한다 (3차 --demo-restart-in 2.0에서 뻐꾸기 울음이 새 라운드에 한 번 더 찍힘, 2026-09-23)
+            guard timer?.parent != nil else { return }
+            block()
+        }, .removeFromParent()]))
     }
 
     /// 지면을 따라 x를 옮기는 걷기 액션 (관중·거위 공용) — y는 표고를 따라가고 잔걸음만큼 통통 튄다

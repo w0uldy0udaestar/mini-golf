@@ -120,6 +120,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let i = args.firstIndex(of: "--demo-restart-after-holed"), i + 1 < args.count, let t = Double(args[i + 1]) {
             scene.demoRestartAfterHoled = t // 첫 홀아웃 T초 뒤 R — 홀 전환 타이머 인터럽트 관찰 (IDEAS 2026-09-23)
         }
+        if let i = args.firstIndex(of: "--demo-hour"), i + 1 < args.count, let h = Int(args[i + 1]) {
+            scene.surprise3.demoHour = (h % 24 + 24) % 24 // 뻐꾸기 시각 고정 — 밤(20~05시) 반딧불 대체 관찰용
+        }
         if let i = args.firstIndex(of: "--demo-restart-in"), i + 1 < args.count, let t = Double(args[i + 1]) {
             scene.demoRestartIn = t // 서프라이즈 시작 T초 뒤 새 라운드 — 인터럽트 정리 관찰용
         }

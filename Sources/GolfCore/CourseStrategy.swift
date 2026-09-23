@@ -34,4 +34,20 @@ public enum CourseStrategy {
     public static func carry(of id: String) -> Double {
         anchors[id]?.carry ?? 180
     }
+
+    /// 캐디 추천 클럽 (서프라이즈 3차) — 남은 거리를 바람·표고로 보정한 '유효 거리'를 풀샷 총거리로 넘는 가장 짧은 클럽.
+    /// 드라이버는 티에서만, 벙커는 샌드 웨지(파워 ×0.45라 거리 표가 안 맞는다), 그린은 퍼터.
+    /// 보정은 거친 어림: 뒷바람(+) 1m/s당 −2%, 오르막 1m당 +1m (코스 전략의 유효거리 k=1.0과 같은 결)
+    public static func recommendedClub(distance: Double, tailwind: Double, rise: Double, lie: Surface) -> Club {
+        let clubs = ClubTable.all
+        if lie == .green {
+            return clubs.first { $0.isPutter } ?? clubs[clubs.count - 1]
+        }
+        if lie == .bunker {
+            return clubs.first { $0.id == "SW" } ?? clubs[clubs.count - 2]
+        }
+        let eff = max(0, distance * (1 - 0.02 * tailwind) + rise)
+        let pool = clubs.filter { !$0.isPutter && (lie == .tee || $0.id != "DR") } // 긴 클럽 → 짧은 클럽 순
+        return pool.last { total(of: $0.id) >= eff } ?? pool[0]
+    }
 }

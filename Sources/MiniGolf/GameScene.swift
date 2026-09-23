@@ -10,7 +10,7 @@ final class GameScene: SKScene {
     private var holeIdx = 0
     var ball = BallState(x: CourseGenerator.teeX, y: 0)
     var strokes = 0
-    private var clubIdx = 0
+    var clubIdx = 0 // Surprises3 캐디가 클럽을 건넨다
     var heightPct = 0.6
     private var results: [(par: Int, strokes: Int, gaveUp: Bool)] = []
     enum Mode { case aim, swinging, motion, walking, holed, end, surprise, ritual } // Surprises.swift 확장이 읽는다
@@ -72,6 +72,7 @@ final class GameScene: SKScene {
     /// (프로브 실측 2026-09-23: 샷의 1.2%, 최대 18.5m·평균 5.4m — 한 프레임 점프는 순간이동으로 보인다)
     var settleRoll: (from: Double, to: Double, t: Double, dur: Double)?
     var galleryState: GalleryState?
+    var surprise3 = Surprise3State() // 서프라이즈 3차 (Surprises3.swift) — 스프링클러·캐디·뻐꾸기·강아지 상태
     var demoBumperFracs: [[Double]] = [] // --demo-bumpers: 창이 없는 관찰 환경용 합성 범퍼 (화면 비율 x,y,w,h)
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
@@ -572,6 +573,7 @@ final class GameScene: SKScene {
             ))
             fflush(stdout)
         }
+        onAimStart() // 캐디 (조준 시작 훅, Surprises3)
     }
 
     /// 퍼터를 잡으면 남은 거리에 맞는 백스윙에서 시작한다 — 평지 기준 계산이라
@@ -1964,7 +1966,8 @@ final class GameScene: SKScene {
                     heightPct = 0.95 // 벽 관찰: 조준 내내 풀 백스윙 프리뷰 유지 (최악 케이스 상시 노출)
                 }
                 demoWait += dt
-                if !napping, demoWait > (demoIdleForce ? 25 : 1.2) { // 아이들 관찰 모드는 조준을 길게 유지
+                // 아이들 관찰 모드는 조준을 길게 유지 · 캐디 건네기는 기다린다 (Surprises3)
+                if !napping, !caddieHoldsAim, demoWait > (demoIdleForce ? 25 : 1.2) {
                     demoWait = 0
                     // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
                     if let p = demoPower {
