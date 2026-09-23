@@ -325,6 +325,7 @@ extension GameScene {
             .run { [weak self] in // 드롭
                 guard let self else { return }
                 ball = BallState(x: dropX, y: hole.ground(at: dropX))
+                settleRoll = nil // 정착 굴림 잔존 방지 (2026-09-23 리뷰 — 강아지와 같은 결함)
                 ballNode.removeAllActions()
                 let fall = SKAction.move(to: dropPos, duration: 0.42)
                 fall.timingMode = .easeIn
@@ -384,6 +385,7 @@ extension GameScene {
                 guard let self else { return }
                 SoundKit.shared.bounce(speed: 2, surface: hole.surface(at: ball.x))
                 ball = BallState(x: newX, y: hole.ground(at: newX))
+                settleRoll = nil // 정착 굴림 잔존 방지 (2026-09-23 리뷰 — 강아지와 같은 결함)
                 let roll = SKAction.move(
                     to: CGPoint(x: px(newX), y: groundY(newX) + 5.5), duration: 0.5
                 )
@@ -481,6 +483,7 @@ extension GameScene {
             .run { [weak self] in // 둑에 내려놓는다
                 guard let self else { return }
                 ball = BallState(x: bankX, y: hole.ground(at: bankX))
+                settleRoll = nil // 정착 굴림 잔존 방지 (2026-09-23 리뷰 — 강아지와 같은 결함)
                 ballNode.removeAllActions()
                 ballNode.position = CGPoint(x: bankPt.x, y: bankPt.y + 5.5)
                 SoundKit.shared.bounce(speed: 1.5, surface: hole.surface(at: bankX))
@@ -767,6 +770,7 @@ extension GameScene {
         let newX = outOfWater(min(max(ball.x + dist, 6), hole.worldW - 6))
         SoundKit.shared.bounce(speed: 2, surface: hole.surface(at: ball.x))
         ball = BallState(x: newX, y: hole.ground(at: newX))
+        settleRoll = nil // 정착 굴림 잔존 방지 (2026-09-23 리뷰 — 강아지와 같은 결함)
         let roll = SKAction.move(to: CGPoint(x: px(newX), y: groundY(newX) + 5.5), duration: 0.6)
         roll.timingMode = .easeOut
         ballNode.run(roll)
