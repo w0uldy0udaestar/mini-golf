@@ -35,6 +35,7 @@ final class GameScene: SKScene {
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
+    var demoSettleForce = false // --demo-settle: 첫 샷을 홀 쪽 라이저 상단(러프, |경사| > 0.42)에 떨어뜨려 정착 굴림 관찰
     var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
     var ballHeld = false
@@ -61,6 +62,9 @@ final class GameScene: SKScene {
     var ballKind = BallKind.standard // 공 바꿔치기: 다음 한 샷만 (샷이 끝나면 표준으로)
     var tunnelArmed = false // 창 터널: 이 샷의 첫 범퍼 진입을 반사 대신 터널로
     var tunnelTransit: TunnelTransit? // 창 속을 지나는 중 — 비행 물리 정지
+    /// 급경사 정착(`Ballistics.settleOffSteepSlope`)의 스냅을 렌더에서 굴림으로 — 물리 위치는 즉시 확정, 그림만 from→to
+    /// (프로브 실측 2026-09-23: 샷의 1.2%, 최대 18.5m·평균 5.4m — 한 프레임 점프는 순간이동으로 보인다)
+    var settleRoll: (from: Double, to: Double, t: Double, dur: Double)?
     var galleryState: GalleryState?
     var demoBumperFracs: [[Double]] = [] // --demo-bumpers: 창이 없는 관찰 환경용 합성 범퍼 (화면 비율 x,y,w,h)
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
@@ -393,6 +397,7 @@ final class GameScene: SKScene {
         swingAnim = nil
         walkAnim = nil
         ballHeld = false
+        settleRoll = nil
         ballNode.removeAllActions() // 홀인 드롭 연출 복구
         ballNode.alpha = 1
         ballNode.setScale(1)
@@ -407,6 +412,20 @@ final class GameScene: SKScene {
         } else {
             enterAim()
         }
+    }
+
+    /// --demo-settle: 홀에서 티 쪽으로 훑어 처음 만나는 러프 급경사(|경사| > 0.42 — 러프 마찰 4.5가 중력 3.5를 이겨 서는 자리).
+    /// 협곡이면 홀 쪽 라이저 상단이라 정착이 라이저 전체를 내려간다 (프로브 최대 18.5m 사례). 없으면 nil (일반 홀)
+    private func demoSteepRimSpot() -> Double? {
+        let toward = hole.teeX >= hole.holeX ? 1.0 : -1.0
+        var x = hole.holeX
+        while (hole.teeX - x) * toward > 0 {
+            if abs(hole.slope(at: x)) > 0.42, hole.surface(at: x) == .rough {
+                return x
+            }
+            x += toward * 0.5
+        }
+        return nil
     }
 
     /// 핀 이동 서프라이즈 — 홀을 사본으로 교체하고 지형·컵·깃발을 다시 그린다 (Surprises2)
@@ -1085,6 +1104,7 @@ final class GameScene: SKScene {
         // 벽·나무 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
         // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
+        settleRoll = nil // 직전 정착 굴림이 남아 있으면 발사 순간 공이 뒤로 보인다
         Ballistics.launch(
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
@@ -1132,6 +1152,10 @@ final class GameScene: SKScene {
             t.alpha = 1
         }
         mode = .motion
+        if demoSettleForce, strokes == 1, let x = demoSteepRimSpot() { // 정착 굴림 관찰: 마찰로 설 수 있는 급경사에 '떨어진' 공
+            ball = BallState(x: x, y: hole.ground(at: x))
+            ball.phase = .roll // 다음 스텝에 정지 판정 → settleOffSteepSlope → SETTLE 로그·굴림
+        }
         SoundKit.shared.impact(cat: club.cat, lie: lie, power: heightPct)
         if !club.isPutter, heightPct >= 0.4, let kind = rollSurprise(hook: .inFlight) { // 돌풍 (비행 훅)
             playSurprise(kind)
@@ -1407,6 +1431,7 @@ final class GameScene: SKScene {
                 ring.position = at
                 ring.setScale(0.4)
                 ring.zPosition = 7
+                ring.name = Self.surpriseNodeName
                 addChild(ring)
                 ring.run(.sequence([
                     .group([.scale(to: 2.6, duration: 0.7), .fadeOut(withDuration: 0.7)]),
@@ -2014,6 +2039,7 @@ final class GameScene: SKScene {
             var wallHit: (speed: Double, x: Double)?
             var bumperHit: (speed: Double, x: Double, y: Double)?
             var lipped = false
+            var settledFrom: Double? // 정착 스냅이 일어난 프레임 — 궤적 잔상은 정지 지점까지만
             while acc >= Phys.dt {
                 acc -= Phys.dt
                 let prevX = ball.x, prevY = ball.y
@@ -2040,6 +2066,15 @@ final class GameScene: SKScene {
                     lipped = true
                 case .none:
                     break
+                }
+                if terminal == .none, ball.phase == .rest, abs(ball.x - prevX) > 0.6 { // 스텝당 이동 ≤ 0.32m — 초과는 정착 스냅
+                    let d = abs(ball.x - prevX)
+                    settledFrom = prevX
+                    settleRoll = (prevX, ball.x, 0, min(0.8, 0.2 + 0.035 * d))
+                    if demoMode {
+                        print(String(format: "SETTLE %.1f→%.1f %.1fm", prevX, ball.x, d))
+                        fflush(stdout)
+                    }
                 }
                 if terminal != .none {
                     break
@@ -2082,7 +2117,8 @@ final class GameScene: SKScene {
                 SoundKit.shared.lipOut()
                 shotLipped = true
             }
-            trailPoints.append(CGPoint(x: px(ball.x), y: py(ball.y) + 5.5))
+            let trailX = settledFrom ?? ball.x
+            trailPoints.append(CGPoint(x: px(trailX), y: py(hole.ground(at: trailX)) + 5.5))
             if trailPoints.count > 400 {
                 trailPoints.removeFirst()
             }
@@ -2418,10 +2454,18 @@ final class GameScene: SKScene {
             shadowNode.isHidden = true
         }
         if mode != .holed, mode != .surprise, !pickupOwns, tunnelTransit == nil { // 창 속 통과 중엔 공·그림자 숨김 유지
-            ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
-            let heightAbove = ball.y - hole.ground(at: ball.x)
+            var bx = ball.x, by = ball.y
+            if var r = settleRoll { // 정착 굴림 — smoothstep으로 from→to, 지면을 따라
+                r.t += dt
+                let u = min(1, r.t / r.dur)
+                bx = r.from + (r.to - r.from) * (u * u * (3 - 2 * u))
+                by = hole.ground(at: bx)
+                settleRoll = u >= 1 ? nil : r
+            }
+            ballNode.position = CGPoint(x: px(bx), y: py(by) + 5.5)
+            let heightAbove = by - hole.ground(at: bx)
             shadowNode.isHidden = heightAbove <= 0.2
-            shadowNode.position = CGPoint(x: px(ball.x), y: groundY(ball.x) - 1)
+            shadowNode.position = CGPoint(x: px(bx), y: groundY(bx) - 1)
         }
 
         if trailPoints.count > 1 {

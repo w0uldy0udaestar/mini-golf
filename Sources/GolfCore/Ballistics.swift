@@ -181,7 +181,9 @@ public enum Ballistics {
             steps += 1
         }
         x = min(max(x, 0.5), hole.worldW - 0.5)
-        guard x != b.x else { return false }
+        // 200스텝 소진(좁은 V 양벽 진동)·경계 클램프로 여전히 급경사면 이동을 포기한다 — 현 생성기는 V 바닥이 항상 완경사라
+        // 도달 불가(프로브 steepRests == 0 단언이 가드), 지형 파라미터가 바뀌면 여기서 드러난다
+        guard x != b.x, abs(hole.slope(at: x)) <= steepRest else { return false }
         b.x = x
         b.y = hole.ground(at: x)
         return hole.surface(at: x) == .water
