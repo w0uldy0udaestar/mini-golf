@@ -209,6 +209,8 @@ final class GameScene: SKScene {
     var roundHadWater = false // 무입수 라운드 배지 판정
     // QA P1 재미 3 (2026-09-16): 좌절 반응·버디 스트릭·포커스 복귀 인사
     var setbackStreak = 0 // 워터·벙커·립아웃 연속 횟수 — 2회째에 좌절 반응
+    var lastShotLie = Surface.tee // 직전 샷을 친 라이 — 벙커 탈출 실패(벙커에서 쳐서 벙커에 남음) 판정
+    var bunkerHintShown = false // 벙커 탈출 힌트는 홀당 한 번 (QA 2026-08-15 "탈출 실패 루프")
     var shotLipped = false // 이번 샷에 립아웃이 있었나 (정지 시 좌절 판정)
     var birdieStreak = 0 // 연속 버디 이상 — 2회부터 홀아웃 토스트에 표시
     var pausedAt: Date? // 5분 이상 비웠다 돌아오면 손 흔들기
@@ -387,6 +389,7 @@ final class GameScene: SKScene {
         results = []
         roundHadWater = false
         setbackStreak = 0
+        bunkerHintShown = false
         birdieStreak = 0
         surpriseCounts = [:]
         scorecard.hide()
@@ -1176,6 +1179,7 @@ final class GameScene: SKScene {
 
     private func launchBall() {
         let lie = strokes == 0 ? Surface.tee : hole.surface(at: ball.x)
+        lastShotLie = lie
         // 풀파워 리스크: 모든 샷에 베이스 분산(±1°) + 80% 초과분^1.6의 리스크, 정규분포 근사
         // (uniform 3개 평균 ≈ 가우시안 — 큰 미스는 드물고 작은 흔들림이 대부분, 리서치 E)
         let overdrive = max(0, (heightPct - 0.8) / 0.2)
@@ -2307,7 +2311,16 @@ final class GameScene: SKScene {
                     } else if galleryWantsScene() {
                         galleryReact() // 갤러리가 지켜본 샷 — 스틱맨 반응이 끝나면 걷기 (Surprises2)
                     } else if frustrated {
-                        playFrustration(reason: inBunker ? "또 벙커…" : shotLipped ? "또 립아웃…" : "또…")
+                        var reason = inBunker ? "또 벙커…" : shotLipped ? "또 립아웃…" : "또…"
+                        if inBunker, lastShotLie == .bunker, !bunkerHintShown { // 탈출 실패 — 힌트는 홀당 한 번
+                            bunkerHintShown = true
+                            reason += " 웨지로 백스윙 절반 이상"
+                        }
+                        playFrustration(reason: reason)
+                    } else if inBunker, lastShotLie == .bunker, !bunkerHintShown { // 좌절 반응 없이 실패한 경우도 힌트
+                        bunkerHintShown = true
+                        toast("벙커 탈출", sub: "웨지로 백스윙 절반 이상 — 벙커는 파워가 반으로 준다")
+                        startWalk()
                     } else if let kind = rollSurprise(hook: .ballRest) {
                         playSurprise(kind)
                         if !kind.ownsScene { // 갤러리처럼 다음 샷 위에 얹히는 종류는 바로 걷는다
