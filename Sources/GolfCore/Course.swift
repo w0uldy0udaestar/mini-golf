@@ -336,15 +336,23 @@ public enum CourseGenerator {
             let minTeeRun = max(par == 3 ? 35 : 60, (apronStart - teeEnd) * 0.30)
             let available = climbEnd - (teeEnd + minTeeRun)
             var totalRise = plannedRise
+            func risers(_ rise: Double) -> Double {
+                Double(max(1, Int(ceil(rise / maxRiser))))
+            }
             func span(_ rise: Double) -> Double {
-                rise * riserRatio + Double(max(1, Int(ceil(rise / maxRiser)))) * treadW
+                rise * riserRatio + risers(rise) * treadW
+            }
+            // 안 들어가면 트레드 폭부터 줄인다(파3 22·그 외 30까지) — 등반량을 먼저 깎으면 계획 낙차와 실제 낙차가 어긋나
+            // 유효거리 보정(수평 = 유효 − k·계획 낙차)이 틀어진다. 등반량 축소는 최후 수단
+            if span(totalRise) > available {
+                treadW = max(par == 3 ? 22 : 30, (available - totalRise * riserRatio) / risers(totalRise))
             }
             while span(totalRise) > available, totalRise > 10 {
                 totalRise *= 0.87
             }
             totalRise = max(totalRise, par == 3 ? 8 : 12) // 최소 상승 — 다이나믹은 지킨다
-            let n = max(1, Int(ceil(totalRise / maxRiser)))
-            if span(totalRise) > available { // 그래도 안 들어가면 트레드를 줄인다 — 등반 시작이 티런 앞으로 밀리면 노드 역순 킹크 (seed 2)
+            let n = Int(risers(totalRise))
+            if span(totalRise) > available { // 그래도 안 들어가면 트레드를 더 줄인다 — 등반 시작이 티런 앞으로 밀리면 노드 역순 킹크 (seed 2)
                 treadW = max(20, (available - totalRise * riserRatio) / Double(n))
             }
             let step = totalRise / Double(n)

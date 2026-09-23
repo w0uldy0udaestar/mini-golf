@@ -390,7 +390,7 @@ final class GolfCoreTests: XCTestCase {
     func testSignatureHoles() throws {
         var perRoundCounts: [Int] = []
         var kindsSeen = Set<SignatureKind>()
-        for seed in 1 ... 60 {
+        for seed in 1 ... 150 {
             let course = CourseGenerator.makeCourse(seed: UInt32(seed))
             let sigs = course.filter { $0.signature != nil }
             perRoundCounts.append(sigs.count)
