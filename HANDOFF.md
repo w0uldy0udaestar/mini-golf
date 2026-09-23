@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — v0.8.1 릴리스 뒤 **백로그 4종 전부 main 머지**(faf48d2): 클럽 리밸런스·무드 워크·걷기 중 재계획·서프라이즈 3차. v0.8.2 미배포, 서프라이즈 3차 Code Reviewer 진행 중)
+## 현재 상태 (2026-09-23 — v0.8.1 릴리스 뒤 백로그 4종 + 서프라이즈 3차 리뷰 반영(1c56c86) main 머지. v0.8.2 미배포 — 판정·릴리스 확인 대기)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -160,7 +160,8 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 1. **백로그 4종 완료** (2026-09-23 "전부 진행", 커밋 순): 클럽 리밸런스(5cf2825 — 우드 69/65/62, DR 306 → 286m, 봇 GIR 42~49 → 33~38%) ·
    무드 워크(03284e9 — `WalkMood`·`applyMood`, `--demo-mood`) · 걷기 중 방향 재계획(e943b62 — `walkTarget`·`replanAhead`·`startWalk(fromBody:)`,
    `--demo-replan`) · 서프라이즈 3차(faf48d2 — 서브에이전트 general-purpose(opus) 워크트리 구현, `Surprises3.swift`, 17종, `--demo-hour`).
-   **다음**: ① 서프라이즈 3차 Code Reviewer(fable) 소견 반영 ② `make app` 재빌드·사용자 판정(무드 워크 과장 폭, 턴·재계획 자연스러움,
+   서프라이즈 3차 리뷰 완료·반영(1c56c86: critical·major 0·minor 2·nit 2 — 드롭 뒤 settleRoll 잔존(1차 종 4곳도 정리), 같은 프레임
+   정리 가드 3곳, 바람 역전 0.6s·착지 뒤 문구, 문서 48px). **다음**: ① `dist/MiniGolf.app`(1c56c86) 사용자 판정(무드 워크 과장 폭, 턴·재계획 자연스러움,
    스프링클러 감쇠 강도(서브에이전트가 "꽤 강함" 지적), 캐디 빈도 7%, 강아지) ③ v0.8.2 릴리스(사용자 확인 뒤, v0.8.1 절차).
    교훈: 서브에이전트 워크트리(.claude/worktrees)를 `git add -A`가 gitlink로 잡았다 → .gitignore 처리(d526a5f). 데모 인자를 zsh 변수로
    넘기면 단어 분리가 안 돼 플래그가 무시된다 — 함수 인자("$1")나 직접 나열로
