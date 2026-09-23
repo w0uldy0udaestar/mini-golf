@@ -105,6 +105,7 @@ final class GameScene: SKScene {
 
         var turn: TurnPlan?
         var arrivalTurn: TurnPlan? // 도착 턴 — 걸어온 방향과 조준 방향이 반대일 때 (공이 뒤에 있던 경우)
+        var mood = WalkMood.neutral // 무드 워크 채널 오버레이 (속도·보폭·자세)
         var arrivalDir = 1.0
         var vPx = 0.0
         // 게이트 상태 (리서치 반영: stride warping + 접지점 래치)
@@ -190,6 +191,8 @@ final class GameScene: SKScene {
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     /// 홀아웃 직후 스틱맨의 스코어 반응 (QA·Whimsy 리뷰 — 결과에 감정을 싣는다)
     enum ReactionKind { case none, rejoice, fistPump, nod, slump, dejected, startled, shoo, laugh } // 뒤 셋은 서프라이즈 반응
+    /// 무드 워크 (2026-09-23, docs/research-mocap-index.md 적용안): 홀아웃·온그린·워터·좌절의 감정이 다음 걷기 전체에 남는다
+    enum WalkMood: String { case neutral, elated, sad }
     var reactionKind = ReactionKind.none
     var reactionAt: TimeInterval = 0
     /// 이번 샷의 스트라이크 품질 — 타이거 트월 트리거. 결과(낙하 지점)가 아니라 발사 순간의 '느낌'(미스힛·파워)으로 판단
@@ -211,6 +214,9 @@ final class GameScene: SKScene {
     var setbackStreak = 0 // 워터·벙커·립아웃 연속 횟수 — 2회째에 좌절 반응
     var lastShotLie = Surface.tee // 직전 샷을 친 라이 — 벙커 탈출 실패(벙커에서 쳐서 벙커에 남음) 판정
     var bunkerHintShown = false // 벙커 탈출 힌트는 홀당 한 번 (QA 2026-08-15 "탈출 실패 루프")
+    var walkMood = WalkMood.neutral // 무드 워크: 다음 걷기의 감정
+    var walkMoodLeft = 0 // 남은 걷기 횟수 (버디·더블보기·기권 2, 온그린·워터·좌절 1)
+    var demoMood: WalkMood? // --demo-mood M: 모든 걷기에 무드 강제 (관찰)
     var shotLipped = false // 이번 샷에 립아웃이 있었나 (정지 시 좌절 판정)
     var birdieStreak = 0 // 연속 버디 이상 — 2회부터 홀아웃 토스트에 표시
     var pausedAt: Date? // 5분 이상 비웠다 돌아오면 손 흔들기
@@ -390,6 +396,7 @@ final class GameScene: SKScene {
         roundHadWater = false
         setbackStreak = 0
         bunkerHintShown = false
+        walkMoodLeft = 0
         birdieStreak = 0
         surpriseCounts = [:]
         scorecard.hide()
@@ -459,6 +466,37 @@ final class GameScene: SKScene {
 
     private func cancelHoleFlow() {
         enumerateChildNodes(withName: Self.holeFlowNodeName) { node, _ in node.removeFromParent() }
+    }
+
+    /// 무드 워크 채널 (docs/research-mocap-index.md — CMU 걷기 스타일 차분의 실루엣 요약, 70px용 과장):
+    /// 들뜸(elated) = 폴짝 바운스·팔 크게·머리 들고 가슴 폄 · 처짐(sad) = 힙·어깨 내려앉고 머리 숙임·어깨 앞으로·팔 죽음·보폭 0.8.
+    /// 출발 0.6s 램프인, 도착 0.9s 램프아웃 — 정지 발자국 계획이 완성되는 스탠스는 중립이어야 조준 전환이 튀지 않는다
+    private func moodEnvelope(tw: Double, dur: Double) -> Double {
+        smoothstep(min(1, max(0, tw / 0.6))) * smoothstep(min(1, max(0, (dur - tw) / 0.9)))
+    }
+
+    private func applyMood(_ f: inout WalkFlavor, mood: WalkMood, tw: Double, dur: Double) {
+        let e = moodEnvelope(tw: tw, dur: dur)
+        guard e > 0, mood != .neutral else { return }
+        // 1차 값(힙 −2.5·머리 −3·폴짝 0.35)은 프레임 시트에서 거의 안 읽혔다 → 2배 과장 (2026-09-23)
+        if mood == .elated {
+            f.skip += 0.6 * e
+            f.armAmpBoost += 0.8 * e
+            f.headDyOff += 3.0 * e
+            f.shoulderYOff += 2.0 * e
+            f.gripLift += 0.6 * e
+        } else {
+            f.hipYOff -= 5.0 * e
+            f.shoulderYOff -= 3.0 * e
+            f.shoulderXOff += 4.0 * e
+            f.headDyOff -= 5.0 * e
+            f.headDxOff += 3.0 * e
+            f.armAmpBoost -= 0.7 * e
+        }
+    }
+
+    private func moodStride(_ mood: WalkMood, e: Double) -> Double {
+        mood == .elated ? 1 + 0.1 * e : mood == .sad ? 1 - 0.3 * e : 1
     }
 
     /// 제자리 돌기 리그 — 걷기 리그 공간(몸 원점)에서 만들어 몸이 서 있는 자리(공 원점 기준 ∓(ballFwd+5))로 옮긴다.
@@ -1069,7 +1107,13 @@ final class GameScene: SKScene {
             }
             hardness /= Double(n + 1)
         }
-        let dur = min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness)))
+        // 무드 워크: 들뜬 걸음은 조금 빠르고, 처진 걸음은 터덜터덜 (거리 무관 배율)
+        let mood = demoMood ?? (walkMoodLeft > 0 ? walkMood : .neutral)
+        if walkMoodLeft > 0 {
+            walkMoodLeft -= 1
+        }
+        let moodSpeed = mood == .elated ? 0.85 : mood == .sad ? 1.45 : 1.0
+        let dur = min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness) * moodSpeed))
         var anim = WalkAnim(
             fromX: from, toX: to, dur: dur,
             // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
@@ -1079,6 +1123,11 @@ final class GameScene: SKScene {
             // (0.3s 시작은 스윙 피니시 타깃이 아직 리그를 쥐고 있어 예고·1걸음이 잘렸다 — 2026-09-23 RIG 덤프)
             anim.turn = WalkAnim.TurnPlan(start: 0.55, dur: 0.65, newDir: newDir)
             anim.relax = 0.55 + 0.65 + 0.15
+        }
+        anim.mood = mood
+        if demoMode, mood != .neutral {
+            print("MOOD \(mood.rawValue) dur \(String(format: "%.1f", dur))")
+            fflush(stdout)
         }
         // 아주 가끔 넘어진다 (재미): 기본 1%, 험한 길 2% — 라운드에 한 번 볼까 말까
         // (초기 3~6%는 실플레이에서 "너무 자주"로 판정 — 2026-08-15)
@@ -1101,12 +1150,12 @@ final class GameScene: SKScene {
                 anim.showAt = anim.relax + Double.random(in: 1.2 ... latest)
             }
         }
-        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 37종 모션을 겹치지 않게 흩뿌린다
-        if anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 37종 모션을 겹치지 않게 흩뿌린다 (무드 관찰 --demo-mood에서는 끈다 — 계측 오염)
+        if demoMood == nil, anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
         var t = anim.relax + 0.7
-        while t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 5 {
+        while demoMood == nil, t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 5 {
             guard Double.random(in: 0 ..< 1) < 0.5 else {
                 t += 1.1
                 continue
@@ -1304,6 +1353,8 @@ final class GameScene: SKScene {
         // 스코어 감정 계층 (QA·Whimsy 리뷰): 좋은 결과일수록 토스트가 크고, 스틱맨이 반응한다
         let diff = strokes == 1 ? -3 : strokes - hole.par // 홀인원은 최상급 취급
         reactionKind = diff <= -2 ? .rejoice : diff == -1 ? .fistPump : diff == 0 ? .nod : .slump
+        walkMood = diff <= -1 ? .elated : diff >= 2 ? .sad : .neutral // 다음 홀의 첫 두 걷기까지 감정이 남는다 (무드 워크)
+        walkMoodLeft = walkMood == .neutral ? 0 : 2
         birdieStreak = diff <= -1 ? birdieStreak + 1 : 0 // 연속 버디 이상 (QA P1 재미 3)
         setbackStreak = 0
         reactionAt = lastTime
@@ -1474,6 +1525,8 @@ final class GameScene: SKScene {
     private func onWater() {
         strokes += 1
         PlayLog.note("WATER strokes \(strokes)")
+        walkMood = .sad // 드롭까지 터덜터덜
+        walkMoodLeft = 1
         roundHadWater = true
         if !demoMode {
             Records.shared.waterBalls += 1
@@ -1528,6 +1581,8 @@ final class GameScene: SKScene {
         mode = .surprise
         react(.rejoice)
         SoundKit.shared.chime()
+        walkMood = .elated // 그린까지 들뜬 걸음
+        walkMoodLeft = 1
         afterSurprise(0.2) { SoundKit.shared.cheer() }
         toast(label, sub: "이글 찬스", titleScale: 1.3)
         let at = CGPoint(x: px(ball.x), y: groundY(ball.x) + 5.5)
@@ -1562,6 +1617,8 @@ final class GameScene: SKScene {
         mode = .surprise
         react(.dejected)
         SoundKit.shared.sigh()
+        walkMood = .sad
+        walkMoodLeft = 1
         if let reason {
             toast("휴…", sub: reason)
         }
@@ -1578,6 +1635,8 @@ final class GameScene: SKScene {
         endShotTrail()
         reactionKind = .dejected
         reactionAt = lastTime
+        walkMood = .sad
+        walkMoodLeft = 2
         toast("기권", sub: "\(Phys.maxStrokes)타 초과", titleScale: 0.88)
         afterHoleFlow(1.4) { [weak self] in self?.advanceHole() }
     }
@@ -2075,6 +2134,7 @@ final class GameScene: SKScene {
                 strideScale *= g.stride
                 freeze = max(freeze, g.stop)
             }
+            strideScale *= moodStride(w.mood, e: moodEnvelope(tw: w.t - w.relax - w.pausedTime, dur: w.dur))
             if freeze > 0 {
                 w.pausedTime += dt * freeze // 걸음 시계는 동결 비율만큼만 멈춘다
             }
@@ -2399,6 +2459,7 @@ final class GameScene: SKScene {
             rigRate = 9
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
+            applyMood(&flavor, mood: w.mood, tw: w.t - w.relax - w.pausedTime, dur: w.dur) // 무드 오버레이 (이벤트가 위에 합산)
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
                 let up = min(1, max(0, (w.t - r.lowerBound) / 0.6))
                 let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
