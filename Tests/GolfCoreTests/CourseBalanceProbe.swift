@@ -221,8 +221,8 @@ final class CourseBalanceProbe: XCTestCase {
             sm.filter { $0 > 1 }.count, sm.filter { $0 > 2 }.count
         ))
         print("BOTBAL\n" + lines.joined(separator: "\n"))
-        // ── 회귀 대역 (2026-09-23 리뷰 재실측: 아키타입 −0.47~−0.76(canyon이 가장 쉬움 쪽), summit 고착 1%, 급경사 정지 0.
-        //    canyon 하한 −1.0까지 여유 0.24 — 클럽 리밸런스 시 이 줄부터 본다) ──
+        // ── 회귀 대역 (2026-09-23 클럽 리밸런스(우드 69/65/62) 뒤 실측: 아키타입 −0.31~−0.81(terraces가 가장 쉬움 쪽), canyon 고착 1%·
+        //    입수 0.15/홀, 급경사 정지 0. terraces 하한 −1.0까지 여유 0.19) ──
         XCTAssertEqual(Self.steepRests, 0, "공이 급경사면에 정지함 (\(Self.steepRests)회)")
         for k in Set(naive.map(\.kind)) {
             let rs = naive.filter { $0.kind == k }

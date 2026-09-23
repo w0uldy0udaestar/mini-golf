@@ -19,10 +19,12 @@ public struct Club: Sendable, Equatable {
 }
 
 public enum ClubTable {
+    /// 우드 3종 파워 75/70/66 → 69/65/62 (2026-09-23 클럽 리밸런스): 구 드라이버 토탈 306m이 파4(250~360) 대부분에서 원온
+    /// 사정권이라 봇 GIR 42~49%·파5 −0.7. 아이언·웨지는 유지 — 협곡 탈출 규칙(Course.pwRoughHeight)이 PW 탄도 표에 묶여 있다
     public static let all: [Club] = [
-        Club(id: "DR", name: "드라이버", cat: .wood, loft: 10.5, spin: 2700, power: 75),
-        Club(id: "3W", name: "3번 우드", cat: .wood, loft: 15, spin: 3600, power: 70),
-        Club(id: "5W", name: "5번 우드", cat: .wood, loft: 18, spin: 4300, power: 66),
+        Club(id: "DR", name: "드라이버", cat: .wood, loft: 10.5, spin: 2700, power: 69),
+        Club(id: "3W", name: "3번 우드", cat: .wood, loft: 15, spin: 3600, power: 65),
+        Club(id: "5W", name: "5번 우드", cat: .wood, loft: 18, spin: 4300, power: 62),
         Club(id: "3I", name: "3번 아이언", cat: .iron, loft: 21, spin: 4600, power: 62),
         Club(id: "4I", name: "4번 아이언", cat: .iron, loft: 24, spin: 5000, power: 59),
         Club(id: "5I", name: "5번 아이언", cat: .iron, loft: 27, spin: 5400, power: 56),
