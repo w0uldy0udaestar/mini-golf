@@ -864,6 +864,46 @@ final class GolfCoreTests: XCTestCase {
         }
     }
 
+    // ── 서프라이즈 3차: 바람 역전 사본 · 캐디 추천 클럽 ──
+
+    func testWithWindChangesOnlyWind() {
+        for h in CourseGenerator.makeCourse(seed: 19) {
+            let r = h.withWind(-h.wind)
+            XCTAssertEqual(r.wind, -h.wind)
+            XCTAssertEqual(r.holeX, h.holeX)
+            XCTAssertEqual(r.par, h.par)
+            XCTAssertEqual(r.elevation, h.elevation)
+            XCTAssertEqual(r.segments.count, h.segments.count)
+            XCTAssertEqual(r.waterRange, h.waterRange)
+            XCTAssertEqual(r.obstacles.count, h.obstacles.count)
+        }
+    }
+
+    func testRecommendedClubCoversDistanceWithShortestClub() throws {
+        // 평지·무풍: 추천 클럽의 풀샷 총거리는 거리 이상이고, 한 클럽 짧은 것은 모자란다
+        for d in stride(from: 20.0, through: 220, by: 10) {
+            let c = CourseStrategy.recommendedClub(distance: d, tailwind: 0, rise: 0, lie: .fairway)
+            XCTAssertFalse(c.isPutter)
+            XCTAssertNotEqual(c.id, "DR", "페어웨이에서 드라이버 추천")
+            let i = try XCTUnwrap(ClubTable.all.firstIndex(of: c))
+            let shorter = ClubTable.all[i + 1]
+            if CourseStrategy.total(of: c.id) >= d, !shorter.isPutter {
+                XCTAssertLessThan(CourseStrategy.total(of: shorter.id), d, "\(d)m에 \(c.id)보다 짧은 클럽으로 충분")
+            }
+        }
+        XCTAssertEqual(CourseStrategy.recommendedClub(distance: 5, tailwind: 0, rise: 0, lie: .rough).id, "SW")
+        XCTAssertEqual(CourseStrategy.recommendedClub(distance: 900, tailwind: 0, rise: 0, lie: .tee).id, "DR")
+        XCTAssertEqual(CourseStrategy.recommendedClub(distance: 900, tailwind: 0, rise: 0, lie: .fairway).id, "3W")
+        XCTAssertEqual(CourseStrategy.recommendedClub(distance: 60, tailwind: 0, rise: 0, lie: .bunker).id, "SW")
+        XCTAssertTrue(CourseStrategy.recommendedClub(distance: 8, tailwind: 0, rise: 0, lie: .green).isPutter)
+        // 맞바람·오르막은 같거나 긴 클럽 (인덱스가 작거나 같다)
+        let base = CourseStrategy.recommendedClub(distance: 120, tailwind: 0, rise: 0, lie: .fairway)
+        let head = CourseStrategy.recommendedClub(distance: 120, tailwind: -6, rise: 10, lie: .fairway)
+        let headIdx = try XCTUnwrap(ClubTable.all.firstIndex(of: head))
+        let baseIdx = try XCTUnwrap(ClubTable.all.firstIndex(of: base))
+        XCTAssertLessThanOrEqual(headIdx, baseIdx)
+    }
+
     // ── 결정론 ──
 
     func testCourseGenerationIsDeterministic() {

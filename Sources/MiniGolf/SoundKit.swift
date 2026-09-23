@@ -355,6 +355,81 @@ final class SoundKit {
         }
     }
 
+    // ── 서프라이즈 3차 (2026-09-23) ──
+
+    /// 스프링클러 예고 — 지면 속 마른 '틱' (짧은 클릭 + 높은 톡)
+    func tick() {
+        var bp = Biquad.bandpass(3200, q: 2.0, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: 0.05) { t in
+            bp.process(rng.white()) * exp(-t / 0.004) * 0.35 + sin(2 * .pi * 1900 * t) * exp(-t / 0.006) * 0.05
+        }
+    }
+
+    /// 스프링클러 분사 — 고역 노이즈 쉬익 위에 임팩트 스프링클러의 틱틱 박자 (한 버퍼 — 라운드로빈 플레이어를 덜 쓴다)
+    func sprinkler(dur: Double) {
+        var hiss = Biquad.bandpass(5200, q: 0.7, sr: sr)
+        var clk = Biquad.bandpass(3000, q: 2.0, sr: sr)
+        var rng = NoiseLCG()
+        play(duration: dur) { t in
+            let u = t / dur
+            let env = min(1, t / 0.15) * min(1, (dur - t) / 0.4)
+            let tt = t.truncatingRemainder(dividingBy: 0.16)
+            let n = rng.white()
+            return (hiss.process(n) * 0.16 * (0.8 + 0.2 * sin(2 * .pi * 7 * t)) + clk
+                .process(n) * exp(-tt / 0.005) * 0.3)
+                * env * (1 - 0.3 * u)
+        }
+    }
+
+    /// 캐디 '흠흠' — 낮은 콧소리 두 음 (말 대신)
+    func hmm() {
+        play(duration: 0.46) { t in
+            let first = t < 0.2
+            let tt = first ? t : t - 0.24
+            guard tt >= 0 else { return 0 }
+            let f = first ? 190.0 : 165.0
+            let env = sin(.pi * min(1, tt / 0.2))
+            return (sin(2 * .pi * f * tt) + 0.3 * sin(2 * .pi * f * 2 * tt)) * env * 0.08
+        }
+    }
+
+    /// 뻐꾹 — 장3도 아래로 떨어지는 두 음 (G5→E♭5)
+    func cuckoo() {
+        play(duration: 0.5) { t in
+            let first = t < 0.2
+            let tt = first ? t : t - 0.23
+            guard tt >= 0 else { return 0 }
+            let f = first ? 784.0 : 622.0
+            let env = min(1, tt / 0.015) * exp(-tt / 0.12)
+            return (sin(2 * .pi * f * tt) + 0.15 * sin(2 * .pi * f * 2 * tt)) * env * 0.11
+        }
+    }
+
+    /// 부엉 — 낮고 둥근 두 음 (밤의 뻐꾸기 대체)
+    func hoot() {
+        play(duration: 0.9) { t in
+            let first = t < 0.3
+            let tt = first ? t : t - 0.4
+            guard tt >= 0 else { return 0 }
+            let d = first ? 0.3 : 0.5
+            let f = (first ? 330.0 : 300.0) * (1 - 0.04 * tt / d)
+            let env = sin(.pi * min(1, tt / d))
+            return (sin(2 * .pi * f * tt) + 0.2 * sin(2 * .pi * f * 2 * tt)) * env * env * 0.08
+        }
+    }
+
+    /// 멍 — 짧은 톱니 버스트 + 피치 낙하
+    func woof() {
+        var lp = Biquad.lowpass(1400, q: 0.9, sr: sr)
+        play(duration: 0.16) { t in
+            let f = 420 - 1200 * t
+            let saw = 2 * (f * t - floor(f * t + 0.5))
+            let env = min(1, t / 0.01) * exp(-t / 0.05)
+            return lp.process(saw) * env * 0.14
+        }
+    }
+
     // ── 합성 ──
 
     private func play(duration: Double, _ sample: (Double) -> Double) {
