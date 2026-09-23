@@ -304,14 +304,15 @@ extension GameScene {
         }
         toast("바람이…?", sub: nil)
         log3(String(format: "WINDREV warn wind %+.1f", old))
-        afterSurprise(0.9) { [weak self] in
+        afterSurprise(0.6) { [weak self] in // 0.9는 낮은 탄도에서 착지 뒤에 떨어졌다 (리뷰 nit 1 — 6회 중 3회)
             guard let self else { return }
             replaceHole(hole.withWind(new))
             SoundKit.shared.gust(dur: 1.1)
             func arrow(_ w: Double) -> String {
                 abs(w) < 0.5 ? "무풍" : "\(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
             }
-            toast("바람이 돌았다!", sub: "이제 \(arrow(new)) · 이 홀 끝까지")
+            let stillFlying = ball.phase == .fly
+            toast("바람이 돌았다!", sub: "이제 \(arrow(new)) · \(stillFlying ? "이 홀 끝까지" : "다음 샷부터 · 이 홀 끝까지")")
             if !(swingStyle.clubTwirl && lastShotGood) {
                 react(.startled)
             }
@@ -578,7 +579,10 @@ extension GameScene {
             .run { SoundKit.shared.tick() },
             .wait(forDuration: 0.5),
             .sequence(calls),
-            .run { [weak self] in self?.react(.laugh) },
+            .run { [weak self] in
+                guard clock.parent != nil else { return } // 같은 프레임 정리 가드 (리뷰 minor 2)
+                self?.react(.laugh)
+            },
             .wait(forDuration: 0.6),
             rise,
             .run { [weak self] in
@@ -636,12 +640,14 @@ extension GameScene {
         swarm.run(.sequence([
             .wait(forDuration: 0.3),
             .run { [weak self] in
+                guard swarm.parent != nil else { return } // 같은 프레임 정리 가드 (리뷰 minor 2)
                 SoundKit.shared.hoot()
                 self?.toast("밤 \(h12)시", sub: "부엉— 반딧불이 날아든다")
                 self?.log3("CUCKOO hoot 1")
             },
             .wait(forDuration: 1.6),
             .run { [weak self] in
+                guard swarm.parent != nil else { return }
                 SoundKit.shared.hoot()
                 self?.react(.nod)
                 self?.log3("CUCKOO hoot 2")
@@ -666,7 +672,7 @@ extension GameScene {
         let fromRight = ballPx < size.width / 2 // 넓은 쪽에서 들어온다
         let edgeX: CGFloat = fromRight ? size.width + 40 : -40
         let startX = fromRight ? min(edgeX, ballPx + 380) : max(edgeX, ballPx - 380)
-        // 드롭 지점: ±15m (최소 4m — 티가 나게), 물 밖, 스틱맨이 설 수 있는 벽 릴리프(46px) 안
+        // 드롭 지점: ±15m (최소 4m — 티가 나게), 물 밖, 스틱맨이 설 수 있는 벽 릴리프 안(게임 46px보다 2px 보수적인 48)
         let reliefM = 48 / Double(pxPerM)
         var delta = Double.random(in: 4 ... 15) * (Bool.random() ? 1 : -1)
         if ball.x + delta < reliefM || ball.x + delta > hole.worldW - reliefM {
@@ -722,6 +728,7 @@ extension GameScene {
             },
             .wait(forDuration: 0.35),
             .run { [weak self] in
+                guard dog.parent != nil else { return } // 같은 프레임 정리 가드 (리뷰 minor 2)
                 dog.xScale = outFacing
                 self?.react(.shoo)
                 SoundKit.shared.woof()
@@ -732,6 +739,7 @@ extension GameScene {
                 mouthBall?.isHidden = true
                 surprise3.dogCarrying = false
                 ball = BallState(x: dropX, y: hole.ground(at: dropX))
+                settleRoll = nil // 물기 직전 정착 굴림이 남아 있으면 걷기 첫 프레임에 옛 자리로 튄다 (리뷰 minor 1)
                 let dropPt = CGPoint(x: dropPx, y: groundY(dropX) + 5.5)
                 ballNode.position = CGPoint(x: dropPt.x, y: dropPt.y + 12)
                 ballNode.isHidden = false
