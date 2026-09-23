@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — 코스 재예산·줍기·온그린(32ac3f1) + 리뷰 반영·정착 굴림 렌더(3661e19) main 머지. v0.8.0 미배포, 플레이 판정 대기)
+## 현재 상태 (2026-09-23 — 코스 재예산·줍기·온그린(32ac3f1) + 리뷰 반영·정착 굴림(3661e19) + 플레이 판정 1차 반영(e2c2afa) main 머지. v0.8.0 미배포)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -38,8 +38,10 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       2.5→0.8px(eccf119, `--club ID` 관찰 플래그). 원인: 조준 화면은 heightPct(기본 0.6, 리셋 안 됨)의 백스윙 프리뷰라 타이거 아이언
       톱 머리 −5.2가 뒤로 기운 어깨 위에 얹혔고, 척추 휨+무릎 전방 굽힘(힙 42~43.5·다리 45 → 6~8px)이 걷기까지 뒤로 기운 실루엣을 만들었다.
       사용자 "좋아" 판정. 남은 조정 후보: 아이언·웨지 백스윙 tilt 자체 축소(드라이버 유지)
-- [ ] **트레이드마크·2.5배 세부 판정 대기** — 2.5배 과장과 트레이드마크를 한 번에. 약하면: 점프 8→10, 트월 트리거 완화
-      (heightPct 0.45→0.3), 암록 butt 10→14. ⛳️ 메뉴 → 스윙 스타일로 전환하며 비교, 타이거 어퍼컷은 버디 이상 홀아웃에서만
+- [x] **트레이드마크·2.5배 판정** (2026-09-23): "읽히긴 하는데 차이가 많이 나 보이지 않음" → 사용자 선택 트레이드마크 강화(e2c2afa):
+      로리 점프 8→12(로그 lift 9.6), 타이거 트월 파워 문턱 0.45→0.3, 브라이슨 암록 butt 10→14. **타이거 아이언·웨지 tilt**: "세컨샷부터
+      어프로치샷이 과도하게 몸 자체가 기울어져 부자연" → tilt 채널만 과장 2.5→1.0(기본 대비 편차 ×0.4, 임팩트 −31.5→−24.0), 드라이버 유지.
+      PosesTests 대역 통과·`--club 7I` 프레임 확인. 교훈: 과장은 채널별 — 척추 기울기는 짧은 클럽에서 작게(메모리 갱신)
 - [x] **2단계 웨지·퍼터 실측** (`feature/swing-stage2`): 퍼터 3인 실측(PutterKeyframes rory/tiger/bryson + ballFwd 6/6/16, 손 각은
       헤드=공 뒤 5px 수치 해), 웨지 로리·타이거 실측 + 브라이슨 유도(brysonWedge). wedge 프로파일 topScale·finishScale 0.72→1.0.
       브라이슨 정면 풀웨지 영상은 6편 탐색 모두 불가(TV 줌·후방 뷰·칩샷). 문서 docs/research-swing-styles.md §2단계, 도구 refs/video/README
@@ -106,9 +108,11 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       따라감(`ballHeld`), 60% 툭 던져 받기·40% 주머니. 온그린은 파4 원온·파5 투온만(사용자 선택, 파3 제외) — rejoice + 차임·환호 +
       고리·반짝임 + "원온!/투온! 이글 찬스", 갤러리·좌절보다 우선. 관찰 `--demo-pickup`·`--demo-gir`. 프레임 확인: 손에 든 공·가슴 앞 들기,
       투온 토스트·고리
-- [ ] ⑦⑧ 사용자 플레이 판정 대기 — 재예산 지형의 손맛(오르막이 넘어가는가·협곡을 나오는가·내리막 난도)과 화면 실루엣(표고가 화면 세로의
-      1/4 남짓으로 줄어 '다이나믹'이 약해졌을 수 있음 — 약하면 수직 과장 렌더 ×1.5~2 검토), 줍기 잔동작·온그린 강도. 파5는 완벽 봇 기준
-      −0.79로 여전히 가장 쉬움(드라이버 306+3W 274 = 2온 사정권) → 클럽 거리 리밸런스(IDEAS)는 별도 판단. 판정 뒤 v0.8.0 릴리스
+- [x] ⑦⑧ 사용자 플레이 판정 1차 (2026-09-23): 지형 "괜찮" → 유지 · 실루엣 "뭔지 모르겠음" → 수직 과장 안 함 · 정착 굴림 "무슨 말인지
+      모르겠음"(플레이 중 인지 안 됨) → 유지 · **온그린 "보이지 않음"** → 조건 코드 결함 미발견(프로브 봇 GIR 42~49%와 같은 판정), 사용자가
+      실제 원온·투온을 달성했는지 확인 필요 · 파5 난도 언급 없음 → 클럽 리밸런스 보류 · **브라이슨 드라이버 피니시 "무릎 떨림"** → 60Hz 렌더
+      리그 덤프(`--demo-trademark --style bryson [--demo-power 1.0] [--demo-settle]`)로 평지·풀파워·경사 0.29 등 5회 스윙 모두 프레임
+      교번 진동 없음(재현 실패, 스크래치 knee.py) — 재현 조건(매번인지·특정 홀·파워·어느 다리) 사용자 확인 필요
 - [ ] ⑥ 사용자 플레이 판정 대기 — 2차 5종의 강도·빈도(터널은 창 범퍼 켜짐+창 존재 시 라운드 1회, 핀은 그린 폭만큼, 공 바꿔치기는
       >30m에서만). 실제 창으로 터널을 보려면 화면에 중간 크기 창을 둔 채 풀샷. 설치 빌드: `brew upgrade --cask mini-golf` 또는 릴리스 zip
 
@@ -130,7 +134,7 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
 ### 트레이드마크 관찰 도구 (2026-09-15)
 
 `--demo-trademark [--style tiger|rory|bryson] [--demo-pickup]` — 풀샷마다 굿샷 판정(트월 강제) + `RIG[t] mode 10점 head phi len
-butt curved dir` 30Hz 덤프 + `TRADEMARK twirl/jump`·`UPPER`(어퍼컷 위상) 로그. 덤프는 스크래치패드 `plot_rig.py`(matplotlib,
+butt curved dir` 60Hz 덤프(구 30Hz — 프레임 교번 진동을 놓친다) + `TRADEMARK twirl/jump`·`UPPER`(어퍼컷 위상) 로그. 덤프는 스크래치패드 `plot_rig.py`(matplotlib,
 `uv venv` + `uv pip install matplotlib`)로 프레임 시트를 그린다: `--from-mark twirl|jump|HOLED` 또는 `--from-mode swinging --nth N`.
 실행은 사용자 앱을 죽이지 않도록 `--screen 1`로 띄우고 **pid로만** 종료(run_demos.sh 패턴). 퍼터 관찰은 `--demo-pickup`
 (컵 앞 시작 → 탭인 → 홀인원 판정 → rejoice 반응).
@@ -149,16 +153,17 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 ### 재개 지점 (2026-09-23 — 다음 세션은 여기서)
 
-main = 3661e19(리뷰 반영·정착 굴림 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 3661e19로 재빌드된 로컬 실행본(brew는 아직 0.7.0).
+main = e2c2afa(플레이 판정 1차 반영 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 e2c2afa로 재빌드된 로컬 실행본(brew는 아직 0.7.0).
 
-1. **플레이 판정 수집** (사용자): ⑦ 재예산 지형(오르막이 넘어가는가·협곡을 나오는가·내리막 난도·실루엣이 밋밋한가) ·
-   **정착 굴림**(협곡 라이저에 멈춘 공이 바닥으로 굴러 내려가는 연출 — 순간이동으로 보이지 않는가, 0.8s 상한이 너무 빠른가) ·
-   ⑧ 줍기 잔동작·온그린 강도 · ⑥ 서프라이즈 2차 · 트레이드마크 2.5배. 판정 반영 후 **v0.8.0 릴리스**(Makefile VERSION 0.7.0→0.8.0 ·
-   CHANGELOG "미배포" → 날짜 · `make zip` · `gh release create` · homebrew-tap cask · tap→fetch→untap 검증 — v0.7.0 절차 그대로)
-2. 실루엣이 밋밋하면: 수직 과장 렌더 ×1.5~2 (GameScene `py(elev)`에 kY — 공·스틱맨·창 범퍼(WindowBumpers y 변환)·컵·궤적 전부 같은 변환.
-   경사가 굴림보다 가팔라 보이는 이질감은 실플레이로 판정). 물리 표고는 그대로
-3. 파5가 여전히 쉬우면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
-   봇 표(`swift test --filter CourseBalanceProbe`)로 전후 비교
+1. **판정 2차** (사용자, e2c2afa 빌드로): ① 타이거 아이언·웨지 기울기가 자연스러워졌는가 ② 스타일 차이(로리 점프·타이거 트월·
+   브라이슨 암록)가 읽히는가 ③ **온그린 연출** — 파4 원온·파5 투온을 실제로 했는데도 안 나오는가(그린 위 정지가 조건, 에이프런은 제외)
+   ④ **무릎 떨림** 재현 조건(매번인지·특정 홀·풀파워·어느 다리) → 조건이 나오면 `--demo-power`·`--demo-settle`·시드로 60Hz 덤프 재현.
+   ⑥ 서프라이즈 2차는 아직 판정 없음. 반영 후 **v0.8.0 릴리스**(Makefile VERSION 0.7.0→0.8.0 · CHANGELOG "미배포" → 날짜 · `make zip` ·
+   `gh release create` · homebrew-tap cask · tap→fetch→untap 검증 — v0.7.0 절차 그대로)
+2. 온그린이 진짜 미발동이면: GameScene `greenChanceLabel`(strokes·surface 판정)과 정지 분기 순서(giveUp → 온그린 → 갤러리 → 좌절)를
+   실플레이 로그로 추적 — 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권)
+3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
+   봇 표(`swift test --filter CourseBalanceProbe`, GIR% 열 포함)로 전후 비교
 4. ~~외부 리뷰 재위임~~ 완료(2026-09-23, ⑦ 항목 참조). 정착 굴림이 약하면 `settleRoll` dur 식(0.2 + 0.035·d, 상한 0.8s)만 조정
 5. 남은 백로그: 서프라이즈 3차(스프링클러·바람 역전·캐디·정각 뻐꾸기·강아지, 라이벌 제외) · 걷기 방향 반전 제자리 돌기 · 무드 워크 ·
    벙커 탈출 힌트 · 파워 라벨–깃대 겹침 · Apple 공증 · 크로스플랫폼
@@ -212,7 +217,7 @@ main = 3661e19(리뷰 반영·정착 굴림 머지), 작업 트리 클린, 원�
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
