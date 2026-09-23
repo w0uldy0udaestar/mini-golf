@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — v0.8.1 릴리스 완료 → v0.8.2 미배포: 벙커 탈출 힌트·QA 잔여 점검(47bcada). 다음: 백로그 선택)
+## 현재 상태 (2026-09-23 — v0.8.1 릴리스 뒤 **백로그 4종 전부 main 머지**(faf48d2): 클럽 리밸런스·무드 워크·걷기 중 재계획·서프라이즈 3차. v0.8.2 미배포, 서프라이즈 3차 Code Reviewer 진행 중)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -157,9 +157,13 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 9935736로 재빌드된 로컬 실행본(brew는 아직 0.7.0). 실플레이 로그 `~/Library/Logs/MiniGolf/play.log`.
 
-1. ~~v0.8.0·v0.8.1 릴리스~~·~~QA 잔여 묶음~~(47bcada: 벙커 탈출 힌트 구현, 파워 라벨–깃대 겹침 불가 확인, HUD–지형 이미 해결) 완료.
-   백로그에서 다음 선택: 서프라이즈 3차 · Apple 공증 · 무드 워크 · 클럽 리밸런스 · 걷기 중 방향 재계획. v0.8.2는 힌트만이라 다음 묶음과 함께 릴리스. 판정 반영 이력(타이거 테이크어웨이·톱 역K·제자리
-   돌기)은 아래 항목 참조
+1. **백로그 4종 완료** (2026-09-23 "전부 진행", 커밋 순): 클럽 리밸런스(5cf2825 — 우드 69/65/62, DR 306 → 286m, 봇 GIR 42~49 → 33~38%) ·
+   무드 워크(03284e9 — `WalkMood`·`applyMood`, `--demo-mood`) · 걷기 중 방향 재계획(e943b62 — `walkTarget`·`replanAhead`·`startWalk(fromBody:)`,
+   `--demo-replan`) · 서프라이즈 3차(faf48d2 — 서브에이전트 general-purpose(opus) 워크트리 구현, `Surprises3.swift`, 17종, `--demo-hour`).
+   **다음**: ① 서프라이즈 3차 Code Reviewer(fable) 소견 반영 ② `make app` 재빌드·사용자 판정(무드 워크 과장 폭, 턴·재계획 자연스러움,
+   스프링클러 감쇠 강도(서브에이전트가 "꽤 강함" 지적), 캐디 빈도 7%, 강아지) ③ v0.8.2 릴리스(사용자 확인 뒤, v0.8.1 절차).
+   교훈: 서브에이전트 워크트리(.claude/worktrees)를 `git add -A`가 gitlink로 잡았다 → .gitignore 처리(d526a5f). 데모 인자를 zsh 변수로
+   넘기면 단어 분리가 안 돼 플래그가 무시된다 — 함수 인자("$1")나 직접 나열로
 2. ~~온그린 추적~~ 해결(4번 항목). 참고: 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권) —
    자연 원온 재현은 `--seed 8 --demo-power 0.92`(파4 협곡 298m)
 3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
@@ -224,7 +228,7 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-turn` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-turn` `--demo-mood M` `--demo-replan` `--demo-hour H` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
