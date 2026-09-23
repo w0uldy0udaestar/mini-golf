@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — **v0.8.0 릴리스 완료** + 타이거 테이크어웨이 수정(9cffbc5, v0.8.1 미배포). 진행 중: 걷기 방향 반전 '제자리 돌기')
+## 현재 상태 (2026-09-23 — v0.8.0 릴리스 완료 → v0.8.1 미배포: 타이거 테이크어웨이(9cffbc5)·제자리 돌기(341b4b5) main 머지. 판정 대기)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -158,6 +158,10 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 
 1. ~~v0.8.0 릴리스~~ **완료** (2026-09-23): fa7a8a1 버전 범프 → `make zip`(815,772B, SHA 936eb712…) → gh release v0.8.0(노트 = CHANGELOG
    요약 + 설치 + SHA) → 공개 에셋 재다운로드 SHA 일치 → homebrew-tap 58e1cb8(version·sha256) push → tap→fetch→untap 검증.
+   **제자리 돌기**(341b4b5, 백로그 선택 2026-09-23): 출발·도착 2걸음 스텝 턴 0.65s(`WalkAnim.TurnPlan`·`turnRig`), 반전은 실루엣이 가장 좁은
+   50% 지점. 리서치 docs/research-turn-in-place.md. 관찰 `--demo-turn --demo-trademark`(RIG 덤프로 발 미끄러짐 0.3px 확인). 판정 뒤 조정
+   후보: 스텝 들림 6px(렌더 3~4px로 감쇠), 머리 선행 6px, 턴 0.65s. 남은 것: 걷기 중 방향 반전(공이 뒤로 굴러갈 때 등)은 startWalk에서만
+   판정하므로 미처리 — 필요하면 walk 중 재계획
    **판정 2차 스크린샷**(타이거 SW 43% 조준 "아직도 어정쩡"): 원인은 tilt가 아니라 p2 handA 2.5배 과장(손은 엉덩이, 클럽만 코킹) →
    3인 평균으로(9cffbc5). 재현 도구 `--demo-hole N --demo-ball X --demo-power P --demo-idle --club SW`(조준 프리뷰 고정) + RIG 덤프.
    남은 2차 판정(선택, 다음 릴리스로 미뤄도 됨): 타이거 아이언·웨지 기울기 · 스타일 차이(로리 점프 12·타이거 트월 문턱 0.3·브라이슨
@@ -226,7 +230,7 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-turn` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
