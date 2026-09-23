@@ -168,6 +168,25 @@ public enum Ballistics {
         b.lowSpeedTime = 0
     }
 
+    /// 급경사면(|경사| > steepRest)에서 멈추려는 공을 내리막으로 굴려 완경사까지 내려놓는다 — 실제 공은 43° 잔디에 서지 않는다.
+    /// 구 V자 가드가 라이저 발치의 진동을 경사면 위에서 얼렸고, 그 자리의 경사 스탠스(0.7×경사)가 샷 로프트를 30° 넘게 세워
+    /// 매 샷이 수직으로 떠 제자리에 떨어졌다 (2026-09-17 협곡 "도저히 못 나온다"의 원인 — 봇 추적 240→240 반복).
+    /// 내려놓은 자리가 물이면 true (호출측이 입수로 처리)
+    public static let steepRest = 0.3
+    static func settleOffSteepSlope(_ b: inout BallState, hole: Hole) -> Bool {
+        var x = b.x
+        var steps = 0
+        while abs(hole.slope(at: x)) > steepRest, steps < 200 {
+            x += hole.slope(at: x) > 0 ? -0.5 : 0.5 // 내리막 방향
+            steps += 1
+        }
+        x = min(max(x, 0.5), hole.worldW - 0.5)
+        guard x != b.x else { return false }
+        b.x = x
+        b.y = hole.ground(at: x)
+        return hole.surface(at: x) == .water
+    }
+
     /// 범퍼(앱 창) 충돌 — AABB 면 반사. 진입면은 스텝 이전 위치로 판정
     /// (240Hz 스텝 이동량 ≤ 0.32m — 창 크기 대비 한 면만 통과 가능, 터널링 없음).
     /// 공이 범퍼 '안에서' 출발한 샷은 통과시킨다 (창 밑 티샷이 갇히면 버그로 보인다)
@@ -374,6 +393,9 @@ public enum Ballistics {
                 if b.lowSpeedTime > 2.5 {
                     b.vx = 0
                     b.phase = .rest
+                    if settleOffSteepSlope(&b, hole: hole) { // 라이저 발치의 V자에서 얼어붙던 공 — 트레드로 (2026-09-17)
+                        return .water
+                    }
                     if abs(b.x - hole.holeX) < Phys.cupHalfWidth + 0.05 {
                         b.x = hole.holeX + (b.x >= hole.holeX ? 1 : -1) * (Phys.cupHalfWidth + 0.05)
                         b.y = hole.ground(at: b.x)
@@ -383,10 +405,13 @@ public enum Ballistics {
             } else {
                 b.lowSpeedTime = 0
             }
-            // 정지: 마찰이 경사 중력을 이길 때만
+            // 정지: 마찰이 경사 중력을 이길 때만 (러프는 경사 0.54까지 — 라이저 꼬리에 서지 않게 정착 규칙 적용)
             if abs(b.vx) < Phys.stopSpeed, surfType.roll >= Phys.g * abs(s) * 0.85 {
                 b.vx = 0
                 b.phase = .rest
+                if settleOffSteepSlope(&b, hole: hole) {
+                    return .water
+                }
                 // 립아웃 직후 컵 위에서 멈추면 컵 가장자리에 걸친 것으로 처리
                 if b.lipped, abs(b.x - hole.holeX) < Phys.cupHalfWidth {
                     b.x = hole.holeX + (b.x >= hole.holeX ? 1 : -1) * (Phys.cupHalfWidth + 0.05)

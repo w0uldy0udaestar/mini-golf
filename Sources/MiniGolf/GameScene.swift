@@ -35,6 +35,11 @@ final class GameScene: SKScene {
     var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
+    var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
+    // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
+    var ballHeld = false
+    var pickupVariant = 0 // 0 = 툭 던져 받기 · 1 = 주머니에 넣기
+    var pickupCatchPlayed = false
     var demoTrademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그 — 트레이드마크 관찰용
     var demoClubId: String? // --club ID: 홀 시작 클럽 지정(DR·7I·SW·PT…) — 클럽별 어드레스 관찰용
     var demoBackdrop = false // --demo-bg: 불투명 배경 (캡처 판독용)
@@ -135,8 +140,9 @@ final class GameScene: SKScene {
         var t = 0.0
         var touchFired = false
         var cupDx = 16.0 // pickup: 컵의 로컬 x (facing 기준)
+        static let pickupGrab = 1.15 // 줍기(허리 힌지) 구간 — 뒤에 들고 보기·던져 받기/주머니 1.35s가 붙는다
         var dur: Double {
-            kind == .teePlace ? 1.35 : 1.15
+            kind == .teePlace ? 1.35 : Self.pickupGrab + 1.35
         }
     }
 
@@ -386,6 +392,7 @@ final class GameScene: SKScene {
         trailPoints = []
         swingAnim = nil
         walkAnim = nil
+        ballHeld = false
         ballNode.removeAllActions() // 홀인 드롭 연출 복구
         ballNode.alpha = 1
         ballNode.setScale(1)
@@ -1366,6 +1373,54 @@ final class GameScene: SKScene {
         return true
     }
 
+    /// 파4 원온·파5 투온만 — 원래 어려운 것이라 값이 있다 (파3 원온은 당연해서 제외, 2026-09-17 사용자 결정)
+    func greenChanceLabel() -> String? {
+        guard hole.surface(at: ball.x) == .green, hole.par >= 4 else { return nil }
+        if demoGIRForce {
+            return hole.par == 4 ? "원온!" : "투온!"
+        }
+        if hole.par == 4, strokes == 1 {
+            return "원온!"
+        }
+        if hole.par == 5, strokes == 2 {
+            return "투온!"
+        }
+        return nil
+    }
+
+    /// 온그린 연출: 씬을 1.8s 점유 — 만세·폴짝(rejoice) + 차임·환호 + 공 주위 고리와 반짝임, 그 뒤 걷기
+    func playGreenCelebration(_ label: String) {
+        mode = .surprise
+        react(.rejoice)
+        SoundKit.shared.chime()
+        afterSurprise(0.2) { SoundKit.shared.cheer() }
+        toast(label, sub: "이글 찬스", titleScale: 1.3)
+        let at = CGPoint(x: px(ball.x), y: groundY(ball.x) + 5.5)
+        for i in 0 ..< 3 {
+            afterSurprise(Double(i) * 0.22) { [weak self] in
+                guard let self else { return }
+                FX.holePop(on: self, at: at)
+                let ring = SKShapeNode(circleOfRadius: 8)
+                ring.strokeColor = NSColor(white: 1, alpha: 0.85)
+                ring.lineWidth = 1.4
+                ring.fillColor = .clear
+                ring.position = at
+                ring.setScale(0.4)
+                ring.zPosition = 7
+                addChild(ring)
+                ring.run(.sequence([
+                    .group([.scale(to: 2.6, duration: 0.7), .fadeOut(withDuration: 0.7)]),
+                    .removeFromParent(),
+                ]))
+            }
+        }
+        afterSurprise(1.8) { [weak self] in self?.finishSurprise() }
+        if demoMode {
+            print("GIR \(label) par \(hole.par) strokes \(strokes)")
+            fflush(stdout)
+        }
+    }
+
     /// 좌절: 씬을 1.6s 점유하고 한숨과 함께 고개를 푹 떨군다(dejected 재활용) — 그 뒤 걷기
     func playFrustration(reason: String?) {
         mode = .surprise
@@ -2056,6 +2111,8 @@ final class GameScene: SKScene {
                     let frustrated = noteSetback(demoSetbackForce || inBunker || shotLipped)
                     if strokes >= Phys.maxStrokes {
                         giveUp()
+                    } else if let label = greenChanceLabel() {
+                        playGreenCelebration(label) // 파4 원온·파5 투온 — 이글 찬스 (2026-09-17 사용자 요청)
                     } else if galleryWantsScene() {
                         galleryReact() // 갤러리가 지켜본 샷 — 스틱맨 반응이 끝나면 걷기 (Surprises2)
                     } else if frustrated {
@@ -2350,6 +2407,16 @@ final class GameScene: SKScene {
 
         // 홀인 드롭·서프라이즈·공 줍기 연출 중에는 SKAction이 공 위치를 갖는다
         let pickupOwns = mode == .ritual && ritualAnim?.kind == .ballPickup
+        if pickupOwns, ballHeld, let anim = ritualAnim { // 공은 트레일 손에 — 던져 받기는 손 위로 포물선 (뼈대 처리 뒤 좌표라 사거리 클램프도 반영)
+            let hand = CGPoint(
+                x: stickman.position.x + drawRig.handTrail.x * CGFloat(dir),
+                y: stickman.position.y + drawRig.handTrail.y
+            )
+            let s = max(0, (anim.t - RitualAnim.pickupGrab) / 1.35)
+            let tossLift: CGFloat = pickupVariant == 0 ? 26 * CGFloat(sin(.pi * min(1, max(0, (s - 0.3) / 0.4)))) : 0
+            ballNode.position = CGPoint(x: hand.x + CGFloat(dir) * 2, y: hand.y + 4 + tossLift)
+            shadowNode.isHidden = true
+        }
         if mode != .holed, mode != .surprise, !pickupOwns, tunnelTransit == nil { // 창 속 통과 중엔 공·그림자 숨김 유지
             ballNode.position = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
             let heightAbove = ball.y - hole.ground(at: ball.x)
@@ -2408,8 +2475,8 @@ private extension GameScene {
         guard var anim = ritualAnim else { return }
         anim.t += dt
         // 터치 이벤트: 작업 구간 중앙 — 티 꽂기는 공 등장, 줍기는 공이 손에 들려 올라옴
-        let touchU = anim.kind == .teePlace ? 0.42 : 0.5
-        if !anim.touchFired, anim.t / anim.dur >= touchU {
+        let touchT = anim.kind == .teePlace ? 0.42 * anim.dur : 0.5 * RitualAnim.pickupGrab
+        if !anim.touchFired, anim.t >= touchT {
             anim.touchFired = true
             let at = CGPoint(x: px(ball.x), y: groundY(ball.x))
             if anim.kind == .teePlace {
@@ -2421,15 +2488,31 @@ private extension GameScene {
                 FX.dust(on: self, at: at, surface: .tee, intensity: 0.25)
                 SoundKit.shared.bounce(speed: 1.2, surface: .green)
             } else {
-                // 컵에서 공을 꺼내 든다 — 손을 따라 올라오는 연출
+                // 컵에서 공을 꺼내 든다 — 이후 공은 트레일 손을 따라간다 (렌더 단계, ballHeld). 구 연출은 공이 혼자 34px 솟았다 사라졌다
                 let cup = CGPoint(x: px(hole.holeX), y: groundY(hole.holeX))
                 ballNode.removeAllActions()
                 ballNode.position = CGPoint(x: cup.x, y: cup.y - 4)
                 ballNode.setScale(0.72)
                 ballNode.alpha = 1
-                let up = SKAction.move(to: CGPoint(x: cup.x - CGFloat(dir) * 4, y: cup.y + 34), duration: 0.45)
-                up.timingMode = .easeOut
-                ballNode.run(.sequence([up, .wait(forDuration: 0.15), .fadeOut(withDuration: 0.2)]))
+                ballNode.run(.scale(to: 1, duration: 0.25))
+                ballHeld = true
+                pickupVariant = Int.random(in: 0 ... 9) < 6 ? 0 : 1
+                pickupCatchPlayed = false
+                if demoMode {
+                    print("PICKUP hold variant \(pickupVariant)")
+                    fflush(stdout)
+                }
+            }
+        }
+        if anim.kind == .ballPickup, ballHeld { // 들고 보기 구간의 사건: 던져 받기 소리 · 주머니에 넣기
+            let s = (anim.t - RitualAnim.pickupGrab) / 1.35
+            if pickupVariant == 0, !pickupCatchPlayed, s >= 0.7 {
+                pickupCatchPlayed = true
+                SoundKit.shared.pluck()
+            }
+            if pickupVariant == 1, !pickupCatchPlayed, s >= 0.75 {
+                pickupCatchPlayed = true
+                ballNode.run(.fadeOut(withDuration: 0.15))
             }
         }
         if anim.t >= anim.dur {
@@ -2438,6 +2521,8 @@ private extension GameScene {
             if kind == .teePlace {
                 enterAim()
             } else {
+                ballHeld = false
+                ballNode.alpha = 0 // 주머니에 — 다음 티에서 다시 꺼낸다 (teePlace 의식)
                 advanceHole()
             }
             return
@@ -2481,6 +2566,7 @@ private extension GameScene {
         } else {
             // 공 줍기: 33/33/33 균등 (모캡) — 힙 고정, 허리 힌지, 뒷다리 들기.
             // 힌지를 조금 더 깊게(어깨 y 36→33): 뼈 길이 고정 후 손이 컵에 정확히 닿도록 (사거리 35)
+            let u = min(1, anim.t / RitualAnim.pickupGrab) // 줍기 구간만 0~1 — 뒤의 들고 보기는 아래 s
             let hinge = smoothstep(min(1, u / 0.33)) * (1 - smoothstep(max(0, (u - 0.67) / 0.33)))
             r.hip.y -= 3 * hinge
             // 컵이 멀면(cupDx > 12) 힙을 그만큼 앞발 쪽으로 옮긴다 — 몸통 25 + 팔 35 사거리 안에 컵이 들도록
@@ -2496,6 +2582,23 @@ private extension GameScene {
             // 클럽 팔은 뒤로 뻗어 카운터밸런스 (사거리 35 안: 계측에서 (−16, 42)는 4.8px 클램프)
             r.grip = mix(r.grip, CGPoint(x: r.hip.x - 11, y: 40), hinge)
             r.clubPhi = mix(r.clubPhi, -1.35, hinge)
+            // 들고 보기 (2026-09-17): 일어선 뒤 공을 가슴 앞으로 들어 올려 내려다본다 → 툭 던져 받거나 주머니에 넣는다
+            let s = max(0, (anim.t - RitualAnim.pickupGrab) / 1.35)
+            if s > 0 {
+                let lift = smoothstep(min(1, s / 0.22)) * (1 - smoothstep(max(0, (s - 0.82) / 0.18)))
+                r.handTrail = mix(r.handTrail, CGPoint(x: r.shoulder.x + 13, y: r.shoulder.y - 6), lift)
+                r.headDx = mix(r.headDx, 8, lift)
+                r.headDy = mix(r.headDy, 10.5, lift) // 고개를 살짝 숙여 공을 본다
+                if pickupVariant == 0 { // 던져 받기: 던질 때 손이 살짝 밀고, 받을 때 살짝 받쳐 내린다
+                    let toss = sin(.pi * min(1, max(0, (s - 0.3) / 0.4)))
+                    r.handTrail.y += 3 * toss * lift
+                    r.headDy += 2 * toss * lift // 공을 따라 시선이 올라간다
+                } else { // 주머니: 손이 힙 옆으로 내려간다
+                    let pocket = smoothstep(min(1, max(0, (s - 0.5) / 0.25)))
+                    r.handTrail = mix(r.handTrail, CGPoint(x: r.hip.x - 5, y: r.hip.y + 3), pocket)
+                    r.headDx = mix(r.headDx, 4, pocket)
+                }
+            }
         }
         return r
     }

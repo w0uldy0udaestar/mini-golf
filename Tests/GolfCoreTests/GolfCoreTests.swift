@@ -121,7 +121,12 @@ final class GolfCoreTests: XCTestCase {
             XCTAssertEqual(course.reduce(0) { $0 + $1.par }, 36)
             for h in course {
                 let range = try XCTUnwrap(CourseGenerator.distRange[h.par])
-                XCTAssertTrue(range.contains(h.dist), "파\(h.par) 거리 \(h.dist)가 화이트 티 범위 밖")
+                // 파 범위는 유효거리(수평 + k·순낙차) 기준 — 내리막은 수평이 길고 오르막은 짧다 (2026-09-17)
+                let eff = h.dist + CourseGenerator.effectiveBonus(netRise: h.ground(at: h.holeX) - h.ground(at: h.teeX))
+                XCTAssertTrue(
+                    (range.lowerBound - 12 ... range.upperBound + 12).contains(eff),
+                    "파\(h.par) 유효거리 \(eff)가 범위 밖 (수평 \(h.dist))"
+                )
             }
         }
     }
@@ -385,8 +390,7 @@ final class GolfCoreTests: XCTestCase {
     func testSignatureHoles() throws {
         var perRoundCounts: [Int] = []
         var kindsSeen = Set<SignatureKind>()
-        var maxRelRange = 0.0
-        for seed in 1 ... 60 {
+        for seed in 1 ... 150 {
             let course = CourseGenerator.makeCourse(seed: UInt32(seed))
             let sigs = course.filter { $0.signature != nil }
             perRoundCounts.append(sigs.count)
@@ -396,16 +400,23 @@ final class GolfCoreTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(roundKinds.count, 3, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
             for h in sigs {
                 try kindsSeen.insert(XCTUnwrap(h.signature))
-                let budget = 0.34 * h.worldW
                 let lo = h.elevation.min() ?? 0
                 let hi = h.elevation.max() ?? 0
-                // 예산 내 (워터 딥 -1.2·벙커 딥 -0.9 여유 +3)
-                XCTAssertGreaterThan(lo, -budget - 3, "\(h.signature!): 하한 초과 (\(lo))")
-                XCTAssertLessThan(hi, budget + 5, "\(h.signature!): 상한 초과 (\(hi))")
-                // 실제로 다이나믹한지 — 예산 비례 하한, 단 플레이 가능성 절대 상한(협곡 38m·
-                // 산정 라이저 20m — 2026-08-21 오르막 완화)과 충돌하지 않게 22m에서 캡
-                maxRelRange = max(maxRelRange, (hi - lo) / budget)
-                XCTAssertGreaterThan(hi - lo, min(budget * 0.30, 22), "\(h.signature!): 낙차가 심심함 (\(hi - lo))")
+                // 절대 상한 (2026-09-17 탄도 기준 재예산 — 워터 딥 -1.2·벙커 딥 -0.9 여유 +3)
+                XCTAssertGreaterThan(lo, -CourseGenerator.elevClamp - 3, "\(h.signature!): 하한 초과 (\(lo))")
+                XCTAssertLessThan(hi, CourseGenerator.elevClamp + 5, "\(h.signature!): 상한 초과 (\(hi))")
+                // 실제로 다이나믹한지 — 아키타입 최소 낙차(파3 8m·협곡 10m·그 외 12m 이상)
+                XCTAssertGreaterThan(hi - lo, 8, "\(h.signature!): 낙차가 심심함 (\(hi - lo))")
+                // 유효거리(수평 + k·순낙차)는 파 거리 범위 안 — 내리막이 파를 무너뜨리지 않는다
+                let net = h.ground(at: h.holeX) - h.ground(at: h.teeX)
+                let eff = h.dist + CourseGenerator.effectiveBonus(netRise: net)
+                let range = try XCTUnwrap(CourseGenerator.distRange[h.par])
+                XCTAssertGreaterThan(
+                    eff,
+                    range.lowerBound - 12,
+                    "\(h.signature!) 파\(h.par): 유효거리 짧음 (\(eff), 낙차 \(net))"
+                )
+                XCTAssertLessThan(eff, range.upperBound + 12, "\(h.signature!) 파\(h.par): 유효거리 김 (\(eff), 낙차 \(net))")
                 // 경사 상한: cos 보간 라이저 최대 ≈0.95 + 보간 여유
                 for x in stride(from: 2.0, to: h.worldW - 2, by: 1.0) {
                     XCTAssertLessThan(abs(h.slope(at: x)), 1.15, "\(h.signature!): 경사 초과 @\(x)")
@@ -417,7 +428,6 @@ final class GolfCoreTests: XCTestCase {
             }
         }
         XCTAssertEqual(kindsSeen, Set(SignatureKind.allCases), "일부 아키타입이 안 나옴: \(kindsSeen)")
-        XCTAssertGreaterThan(maxRelRange, 0.6, "최대 낙차가 예산 대비 작음 (\(maxRelRange))")
     }
 
     /// 관찰 도구: 시드별 라운드 구성 출력 — --demo --seed N 시각 검증용
@@ -470,7 +480,11 @@ final class GolfCoreTests: XCTestCase {
                 if sig == .canyon {
                     let floor = h.elevation.min() ?? 0
                     let rim = h.ground(at: h.teeX)
-                    XCTAssertLessThanOrEqual(rim - floor, 39.5, "협곡 탈출 불가 깊이 (\(rim - floor))")
+                    XCTAssertLessThanOrEqual(
+                        rim - floor,
+                        CourseGenerator.maxCanyonDepth + 3.5,
+                        "협곡 탈출 불가 깊이 (\(rim - floor))"
+                    )
                 }
                 if sig == .summitGreen {
                     // '한 샷으로 넘어야 하는' 가파른 상승(경사 >0.3) 연속 구간의 낙차만 측정
@@ -490,10 +504,36 @@ final class GolfCoreTests: XCTestCase {
                             climbing = false
                         }
                     }
-                    XCTAssertLessThanOrEqual(maxRiser, 21.5, "산정 라이저가 상한 초과 (\(maxRiser))")
+                    XCTAssertLessThanOrEqual(maxRiser, CourseGenerator.maxRiser + 1.5, "산정 라이저가 상한 초과 (\(maxRiser))")
                 }
             }
         }
+    }
+
+    // ── 급경사 정착 금지 (2026-09-17 협곡 탈출 불가 원인) ──
+
+    func testBallSettlesOffSteepRiser() {
+        // 평지 → x 100~133에 20m 라이저(cos 보간, 중앙 경사 ≈0.95) → 평지
+        var elev = [Double](repeating: 0, count: 10002)
+        for i in 0 ..< elev.count {
+            let u = min(1, max(0, (Double(i) - 100) / 33))
+            elev[i] = 20 * (0.5 - 0.5 * cos(u * .pi))
+        }
+        let hole = Hole(
+            par: 4, dist: 9974, holeX: 9999, worldW: 10000, greenStart: 9987, greenEnd: 10007, apronStart: 9982,
+            segments: [Segment(from: 0, to: 10000, type: .rough)], elevation: elev, waterRange: nil, greenSlope: 0
+        )
+        var b = BallState(x: 112, y: hole.ground(at: 112)) // 라이저 중턱
+        XCTAssertGreaterThan(abs(hole.slope(at: b.x)), 0.5)
+        let water = Ballistics.settleOffSteepSlope(&b, hole: hole)
+        XCTAssertFalse(water)
+        XCTAssertLessThanOrEqual(abs(hole.slope(at: b.x)), Ballistics.steepRest + 0.05, "완경사까지 내려와야 함 (\(b.x))")
+        XCTAssertLessThan(b.x, 112, "내리막(발치) 쪽으로 내려와야 함")
+        XCTAssertEqual(b.y, hole.ground(at: b.x), accuracy: 1e-9)
+        // 완경사에 있는 공은 그대로
+        var c = BallState(x: 50, y: 0)
+        XCTAssertFalse(Ballistics.settleOffSteepSlope(&c, hole: hole))
+        XCTAssertEqual(c.x, 50)
     }
 
     // ── 바람 (2026-08-21 재미 확장 4번) ──
