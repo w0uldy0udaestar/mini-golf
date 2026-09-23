@@ -403,6 +403,10 @@ final class GameScene: SKScene {
         ballNode.alpha = 1
         ballNode.setScale(1)
         rebuildTerrain()
+        PlayLog.note(
+            "HOLE \(holeIdx + 1) par \(hole.par) \(hole.signature?.rawValue ?? "plain") tee \(Int(hole.teeX)) cup \(Int(hole.holeX)) "
+                + "green \(Int(hole.greenStart))-\(Int(hole.greenEnd))"
+        )
         if demoMode, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
             print("SIGNATURE \(sig.rawValue)")
             fflush(stdout)
@@ -1136,6 +1140,7 @@ final class GameScene: SKScene {
         }
         preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건·갤러리 스냅샷
         strokes += 1
+        PlayLog.note(String(format: "SHOT %d %@ h%.2f from %.1f lie %@", strokes, club.id, heightPct, preShot.x, "\(lie)"))
         if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
             // 골프처럼 한 번의 연속 동작에선 정지가 타격감이 아니라 프레임 드랍으로 보인다)
@@ -1197,6 +1202,7 @@ final class GameScene: SKScene {
 
     /// ── 홀 이벤트 ──
     private func onHoled() {
+        PlayLog.note("HOLED strokes \(strokes)")
         mode = .holed
         results.append((hole.par, strokes, false))
         endShotTrail()
@@ -1366,6 +1372,7 @@ final class GameScene: SKScene {
 
     private func onWater() {
         strokes += 1
+        PlayLog.note("WATER strokes \(strokes)")
         roundHadWater = true
         if !demoMode {
             Records.shared.waterBalls += 1
@@ -2150,13 +2157,13 @@ final class GameScene: SKScene {
                     }
                     let inBunker = hole.surface(at: ball.x) == .bunker
                     let frustrated = noteSetback(demoSetbackForce || inBunker || shotLipped)
+                    PlayLog.note(String(
+                        format: "REST strokes %d x %.1f lie %@ label %@", strokes, ball.x, "\(hole.surface(at: ball.x))",
+                        greenChanceLabel() ?? "-"
+                    ))
                     if strokes >= Phys.maxStrokes {
                         giveUp()
                     } else if let label = greenChanceLabel() {
-                        if demoMode {
-                            print("GIR \(label) par \(hole.par) strokes \(strokes)")
-                            fflush(stdout)
-                        }
                         playGreenCelebration(label) // 파4 원온·파5 투온 — 이글 찬스 (2026-09-17 사용자 요청)
                     } else if galleryWantsScene() {
                         galleryReact() // 갤러리가 지켜본 샷 — 스틱맨 반응이 끝나면 걷기 (Surprises2)
