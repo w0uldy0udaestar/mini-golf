@@ -240,10 +240,12 @@ struct SwingKeyframes {
 
     /// 타이거 아이언·웨지의 tilt(척추 후방 기울기)만 과장 2.5 → 1.0(기본 포즈 대비 편차 ×0.4 — 실측 그대로): 임팩트 −31.5는
     /// 드라이버(−31.8, 수용됨)와 같은 값이지만 짧은 클럽에서 "세컨샷부터 몸 자체가 과도하게 기울어 부자연" (2026-09-23 플레이 판정).
-    /// 나머지 채널(hipDx·handA·템포·톱 홀드)은 2.5배 유지. 구 tilt: −16.7/−21.6/−20.0/−31.5/−30.4/−17.7
+    /// **테이크어웨이(p2) handA는 3인 평균**(아이언 −67·웨지 −70, 구 2.5배 −50.6/−35): 과장값은 손이 엉덩이 높이에 남은 채
+    /// 클럽만 코킹돼(SW 43% 프리뷰 손 −61°·클럽 −142° → 손목 −81°, 로리 −48°) "어정쩡한" 자세 — 스크린샷 판정 2차(2026-09-23).
+    /// 나머지 채널(hipDx·p4 이후 handA·템포·톱 홀드)은 2.5배 유지. 구 tilt: −16.7/−21.6/−20.0/−31.5/−30.4/−17.7
     static let tigerIron = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -13.9, handA: 16.0, handD: 34, clubA: 12, heel: 0.0, headDx: 2.5),
-        p2: Pose(hipDx: -0.7, tilt: -15.8, handA: -50.6, handD: 32.9, clubA: -110, heel: 0.0, headDx: 3.0),
+        p2: Pose(hipDx: -0.7, tilt: -15.8, handA: -67, handD: 32.9, clubA: -110, heel: 0.0, headDx: 3.0),
         p4: Pose(hipDx: -0.3, tilt: -17.6, handA: -146.3, handD: 24.0, clubA: -262, heel: 0.0, headDx: 2.0),
         p7: Pose(hipDx: 7.5, tilt: -24.0, handA: 29.7, handD: 34, clubA: 6, heel: 1.0, headDx: 0.8),
         p8: Pose(hipDx: 11.3, tilt: -24.2, handA: 95, handD: 30.2, clubA: 125, heel: 1.3, headDx: 6.2),
@@ -277,7 +279,7 @@ struct SwingKeyframes {
     /// tilt만 편차 ×0.4 (tigerIron 주석 참조). 구 tilt: −17.0/−14.1/−23.4/−26.8/−22.5/−20.1
     static let tigerWedge = SwingKeyframes(
         p1: Pose(hipDx: 0.0, tilt: -14.0, handA: 16.3, handD: 34, clubA: 12, heel: 0.0, headDx: 3.7),
-        p2: Pose(hipDx: -1.1, tilt: -12.8, handA: -35, handD: 30, clubA: -100, heel: 0.0, headDx: 2.2),
+        p2: Pose(hipDx: -1.1, tilt: -12.8, handA: -70, handD: 30, clubA: -100, heel: 0.0, headDx: 2.2),
         p4: Pose(hipDx: 3.7, tilt: -19.0, handA: -115.4, handD: 31.8, clubA: -230, heel: 0.0, headDx: 1.0),
         p7: Pose(hipDx: 7.7, tilt: -22.1, handA: 24.9, handD: 34, clubA: 6, heel: 1.0, headDx: -0.1),
         p8: Pose(hipDx: 7.7, tilt: -21.0, handA: 73.4, handD: 26.7, clubA: 120, heel: 3.0, headDx: 3.9),

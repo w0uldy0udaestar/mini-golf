@@ -36,7 +36,9 @@ final class GameScene: SKScene {
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var demoSettleForce = false // --demo-settle: 첫 샷을 홀 쪽 라이저 상단(러프, |경사| > 0.42)에 떨어뜨려 정착 굴림 관찰
-    var demoPower: Double? // --demo-power P: 봇 파워 고정 (실플레이 풀파워 조건 재현용)
+    var demoPower: Double? // --demo-power P: 봇 파워 고정 (실플레이 풀파워 조건 재현용) — 조준 프리뷰에도 적용
+    var demoStartHole = 1 // --demo-hole N: 새 라운드를 N번 홀부터 (미러 홀·특정 아키타입 관찰)
+    var demoBallX: Double? // --demo-ball X: 홀 시작 공 위치(m) — 특정 라이·거리의 조준 자세 관찰
     var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
     var ballHeld = false
@@ -366,7 +368,7 @@ final class GameScene: SKScene {
             seed: demoSeed
                 ?? UInt32(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 2_000_000_000))
         )
-        holeIdx = 0
+        holeIdx = demoMode ? min(8, max(0, demoStartHole - 1)) : 0
         results = []
         roundHadWater = false
         setbackStreak = 0
@@ -391,6 +393,10 @@ final class GameScene: SKScene {
         if demoPickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
             let x = hole.holeX - 1.2 * (hole.holeX >= hole.teeX ? 1 : -1)
             ball = BallState(x: x, y: hole.ground(at: x))
+        }
+        if let x = demoBallX { // 공 위치 고정 관찰 (라이·거리별 조준 자세)
+            let cx = min(max(x, 1), hole.worldW - 1)
+            ball = BallState(x: cx, y: hole.ground(at: cx))
         }
         if demoWallForce { // 벽 스탠스 관찰: 릴리프 하한(46px) 직후의 최소 이격 케이스로 시작
             let m = 48 / Double(pxPerM)
@@ -482,6 +488,9 @@ final class GameScene: SKScene {
     private func enterAim() {
         mode = .aim
         aimTime = 0
+        if demoMode, let p = demoPower {
+            heightPct = p // 관찰: 조준 프리뷰(백스윙 높이)도 고정 파워로
+        }
         reactionKind = .none
         napping = false
         napNode?.removeFromParent()
