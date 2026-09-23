@@ -112,7 +112,8 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
 
 `swift test --filter CourseBalanceProbe` — `BOTBAL` 표(아키타입별 파 대비·고착·입수·순낙차, 파별, 고착 홀 샷 추적 `STUCK …`)와
 `ELEVK`(낙차별 클럽 토탈). 봇 정책: 25m 안쪽 퍼터(텍사스 웨지)·벙커 SW·직전 샷 이동 < 3m면 PW 탈출·클럽은 토탈 ≥ 목표 중 최소.
-지형·물리를 바꾸면 이 표부터 본다. 캡처 스크립트는 스크래치패드(세션 한정)라 유실되면 HANDOFF의 `capture2.py` 설명대로 재작성.
+지형·물리를 바꾸면 이 표부터 본다. 캡처 스크립트는 `scripts/capture-demo.py`로 저장소에 보존(2026-09-23 — 스크래치패드 유실로 두 번 재작성한 뒤):
+`/usr/bin/python3 scripts/capture-demo.py OUTDIR MAXSEC --trigger "PREFIX:dur:gap:count" -- <MiniGolf 인자>`. 첫 1s는 합성 전 회색 화면이라 트리거를 늦게.
 
 ### 서프라이즈 관찰 도구 (2026-09-16)
 
