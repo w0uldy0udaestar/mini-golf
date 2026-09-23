@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — 코스 재예산·줍기·온그린(32ac3f1) + 리뷰 반영·정착 굴림(3661e19) + 플레이 판정 1차 반영(e2c2afa) main 머지. v0.8.0 미배포)
+## 현재 상태 (2026-09-23 — 코스 재예산·줍기·온그린(32ac3f1) + 리뷰 반영·정착 굴림(3661e19) + 판정 1차 반영(e2c2afa) + 플레이 로그(9fe8594) + 홀 전환 타이머 수정(9935736) main 머지. v0.8.0 미배포)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -153,15 +153,16 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 ### 재개 지점 (2026-09-23 — 다음 세션은 여기서)
 
-main = e2c2afa(플레이 판정 1차 반영 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 e2c2afa로 재빌드된 로컬 실행본(brew는 아직 0.7.0).
+main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 9935736로 재빌드된 로컬 실행본(brew는 아직 0.7.0). 실플레이 로그 `~/Library/Logs/MiniGolf/play.log`.
 
-1. **판정 2차** (사용자, e2c2afa 빌드로): ① 타이거 아이언·웨지 기울기가 자연스러워졌는가 ② 스타일 차이(로리 점프·타이거 트월·
-   브라이슨 암록)가 읽히는가 ③ **온그린 연출** — 파4 원온·파5 투온을 실제로 했는데도 안 나오는가(그린 위 정지가 조건, 에이프런은 제외)
-   ④ **무릎 떨림** 재현 조건(매번인지·특정 홀·풀파워·어느 다리) → 조건이 나오면 `--demo-power`·`--demo-settle`·시드로 60Hz 덤프 재현.
-   ⑥ 서프라이즈 2차는 아직 판정 없음. 반영 후 **v0.8.0 릴리스**(Makefile VERSION 0.7.0→0.8.0 · CHANGELOG "미배포" → 날짜 · `make zip` ·
-   `gh release create` · homebrew-tap cask · tap→fetch→untap 검증 — v0.7.0 절차 그대로)
-2. 온그린이 진짜 미발동이면: GameScene `greenChanceLabel`(strokes·surface 판정)과 정지 분기 순서(giveUp → 온그린 → 갤러리 → 좌절)를
-   실플레이 로그로 추적 — 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권)
+1. **v0.8.0 릴리스** (사용자 확인 뒤): Makefile VERSION 0.7.0→0.8.0 · CHANGELOG "미배포" → 날짜 · `make zip` · `gh release create` ·
+   homebrew-tap cask · tap→fetch→untap 검증 — v0.7.0 절차 그대로. 릴리스 전 남은 2차 판정(선택): 타이거 아이언·웨지 기울기가
+   자연스러워졌는가 · 스타일 차이(로리 점프 12·타이거 트월 문턱 0.3·브라이슨 암록 14)가 읽히는가 · ⑥ 서프라이즈 2차(아직 판정 없음).
+   무릎 떨림은 "한 번 봤다/재현 안 됨" → 보류(조건이 나오면 `--demo-power`·`--demo-settle`·시드로 60Hz 덤프).
+   **홀 전환 타이머 버그**(9935736): 홀아웃 뒤 1.3~1.7s 안 R → 1번 홀 건너뜀 — `afterHoleFlow`/`cancelHoleFlow`로 수정,
+   `--demo-pickup --demo-restart-after-holed 0.5` 재현·검증. 기권(1.4s) 경로는 같은 구조라 별도 재현 생략
+2. ~~온그린 추적~~ 해결(4번 항목). 참고: 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권) —
+   자연 원온 재현은 `--seed 8 --demo-power 0.92`(파4 협곡 298m)
 3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
    봇 표(`swift test --filter CourseBalanceProbe`, GIR% 열 포함)로 전후 비교
 4. ~~온그린 미발동 추적~~ **해결** (2026-09-23 play.log 증거): 4번 홀 파4 summitGreen 드라이버 h0.95 → `REST strokes 1 x 297.5 lie green
@@ -224,7 +225,7 @@ main = e2c2afa(플레이 판정 1차 반영 머지), 작업 트리 클린, 원�
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
