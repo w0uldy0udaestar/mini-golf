@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-16 — v0.7.0 릴리스 완료: 서프라이즈 2차·포즈 불변식 테스트·QA P1 잔여 3종. 플레이 판정 대기)
+## 현재 상태 (2026-09-23 — 코스 표고 재예산·공 손에 들기·온그린 연출 main 머지(32ac3f1). v0.8.0 미배포, 플레이 판정 대기)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -87,8 +87,32 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
 - [x] **v0.7.0 릴리스** (2026-09-16, f3a7c8f 버전 범프): `make zip`(796,042B, SHA b6cd497e…) → gh release v0.7.0 → 공개 에셋 재다운로드 SHA 일치 →
       homebrew-tap 45a4431(version·sha256) push → `brew tap` → `brew fetch --cask` 통과(캐시 SHA 일치) → `brew untap`(이 머신엔 tap 미설치 상태가
       원래 상태라 복구). ⚠️ 이 머신은 tap이 설치돼 있지 않으니 검증 시 tap→fetch→untap 순서로
+- [x] **⑦ 코스 표고 재예산** (`feature/course-rebalance` bb6a446·98761ab → 머지 32ac3f1, 2026-09-17 사용자 판정 "오르막은 탄도가 안 나오고,
+      협곡은 못 나오고, 내리막은 파5도 무조건 2온" → 선택 "탄도 기준 재예산"): 구 예산 0.34×worldW(파4 114~151m)가 풀샷 정점(42~67m)을
+      넘던 것을 `plannedNetRise`(절벽 20~32·테라스 24~40·산정 20~36, 파3 절반)·`maxRiser` 14·`canyonDepthLimit`(러프 풀 PW 거리별 높이 표
+      `pwRoughHeight`로 반대편 림을 2m 여유로 넘는 깊이 ≈10~17)로 교체. 수평 거리 = 유효거리(파 범위) − k·계획 낙차(오르막 1.0·내리막 1.5).
+      **협곡 탈출 불가의 진짜 원인**은 라이저 꼬리에 공이 정지하고(저속 V자 가드·정상 정지) 그 자리 경사 스탠스가 로프트를 +30° 세워
+      샷이 수직으로 뜨던 것 → `Ballistics.settleOffSteepSlope`(|경사| > 0.3이면 내리막 트레드로, 물이면 .water). 산정 백스톱 램프를 그린
+      블렌드 뒤(climbEnd+48~62)로. 봇 실측(`Tests/GolfCoreTests/CourseBalanceProbe`, 40시드×9홀, 회귀 단언 포함): 아키타입별 순진 봇
+      파 대비 −1.40~+1.01 → −0.47~−0.76(격차 2.41 → 0.29), 협곡 12타 고착 15% → 0%, 입수 0.99 → 0.08/홀, 급경사 정지 0. 테스트 63개.
+      교훈: 낙차→거리 k≈1.0~1.2 실측(DR·7I ±20~40m), 라이저가 그 지점 탄도 높이를 넘으면 벽을 맞고 굴러 내려와 거리 자체가 붕괴.
+      **리뷰**: Code Reviewer(fable)가 월 사용 한도(429)로 중단돼 자체 검토로 대체 — 점검 목록(정착 경계·물 반환·유효거리 파생값·
+      트레드 축소 순서·봇 결정론)은 통과, 외부 리뷰는 한도 해제 뒤 재위임 권장
+- [x] **⑧ 홀컵 공 줍기 손에 들기 + 온그린 연출** (5c6c5e0): 줍기 1.15s 뒤 들고 보기 1.35s — 공이 Skeleton 처리 후 `drawRig.handTrail`을
+      따라감(`ballHeld`), 60% 툭 던져 받기·40% 주머니. 온그린은 파4 원온·파5 투온만(사용자 선택, 파3 제외) — rejoice + 차임·환호 +
+      고리·반짝임 + "원온!/투온! 이글 찬스", 갤러리·좌절보다 우선. 관찰 `--demo-pickup`·`--demo-gir`. 프레임 확인: 손에 든 공·가슴 앞 들기,
+      투온 토스트·고리
+- [ ] ⑦⑧ 사용자 플레이 판정 대기 — 재예산 지형의 손맛(오르막이 넘어가는가·협곡을 나오는가·내리막 난도)과 화면 실루엣(표고가 화면 세로의
+      1/4 남짓으로 줄어 '다이나믹'이 약해졌을 수 있음 — 약하면 수직 과장 렌더 ×1.5~2 검토), 줍기 잔동작·온그린 강도. 파5는 완벽 봇 기준
+      −0.79로 여전히 가장 쉬움(드라이버 306+3W 274 = 2온 사정권) → 클럽 거리 리밸런스(IDEAS)는 별도 판단. 판정 뒤 v0.8.0 릴리스
 - [ ] ⑥ 사용자 플레이 판정 대기 — 2차 5종의 강도·빈도(터널은 창 범퍼 켜짐+창 존재 시 라운드 1회, 핀은 그린 폭만큼, 공 바꿔치기는
       >30m에서만). 실제 창으로 터널을 보려면 화면에 중간 크기 창을 둔 채 풀샷. 설치 빌드: `brew upgrade --cask mini-golf` 또는 릴리스 zip
+
+### 코스 밸런스 봇 (2026-09-17)
+
+`swift test --filter CourseBalanceProbe` — `BOTBAL` 표(아키타입별 파 대비·고착·입수·순낙차, 파별, 고착 홀 샷 추적 `STUCK …`)와
+`ELEVK`(낙차별 클럽 토탈). 봇 정책: 25m 안쪽 퍼터(텍사스 웨지)·벙커 SW·직전 샷 이동 < 3m면 PW 탈출·클럽은 토탈 ≥ 목표 중 최소.
+지형·물리를 바꾸면 이 표부터 본다. 캡처 스크립트는 스크래치패드(세션 한정)라 유실되면 HANDOFF의 `capture2.py` 설명대로 재작성.
 
 ### 서프라이즈 관찰 도구 (2026-09-16)
 
@@ -168,7 +192,7 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 
