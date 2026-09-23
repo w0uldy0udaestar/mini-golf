@@ -100,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
         scene.demoSettleForce = args.contains("--demo-settle") // 급경사 정착 굴림 관찰 (첫 샷을 홀 쪽 라이저 상단에 떨어뜨림 — 협곡 시드)
         scene.demoTurnForce = args.contains("--demo-turn") // 걷기 방향 반전(제자리 돌기) 관찰 (첫 샷을 뒤로 22m)
+        scene.demoReplanForce = args.contains("--demo-replan") // 걷는 도중 공 이동 → 재계획·재출발 관찰
         if let i = args.firstIndex(of: "--demo-mood"), i + 1 < args.count,
            let m = GameScene.WalkMood(rawValue: args[i + 1]) {
             scene.demoMood = m // 모든 걷기에 무드 강제 (elated|sad — 관찰용)

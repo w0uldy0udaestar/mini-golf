@@ -40,6 +40,8 @@ final class GameScene: SKScene {
     var demoStartHole = 1 // --demo-hole N: 새 라운드를 N번 홀부터 (미러 홀·특정 아키타입 관찰)
     var demoBallX: Double? // --demo-ball X: 홀 시작 공 위치(m) — 특정 라이·거리의 조준 자세 관찰
     var demoTurnForce = false // --demo-turn: 첫 샷을 뒤로 22m 떨어뜨려 걷기 방향 반전(제자리 돌기) 관찰
+    var demoReplanForce = false // --demo-replan: 걷는 도중 공을 옮긴다 (1차 12m 앞 → 연속 재계획, 2차 25m 뒤 → 도착 후 재출발+턴)
+    private var demoReplanCount = 0
     var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
     var ballHeld = false
@@ -106,6 +108,7 @@ final class GameScene: SKScene {
         var turn: TurnPlan?
         var arrivalTurn: TurnPlan? // 도착 턴 — 걸어온 방향과 조준 방향이 반대일 때 (공이 뒤에 있던 경우)
         var mood = WalkMood.neutral // 무드 워크 채널 오버레이 (속도·보폭·자세)
+        var replanFired = false // --demo-replan: 이 걷기에서 공을 이미 옮겼나
         var arrivalDir = 1.0
         var vPx = 0.0
         // 게이트 상태 (리서치 반영: stride warping + 접지점 래치)
@@ -466,6 +469,59 @@ final class GameScene: SKScene {
 
     private func cancelHoleFlow() {
         enumerateChildNodes(withName: Self.holeFlowNodeName) { node, _ in node.removeFromParent() }
+    }
+
+    /// 걷는 도중 공이 같은 방향 앞으로 옮겨졌을 때 — 새 프로파일의 등속 구간에서 이어받아 속도·게이트(발자국)를 유지한다.
+    /// 새 출발점은 지금 자리보다 램프인 거리만큼 뒤로 잡아 position(rampIn) = 지금 자리가 되게 한다 (위치·속도 연속)
+    private func replanAhead(_ w: inout WalkAnim, to: Double) {
+        let sgn: Double = w.toX >= w.fromX ? 1 : -1
+        let dNowPx = abs(stickX - w.fromX) * Double(pxPerM)
+        let moodSpeed = w.mood == .elated ? 0.85 : w.mood == .sad ? 1.45 : 1.0
+        var xIn = 6.0 // 램프인 거리(m) 초기 추정 → 프로파일에서 다시 읽는다
+        var prof = WalkProfile(dist: abs(to - stickX) + xIn, dur: 1)
+        for _ in 0 ..< 2 {
+            let dist = abs(to - stickX) + xIn
+            let dur = min(14.0, max(1.2, dist / 10 * moodSpeed))
+            prof = WalkProfile(dist: dist, dur: dur)
+            xIn = prof.position(at: prof.rampIn)
+        }
+        var n = WalkAnim(fromX: stickX - sgn * xIn, toX: to, dur: prof.dur, profile: prof)
+        n.relax = 0
+        n.t = prof.rampIn // 등속 구간 첫 프레임 = 지금 자리
+        n.gaitReady = true
+        n.gaitPhase = w.gaitPhase
+        n.stepL = w.stepL
+        n.duty = w.duty
+        n.vPx = w.vPx
+        n.mood = w.mood
+        n.stepFxParity = w.stepFxParity
+        n.replanFired = w.replanFired
+        let shift = xIn * Double(pxPerM) - dNowPx // 진행축 원점 fromX → 새 fromX
+        n.feet = w.feet.map { f in
+            var g = f
+            g.plant += shift
+            g.swingFrom += shift
+            g.swingTo += shift
+            return g
+        }
+        if demoMode {
+            print(String(format: "REPLAN ahead to %.1f (남은 %.1fm)", to, abs(to - stickX)))
+            fflush(stdout)
+        }
+        w = n
+    }
+
+    /// --demo-replan: 걷기 1.5s 지점에서 공을 옮긴다 — 1차 12m 앞(연속 재계획), 2차 25m 뒤(도착 후 재출발·제자리 돌기)
+    private func demoReplanTick(_ w: inout WalkAnim) {
+        guard demoReplanForce, !w.replanFired, demoReplanCount < 2, w.t - w.relax - w.pausedTime > 1.5 else { return }
+        w.replanFired = true
+        let sgn: Double = w.toX >= w.fromX ? 1 : -1
+        let ahead = demoReplanCount == 0
+        demoReplanCount += 1
+        let nx = min(max(ahead ? ball.x + sgn * 12 : stickX - sgn * 25, 2), hole.worldW - 2) // 2차는 걷는 사람 뒤로
+        ball = BallState(x: nx, y: hole.ground(at: nx))
+        print(String(format: "DEMO-REPLAN %@ ball → %.1f", ahead ? "ahead" : "behind", nx))
+        fflush(stdout)
     }
 
     /// 무드 워크 채널 (docs/research-mocap-index.md — CMU 걷기 스타일 차분의 실루엣 요약, 70px용 과장):
@@ -1078,18 +1134,24 @@ final class GameScene: SKScene {
         rig.clubLen *= 1 - 0.10 * t // 초크다운
     }
 
-    func startWalk() {
+    /// 걷기 도착 자리와 조준 방향 — 공 위치·도착 클럽 스탠스에서. startWalk와 걷는 도중 재계획(공이 옮겨졌을 때)이 공유
+    /// (도착 클럽은 enterAim의 자동 퍼터 전환과 같은 조건으로 미리 안다 — 도착 자리를 그 스탠스로)
+    private func walkTarget() -> (to: Double, dir: Double) {
+        let arrivalDir: Double = hole.holeX >= ball.x ? 1 : -1
+        let willPutt = (strokes > 0 || demoPickupForce) && hole.surface(at: ball.x) == .green
+        let arrivalFwd = willPutt ? SwingProfile.profile(for: .putter, style: swingStyle).ballFwd : profile
+            .ballFwd // 스타일별 퍼터 스탠스
+        return (ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM), arrivalDir)
+    }
+
+    /// fromBody: 걷기 도착 자리(몸 원점)에서 다시 출발 — 걷는 동안 공이 옮겨져 도착해 보니 공이 없을 때 (2026-09-23 재계획)
+    func startWalk(fromBody: Bool = false) {
         endShotTrail()
         // 원점 통일 (2026-09-14 전환 개편): 포즈 리그는 공이 원점이고 몸(힙)은 공 뒤 ballFwd+5px에 선다.
         // 걷기 리그는 몸이 원점이므로, 걷기의 출발·도착을 '몸이 서는 자리'로 잡아야 전환 순간 좌표 점프가 0이다
         // (구: 출발 stickX·도착 ball.x → 출발 때 몸이 25px 앞으로 튀고, 도착 때 25px 뒤로 미끄러졌다).
-        let from = stickX - dir * (renderBallFwd + 5) / Double(pxPerM)
-        let arrivalDir: Double = hole.holeX >= ball.x ? 1 : -1
-        // 도착 클럽은 enterAim의 자동 퍼터 전환과 같은 조건으로 미리 안다 — 도착 자리를 그 스탠스로
-        let willPutt = (strokes > 0 || demoPickupForce) && hole.surface(at: ball.x) == .green
-        let arrivalFwd = willPutt ? SwingProfile.profile(for: .putter, style: swingStyle).ballFwd : profile
-            .ballFwd // 스타일별 퍼터 스탠스
-        let to = ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM)
+        let from = fromBody ? stickX : stickX - dir * (renderBallFwd + 5) / Double(pxPerM)
+        let (to, arrivalDir) = walkTarget()
         let dist = abs(to - from)
         mode = .walking
         let newDir: Double = to >= from ? 1 : -1
@@ -1121,8 +1183,14 @@ final class GameScene: SKScene {
         )
         if reversing { // 제자리 돌기: 피니시 애니가 끝나는 0.55s 뒤 0.65s 턴 + 정착 — 반전은 턴 중간에 (setFacing은 update에서)
             // (0.3s 시작은 스윙 피니시 타깃이 아직 리그를 쥐고 있어 예고·1걸음이 잘렸다 — 2026-09-23 RIG 덤프)
-            anim.turn = WalkAnim.TurnPlan(start: 0.55, dur: 0.65, newDir: newDir)
-            anim.relax = 0.55 + 0.65 + 0.15
+            let start = fromBody ? 0.1 : 0.55 // 몸 원점 재출발은 피니시가 없다
+            anim.turn = WalkAnim.TurnPlan(start: start, dur: 0.65, newDir: newDir, atBody: fromBody)
+            anim.relax = start + 0.65 + 0.15
+        } else if fromBody {
+            anim.relax = 0.25 // 재출발: 잠깐 멈칫만
+        }
+        if fromBody {
+            anim.relaxShift = renderBallFwd + 5 // 여운(직립) 포즈를 몸 원점에 (공 원점 포즈는 −(ballFwd+5)에 선다)
         }
         anim.mood = mood
         if demoMode, mood != .neutral {
@@ -2096,6 +2164,17 @@ final class GameScene: SKScene {
                 }
                 w.turn = tp
             }
+            // 걷는 도중 공이 옮겨졌나 (서프라이즈·관찰 --demo-replan): 같은 방향 앞이면 속도를 유지한 채 목표만 교체,
+            // 뒤거나 가까우면 도착한 뒤 그 자리에서 재출발한다 (아래 도착 처리 — 반대 방향이면 제자리 돌기 포함)
+            if w.gaitReady, w.stopPlan == nil, w.arrivalTurn == nil, w.t >= w.relax {
+                demoReplanTick(&w)
+                let tgt = walkTarget()
+                let sgn: Double = w.toX >= w.fromX ? 1 : -1
+                if abs(tgt.to - w.toX) > 0.3, (tgt.to - stickX) * sgn > 0,
+                   abs(tgt.to - stickX) * Double(pxPerM) > WalkAnim.stopPlanRange + 30 {
+                    replanAhead(&w, to: tgt.to)
+                }
+            }
             // 넘어짐: 전진 동결을 연속 램프로 — 쓰러지며(0.3~0.6) 멈추고, 일어난 만큼(1.5~2.2)
             // 다시 가속한다. 이진 동결은 엎어진 채 슬라이드(리뷰 S1)와 duty 점프 스냅(S3)을 만든다
             var freeze = 0.0
@@ -2214,14 +2293,27 @@ final class GameScene: SKScene {
                         swapRenderFeet()
                     }
                 }
-                if u >= 1, w.arrivalTurn == nil, w.arrivalDir != dir { // 도착 턴: 조준 방향으로 제자리 돌기 뒤 조준
-                    w.arrivalTurn = WalkAnim.TurnPlan(start: w.t, dur: 0.65, newDir: w.arrivalDir, atBody: true)
-                    if demoMode {
-                        print(String(format: "TURN arrival x %.0f dir %d", Double(px(stickX)), Int(dir)))
-                        fflush(stdout)
+                var rewalk = false
+                if u >= 1, w.arrivalTurn == nil {
+                    let tgt = walkTarget() // 저장값 대신 지금 값 — 핀 이동·공 이동(서프라이즈) 뒤에도 맞는 방향·자리로
+                    if abs(tgt.to - stickX) > 0.5 { // 도착해 보니 공이 없다 — 이 자리에서 다시 걷는다
+                        rewalk = true
+                        if demoMode {
+                            print(String(format: "REWALK from %.1f to %.1f", stickX, tgt.to))
+                            fflush(stdout)
+                        }
+                    } else if tgt.dir != dir { // 도착 턴: 조준 방향으로 제자리 돌기 뒤 조준
+                        w.arrivalTurn = WalkAnim.TurnPlan(start: w.t, dur: 0.65, newDir: tgt.dir, atBody: true)
+                        if demoMode {
+                            print(String(format: "TURN arrival x %.0f dir %d", Double(px(stickX)), Int(dir)))
+                            fflush(stdout)
+                        }
                     }
                 }
-                if var tp = w.arrivalTurn {
+                if rewalk {
+                    walkAnim = w
+                    startWalk(fromBody: true)
+                } else if var tp = w.arrivalTurn {
                     if !tp.flipped, w.t >= tp.start + tp.dur * 0.5 {
                         tp.flipped = true
                         setFacing(tp.newDir)
