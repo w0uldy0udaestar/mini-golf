@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — 코스 재예산·줍기·온그린(32ac3f1) + 리뷰 반영·정착 굴림(3661e19) + 판정 1차 반영(e2c2afa) + 플레이 로그(9fe8594) + 홀 전환 타이머 수정(9935736) main 머지. v0.8.0 미배포)
+## 현재 상태 (2026-09-23 — **v0.8.0 릴리스 완료**(fa7a8a1 버전 범프, gh release v0.8.0, homebrew-tap 58e1cb8). 다음은 2차 판정·백로그)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -86,6 +86,7 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       5분 이상 뒤 재개 시 조준 중이면 shoo 손 흔들기 + "어서 와" — 포커스 상실은 일시정지가 아니라 홀드 해제만이라 ⛳️ 수동 정지 기준).
       관찰 `--demo-setback`(모든 샷 좌절 계열)·`--demo-idle --demo-greet`(3s 뒤 정지→1s 재개)·`--demo-pickup`(홀마다 홀인원 → 스트릭).
       프레임 3종 확인. 남긴 것: 벙커 탈출 힌트(사용자 미선택), 파워 라벨–깃대 겹침(미검증)
+- [x] **v0.8.0 릴리스** (2026-09-23, fa7a8a1): zip 815,772B SHA 936eb712… → gh release → 공개 SHA 일치 → tap 58e1cb8 → tap·fetch·untap 검증
 - [x] **v0.7.0 릴리스** (2026-09-16, f3a7c8f 버전 범프): `make zip`(796,042B, SHA b6cd497e…) → gh release v0.7.0 → 공개 에셋 재다운로드 SHA 일치 →
       homebrew-tap 45a4431(version·sha256) push → `brew tap` → `brew fetch --cask` 통과(캐시 SHA 일치) → `brew untap`(이 머신엔 tap 미설치 상태가
       원래 상태라 복구). ⚠️ 이 머신은 tap이 설치돼 있지 않으니 검증 시 tap→fetch→untap 순서로
@@ -155,12 +156,10 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 9935736로 재빌드된 로컬 실행본(brew는 아직 0.7.0). 실플레이 로그 `~/Library/Logs/MiniGolf/play.log`.
 
-1. **v0.8.0 릴리스** (사용자 확인 뒤): Makefile VERSION 0.7.0→0.8.0 · CHANGELOG "미배포" → 날짜 · `make zip` · `gh release create` ·
-   homebrew-tap cask · tap→fetch→untap 검증 — v0.7.0 절차 그대로. 릴리스 전 남은 2차 판정(선택): 타이거 아이언·웨지 기울기가
-   자연스러워졌는가 · 스타일 차이(로리 점프 12·타이거 트월 문턱 0.3·브라이슨 암록 14)가 읽히는가 · ⑥ 서프라이즈 2차(아직 판정 없음).
-   무릎 떨림은 "한 번 봤다/재현 안 됨" → 보류(조건이 나오면 `--demo-power`·`--demo-settle`·시드로 60Hz 덤프).
-   **홀 전환 타이머 버그**(9935736): 홀아웃 뒤 1.3~1.7s 안 R → 1번 홀 건너뜀 — `afterHoleFlow`/`cancelHoleFlow`로 수정,
-   `--demo-pickup --demo-restart-after-holed 0.5` 재현·검증. 기권(1.4s) 경로는 같은 구조라 별도 재현 생략
+1. ~~v0.8.0 릴리스~~ **완료** (2026-09-23): fa7a8a1 버전 범프 → `make zip`(815,772B, SHA 936eb712…) → gh release v0.8.0(노트 = CHANGELOG
+   요약 + 설치 + SHA) → 공개 에셋 재다운로드 SHA 일치 → homebrew-tap 58e1cb8(version·sha256) push → tap→fetch→untap 검증.
+   남은 2차 판정(선택, 다음 릴리스로 미뤄도 됨): 타이거 아이언·웨지 기울기 · 스타일 차이(로리 점프 12·타이거 트월 문턱 0.3·브라이슨
+   암록 14) · ⑥ 서프라이즈 2차. 무릎 떨림은 "한 번 봤다/재현 안 됨" → 보류(조건이 나오면 `--demo-power`·`--demo-settle`·시드로 60Hz 덤프)
 2. ~~온그린 추적~~ 해결(4번 항목). 참고: 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권) —
    자연 원온 재현은 `--seed 8 --demo-power 0.92`(파4 협곡 298m)
 3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
