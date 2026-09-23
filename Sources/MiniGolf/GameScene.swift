@@ -36,6 +36,7 @@ final class GameScene: SKScene {
     var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
     var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
     var demoSettleForce = false // --demo-settle: 첫 샷을 홀 쪽 라이저 상단(러프, |경사| > 0.42)에 떨어뜨려 정착 굴림 관찰
+    var demoPower: Double? // --demo-power P: 봇 파워 고정 (실플레이 풀파워 조건 재현용)
     var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
     var ballHeld = false
@@ -663,10 +664,11 @@ final class GameScene: SKScene {
         jumpModes = []
     }
 
-    /// 리그 전체 덤프 (30Hz, --demo-trademark): 오프라인 플롯으로 트레이드마크 연출을 프레임 단위로 검증한다.
+    /// 리그 전체 덤프 (60Hz, --demo-trademark): 오프라인 플롯으로 트레이드마크 연출을 프레임 단위로 검증한다.
     /// 좌표는 facing 로컬(px, 지면 0) — 렌더는 x·headDx·clubPhi에 dir을 곱한다
     private func logRigDump(_ r: Rig, joints j: Skeleton.Joints, currentTime: TimeInterval) {
-        guard currentTime - rigDumpLast >= 1.0 / 30 else { return }
+        // 60Hz — 30Hz는 프레임 교번 진동(무릎 떨림 의심)을 에일리어싱으로 놓친다 (2026-09-23)
+        guard currentTime - rigDumpLast >= 1.0 / 60 - 0.002 else { return }
         rigDumpLast = currentTime
         let pts: [CGPoint] = [
             r.hip,
@@ -1100,7 +1102,8 @@ final class GameScene: SKScene {
         let gauss = (Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1) + Double.random(in: -1 ... 1)) / 3
         let mishit = club.isPutter ? 0 : risk * gauss
         // 굿샷 판정 (타이거 트월): 실제처럼 공이 뜨자마자 스트라이크 품질로 — 미스힛 작고 반 이상 파워. 퍼터 제외
-        lastShotGood = !club.isPutter && (demoTrademarkForce || (heightPct >= 0.45 && abs(mishit) < 0.12))
+        // 파워 문턱 0.45 → 0.3: 트월이 세컨샷·어프로치에서도 나오게 (2026-09-23 플레이 판정 "차이가 많이 나 보이지 않음")
+        lastShotGood = !club.isPutter && (demoTrademarkForce || (heightPct >= 0.3 && abs(mishit) < 0.12))
         // 벽·나무 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
         // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
@@ -1856,7 +1859,9 @@ final class GameScene: SKScene {
                 if !napping, demoWait > (demoIdleForce ? 25 : 1.2) { // 아이들 관찰 모드는 조준을 길게 유지
                     demoWait = 0
                     // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
-                    if demoWallForce {
+                    if let p = demoPower {
+                        heightPct = p // 관찰용 파워 고정
+                    } else if demoWallForce {
                         heightPct = Double.random(in: 0.9 ... 1.0)
                     } else if !(demoPickupForce && club.isPutter) { // 줍기 관찰: 거리 프리셋 퍼팅 그대로 (탭인)
                         heightPct = Double.random(in: 0.5 ... 0.85)
@@ -2148,6 +2153,10 @@ final class GameScene: SKScene {
                     if strokes >= Phys.maxStrokes {
                         giveUp()
                     } else if let label = greenChanceLabel() {
+                        if demoMode {
+                            print("GIR \(label) par \(hole.par) strokes \(strokes)")
+                            fflush(stdout)
+                        }
                         playGreenCelebration(label) // 파4 원온·파5 투온 — 이글 찬스 (2026-09-17 사용자 요청)
                     } else if galleryWantsScene() {
                         galleryReact() // 갤러리가 지켜본 샷 — 스틱맨 반응이 끝나면 걷기 (Surprises2)

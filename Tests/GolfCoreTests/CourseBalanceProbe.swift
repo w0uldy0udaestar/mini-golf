@@ -53,12 +53,14 @@ final class CourseBalanceProbe: XCTestCase {
 
     struct HoleResult {
         let kind: String; let par: Int; let strokes: Int; let water: Int; let netRise: Double; var trace: [String] = []
+        var gir = false // 파4 원온·파5 투온 (그린 위 정지) — GameScene.greenChanceLabel과 같은 조건
     }
 
     /// 봇 한 홀 플레이. elevK > 0이면 표고차를 거리로 환산해 클럽을 고른다(중수)
     static func play(_ hole: Hole, elevK: Double) -> HoleResult {
         var b = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX))
         var strokes = 0, water = 0
+        var gir = false
         var trace: [String] = []
         var lastMoved = 999.0 // 직전 샷 이동 거리 — 벽에 막혀 제자리면 웨지로 탈출 (사람의 반응)
         let minR = Phys.minPowerRatio
@@ -108,7 +110,8 @@ final class CourseBalanceProbe: XCTestCase {
                         strokes: strokes,
                         water: water,
                         netRise: hole.ground(at: hole.holeX) - hole.ground(at: hole.teeX),
-                        trace: trace + [String(format: "%@ h%.2f %@ %.0f→HOLED", club.id, h, "\(lie)", fromX)]
+                        trace: trace + [String(format: "%@ h%.2f %@ %.0f→HOLED", club.id, h, "\(lie)", fromX)],
+                        gir: gir
                     )
                 case .water:
                     water += 1
@@ -132,6 +135,9 @@ final class CourseBalanceProbe: XCTestCase {
                 b.phase = .rest; b.vx = 0; b.vy = 0
             } // 60초 비종결 가드
             lastMoved = abs(b.x - fromX)
+            if hole.par >= 4, strokes == hole.par - 2, b.phase == .rest, hole.surface(at: b.x) == .green {
+                gir = true
+            }
             if b.phase == .rest, hole.surface(at: b.x) != .water, abs(hole.slope(at: b.x)) > 0.35 {
                 Self.steepRests += 1
                 trace.append(String(format: "STEEP-REST @%.0f slope %.2f", b.x, hole.slope(at: b.x)))
@@ -147,7 +153,8 @@ final class CourseBalanceProbe: XCTestCase {
             strokes: strokes,
             water: water,
             netRise: hole.ground(at: hole.holeX) - hole.ground(at: hole.teeX),
-            trace: trace
+            trace: trace,
+            gir: gir
         )
     }
 
@@ -162,13 +169,16 @@ final class CourseBalanceProbe: XCTestCase {
             let water = Double(rs.map(\.water).reduce(0, +)) / Double(rs.count)
             let rise = rs.map(\.netRise).reduce(0, +) / Double(rs.count)
             let under = Double(rs.filter { $0.strokes < $0.par }.count) / Double(rs.count)
+            let long = rs.filter { $0.par >= 4 }
+            let gir = long.isEmpty ? 0 : Double(long.filter(\.gir).count) / Double(long.count) // 파4 원온·파5 투온 비율
             lines.append(String(
-                format: "  %-12@ n=%3d  over par %+5.2f  stuck %4.0f%%  under-par %3.0f%%  water/hole %.2f  netRise %+6.1fm",
+                format: "  %-12@ n=%3d  over par %+5.2f  stuck %4.0f%%  under-par %3.0f%%  GIR %3.0f%%  water/hole %.2f  netRise %+6.1fm",
                 k as NSString,
                 rs.count,
                 mean,
                 stuck * 100,
                 under * 100,
+                gir * 100,
                 water,
                 rise
             ))
