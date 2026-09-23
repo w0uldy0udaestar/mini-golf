@@ -39,6 +39,7 @@ final class GameScene: SKScene {
     var demoPower: Double? // --demo-power P: 봇 파워 고정 (실플레이 풀파워 조건 재현용) — 조준 프리뷰에도 적용
     var demoStartHole = 1 // --demo-hole N: 새 라운드를 N번 홀부터 (미러 홀·특정 아키타입 관찰)
     var demoBallX: Double? // --demo-ball X: 홀 시작 공 위치(m) — 특정 라이·거리의 조준 자세 관찰
+    var demoTurnForce = false // --demo-turn: 첫 샷을 뒤로 22m 떨어뜨려 걷기 방향 반전(제자리 돌기) 관찰
     var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
     var ballHeld = false
@@ -90,7 +91,21 @@ final class GameScene: SKScene {
         let fromX, toX, dur: Double
         let profile: WalkProfile // 램프·등속·램프 속도 프로파일 — 위치와 vInst의 단일 출처 (GolfCore)
         var t = 0.0
-        let relax = 0.8 // 피니시 여운 — 서두르지 않는다
+        var relax = 0.8 // 피니시 여운 — 서두르지 않는다 (방향 반전이면 제자리 돌기만큼 길어진다)
+        /// 제자리 돌기 (2026-09-23, docs/research-turn-in-place.md): 예고(머리 선행) → 구 뒷발이 새 방향으로 짧게 내딛기 →
+        /// 가장 좁은 실루엣에서 반전(미러·발 정체 교환) → 구 앞발 반 보폭 → 정착. 끝난 스탠스 = 걷기 시작 스탠스(−11·+16)라 미끄러짐 0
+        struct TurnPlan {
+            let start: Double // walk 시계 기준 시작
+            let dur: Double
+            let newDir: Double
+            var atBody = false // 도착 턴: 원점이 몸(걷기 좌표) — 출발 턴은 공 원점이라 몸이 ∓(ballFwd+5)에 선다
+            var flipped = false
+            var started = false
+        }
+
+        var turn: TurnPlan?
+        var arrivalTurn: TurnPlan? // 도착 턴 — 걸어온 방향과 조준 방향이 반대일 때 (공이 뒤에 있던 경우)
+        var arrivalDir = 1.0
         var vPx = 0.0
         // 게이트 상태 (리서치 반영: stride warping + 접지점 래치)
         var gaitPhase = 0.0 // 보행 위상 (1 = 두 걸음)
@@ -441,6 +456,39 @@ final class GameScene: SKScene {
 
     private func cancelHoleFlow() {
         enumerateChildNodes(withName: Self.holeFlowNodeName) { node, _ in node.removeFromParent() }
+    }
+
+    /// 제자리 돌기 리그 — 걷기 리그 공간(몸 원점)에서 만들어 몸이 서 있는 자리(공 원점 기준 ∓(ballFwd+5))로 옮긴다.
+    /// 반전 전(구 facing): 앞발(+16)을 축으로 두고 뒷발(−11)을 새 방향으로 5px 내딛는다 → 미러 후 그 발이 새 앞발(+16)이 된다.
+    /// 반전 후(새 facing): 축발(이제 뒷발, −16)이 −11로 반 걸음 → 걷기 시작 스탠스와 일치. 머리는 예고 구간부터 새 방향, 힙은
+    /// 반전 즈음 2px 내려앉는다(무릎 거의 폄 → IK 방향 뒤집힘이 안 튄다). 수치는 리서치 권고(0.65s, 15/30/10/30/15%)의 2.5배 과장
+    private func turnRig(_ tp: WalkAnim.TurnPlan, t: Double) -> Rig {
+        let u = min(1, max(0, (t - tp.start) / tp.dur))
+        let step1 = smoothstep(min(1, max(0, (u - 0.15) / 0.30))) // 구 뒷발
+        let step2 = smoothstep(min(1, max(0, (u - 0.55) / 0.30))) // 구 앞발(축발)
+        let lift1 = sin(.pi * min(1, max(0, (u - 0.15) / 0.30)))
+        let lift2 = sin(.pi * min(1, max(0, (u - 0.55) / 0.30)))
+        var flavor = WalkFlavor()
+        flavor.hipYOff = -2 * sin(.pi * min(1, max(0, (u - 0.3) / 0.4))) // 반전 즈음 무게 싣기
+        let hipLocal = tp.atBody ? 0 : (tp.flipped ? 1.0 : -1.0) * (renderBallFwd + 5)
+        var f1: (x: Double, lift: Double)
+        var f2: (x: Double, lift: Double)
+        if !tp.flipped { // 구 facing: foot1 = 뒷발(내딛는 발), foot2 = 앞발(축)
+            f1 = (mix(-11, -16, step1), 6 * lift1 * lift1)
+            f2 = (16, 0)
+            flavor.hipXOff = 3 * smoothstep(min(1, u / 0.15)) // 축발 쪽으로 체중
+            flavor.headDxOff = -6 * smoothstep(min(1, u / 0.15)) // 머리가 먼저 새 방향을 본다 (예고)
+        } else { // 새 facing (미러·발 교환 뒤): foot1 = 축발(이제 뒷발), foot2 = 내딛은 발(이제 앞발)
+            f1 = (mix(-16, -11, step2), 6 * lift2 * lift2)
+            f2 = (16, 0)
+            flavor.hipXOff = 3 * (1 - step2)
+        }
+        var r = RigBuilder.walking(f1: f1, f2: f2, gaitPhase: 0, vPx: 0, clubLen: renderLen, flavor: flavor) { dx in
+            let xm = self.stickX + (dx + hipLocal) * self.dir / Double(self.pxPerM)
+            return Double(self.groundY(xm) - self.groundY(self.stickX))
+        }
+        r.shiftX(hipLocal)
+        return r
     }
 
     /// --demo-settle: 홀에서 티 쪽으로 훑어 처음 만나는 러프 급경사(|경사| > 0.42 — 러프 마찰 4.5가 중력 3.5를 이겨 서는 자리).
@@ -994,7 +1042,6 @@ final class GameScene: SKScene {
         // 원점 통일 (2026-09-14 전환 개편): 포즈 리그는 공이 원점이고 몸(힙)은 공 뒤 ballFwd+5px에 선다.
         // 걷기 리그는 몸이 원점이므로, 걷기의 출발·도착을 '몸이 서는 자리'로 잡아야 전환 순간 좌표 점프가 0이다
         // (구: 출발 stickX·도착 ball.x → 출발 때 몸이 25px 앞으로 튀고, 도착 때 25px 뒤로 미끄러졌다).
-        let oldDir = dir
         let from = stickX - dir * (renderBallFwd + 5) / Double(pxPerM)
         let arrivalDir: Double = hole.holeX >= ball.x ? 1 : -1
         // 도착 클럽은 enterAim의 자동 퍼터 전환과 같은 조건으로 미리 안다 — 도착 자리를 그 스탠스로
@@ -1004,9 +1051,8 @@ final class GameScene: SKScene {
         let to = ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM)
         let dist = abs(to - from)
         mode = .walking
-        if dist > 0.5 { // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
-            setFacing(to >= from ? 1 : -1)
-        }
+        let newDir: Double = to >= from ? 1 : -1
+        let reversing = dist > 0.5 && newDir != dir // 아주 짧은 이동은 방향 유지 (제자리 반걸음)
         // 완전 여유로운 걸음 — 실제 골퍼처럼 서두르지 않는다.
         // 험한 길(경사·러프·벙커)은 더 오래 걸린다 (지형 적응 — 2026-08-15 사용자 요청)
         var hardness = 0.0
@@ -1026,8 +1072,11 @@ final class GameScene: SKScene {
             // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
             profile: WalkProfile(dist: dist, dur: dur)
         )
-        // 방향이 반전됐으면 여운(직립) 포즈를 몸이 있는 자리에 앵커 — 공 원점 포즈는 반대편에 서기 때문
-        anim.relaxShift = dir != oldDir ? 2 * (renderBallFwd + 5) : 0
+        if reversing { // 제자리 돌기: 피니시 애니가 끝나는 0.55s 뒤 0.65s 턴 + 정착 — 반전은 턴 중간에 (setFacing은 update에서)
+            // (0.3s 시작은 스윙 피니시 타깃이 아직 리그를 쥐고 있어 예고·1걸음이 잘렸다 — 2026-09-23 RIG 덤프)
+            anim.turn = WalkAnim.TurnPlan(start: 0.55, dur: 0.65, newDir: newDir)
+            anim.relax = 0.55 + 0.65 + 0.15
+        }
         // 아주 가끔 넘어진다 (재미): 기본 1%, 험한 길 2% — 라운드에 한 번 볼까 말까
         // (초기 3~6%는 실플레이에서 "너무 자주"로 판정 — 2026-08-15)
         if anim.dur > 5.0,
@@ -1107,6 +1156,7 @@ final class GameScene: SKScene {
             print(String(format: "FLAVOR[%.2f] ", Date().timeIntervalSince1970) + list + trip + show)
             fflush(stdout)
         }
+        anim.arrivalDir = arrivalDir
         walkAnim = anim
         updateHUD()
     }
@@ -1194,6 +1244,11 @@ final class GameScene: SKScene {
             t.alpha = 1
         }
         mode = .motion
+        if demoTurnForce, strokes == 1 { // 제자리 돌기 관찰: 공이 뒤로 떨어졌다
+            let x = min(max(stickX - dir * 22, 2), hole.worldW - 2)
+            ball = BallState(x: x, y: hole.ground(at: x))
+            ball.phase = .roll
+        }
         if demoSettleForce, strokes == 1, let x = demoSteepRimSpot() { // 정착 굴림 관찰: 마찰로 설 수 있는 급경사에 '떨어진' 공
             ball = BallState(x: x, y: hole.ground(at: x))
             ball.phase = .roll // 다음 스텝에 정지 판정 → settleOffSteepSlope → SETTLE 로그·굴림
@@ -1960,6 +2015,24 @@ final class GameScene: SKScene {
 
         if mode == .walking, var w = walkAnim {
             w.t += dt
+            if var tp = w.turn, w.t >= tp.start {
+                if !tp.started {
+                    tp.started = true
+                    if demoMode {
+                        print(String(format: "TURN start x %.0f dir %d", Double(px(stickX)), Int(dir)))
+                        fflush(stdout)
+                    }
+                }
+                if !tp.flipped, w.t >= tp.start + tp.dur * 0.5 { // 가장 좁은 실루엣·무릎 거의 폄 — 여기서 미러·발 교환
+                    tp.flipped = true
+                    setFacing(tp.newDir)
+                    if demoMode {
+                        print("TURN flip")
+                        fflush(stdout)
+                    }
+                }
+                w.turn = tp
+            }
             // 넘어짐: 전진 동결을 연속 램프로 — 쓰러지며(0.3~0.6) 멈추고, 일어난 만큼(1.5~2.2)
             // 다시 가속한다. 이진 동결은 엎어진 채 슬라이드(리뷰 S1)와 duty 점프 스냅(S3)을 만든다
             var freeze = 0.0
@@ -2077,9 +2150,32 @@ final class GameScene: SKScene {
                         swapRenderFeet()
                     }
                 }
-                walkAnim = w
-                if u >= 1 {
-                    enterAim()
+                if u >= 1, w.arrivalTurn == nil, w.arrivalDir != dir { // 도착 턴: 조준 방향으로 제자리 돌기 뒤 조준
+                    w.arrivalTurn = WalkAnim.TurnPlan(start: w.t, dur: 0.65, newDir: w.arrivalDir, atBody: true)
+                    if demoMode {
+                        print(String(format: "TURN arrival x %.0f dir %d", Double(px(stickX)), Int(dir)))
+                        fflush(stdout)
+                    }
+                }
+                if var tp = w.arrivalTurn {
+                    if !tp.flipped, w.t >= tp.start + tp.dur * 0.5 {
+                        tp.flipped = true
+                        setFacing(tp.newDir)
+                        if demoMode {
+                            print("TURN arrival flip")
+                            fflush(stdout)
+                        }
+                    }
+                    w.arrivalTurn = tp
+                    walkAnim = w
+                    if w.t >= tp.start + tp.dur + 0.15 {
+                        enterAim()
+                    }
+                } else {
+                    walkAnim = w
+                    if u >= 1 {
+                        enterAim()
+                    }
                 }
             } else {
                 walkAnim = w
@@ -2285,6 +2381,9 @@ final class GameScene: SKScene {
             if mode == .holed, reactionKind != .none, anim.t >= anim.prof.down {
                 applyScoreReaction(&targetRig, t: currentTime - reactionAt)
             }
+        } else if mode == .walking, let w = walkAnim, let tp = w.arrivalTurn { // 도착 턴 (몸 원점)
+            targetRig = turnRig(tp, t: w.t)
+            rigRate = 9
         } else if mode == .walking, let w = walkAnim, w.t >= w.relax {
             var flavor = WalkFlavor()
             if let r = w.shoulderRange { // 0.6초에 걸쳐 어깨에 올렸다 내린다
@@ -2423,6 +2522,9 @@ final class GameScene: SKScene {
             targetRig = ritualRig(anim)
             applySlopeStance(&targetRig) // 의식 중에도 발은 경사를 딛는다
             rigRate = 10
+        } else if mode == .walking, let w = walkAnim, let tp = w.turn, w.t >= tp.start { // 제자리 돌기 (여운 중)
+            targetRig = turnRig(tp, t: w.t)
+            rigRate = 9
         } else if mode == .walking { // 피니시 여운 (relax) — 직립으로 느긋하게
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
             targetRig.shiftX(walkAnim?.relaxShift ?? 0) // 방향 반전 시 몸이 있는 자리에

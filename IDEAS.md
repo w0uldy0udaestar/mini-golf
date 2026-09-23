@@ -20,6 +20,6 @@
 - **HUD-지형 겹침 방지** (리뷰 S-3, 2026-08-14): groundBase 96px 고정이라 고해상도(pxPerM↑)에서 깊은 계곡·워터(-6m)가 하단 HUD(y 40~66)까지 내려올 수 있음 — groundBase를 pxPerM 비례로 하거나 표고 하한을 화면 기준으로 클램프. 참고: 미러 세그먼트 반개구간 1포인트 편향(S-4)·수직낙하 β 방향 기본값(S-5)은 실질 영향 없음 판정으로 보류
 - **스핀 리서치 미적용분** (2026-08-14, docs/research-spin-bounce.md): 러프 플라이어/딥 이원화(±20% 분산 포함 — 신선한 메카닉 후보) · 티 spinFactor 0.85(우드 한정) · Cl 이차식 재조정(club.power 재밸런싱 동반 — 최후순위) · 릴리스/체크/백업 3태 이펙트 구분(먼지 궤적/임팩트 링/역회전 스파크)
 - **전환 리서치 자산** (exp/transition-lab-20260814 브랜치 보존): 임계 감쇠 스프링 Spring.swift+테스트("다운스윙은 스프링 불가" 수치 근거 포함) · vInst smootherstep 도함수 동기 · `--demo` 자동 플레이+타임스탬프 로그(프레임 캡처 관찰용 — 전환 작업 재개 시 먼저 이식 권장)
-- **걷기 방향 반전의 한 프레임 미러** (2026-09-14 리서치 중 발견): 공이 뒤에 있을 때 `dir`이 걷기 시작 순간 즉시 뒤집힌다. 리그 개편 후 "제자리 돌기 2걸음" 전환으로 대체 검토. 스틱맨 리그 리서치: docs/research-stickman-rig.md
+- ~~걷기 방향 반전의 한 프레임 미러~~ **해결** (2026-09-23 제자리 돌기 2걸음 — 출발·도착, docs/research-turn-in-place.md, `--demo-turn`). 원 기록 (2026-09-14 리서치 중 발견): 공이 뒤에 있을 때 `dir`이 걷기 시작 순간 즉시 뒤집힌다. 리그 개편 후 "제자리 돌기 2걸음" 전환으로 대체 검토. 스틱맨 리그 리서치: docs/research-stickman-rig.md
 - ~~홀아웃·기권 직후 R 재시작 시 씬 직접 run 타이머 잔존~~ **해결** (2026-09-23 재현·수정: `afterHoleFlow` 노드 + `startHole`의
   `cancelHoleFlow`, 관찰 `--demo-pickup --demo-restart-after-holed 0.5`). 원 기록 — (Code Reviewer 범위 밖 관찰, 2026-09-23): `onHoled`(GameScene ≈1201-1207)·`giveUp`(≈1447)의 지연 실행이 씬에 직접 `run`돼 `startHole`의 `cancelSurprises`로 안 지워진다. 홀아웃 뒤 1.3s 안에 R을 누르면 새 라운드 티 의식 중 `startRitual(.ballPickup)`이 끼어들어 종료 시 `advanceHole()`로 1번 홀을 스코어 없이 건너뛸 가능성(논리 확인, 미재현). 수정은 `afterSurprise`류 취소 가능 타이머 노드로 교체 — 서프라이즈 1차 리뷰 M2와 같은 계열
