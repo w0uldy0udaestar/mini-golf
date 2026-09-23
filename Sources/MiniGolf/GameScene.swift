@@ -55,6 +55,8 @@ final class GameScene: SKScene {
     var napIdle = Double.infinity // 마지막 입력 뒤 이만큼 방치하면 낮잠 (초, 조준당 1회)
     var lastInputAim = 0.0 // 조준 중 마지막 키 입력 시각 (aimTime)
     var demoRestartIn: Double? // --demo-restart-in T: 서프라이즈 시작 T초 뒤 새 라운드 (인터럽트 정리 관찰)
+    var demoRestartAfterHoled: Double? // --demo-restart-after-holed T: 첫 홀아웃 T초 뒤 새 라운드 (홀 전환 타이머 인터럽트 관찰)
+    private var demoRestartedAfterHoled = false
     var napStart = 0.0
     var napNode: SKNode?
     var catState: CatState?
@@ -376,6 +378,7 @@ final class GameScene: SKScene {
 
     private func startHole() {
         cancelSurprises() // R 새 라운드·홀 전환 중 진행 중이던 서프라이즈 정리 (리뷰 M2)
+        cancelHoleFlow() // 홀아웃·기권 뒤 '줍기/다음 홀' 타이머 — R이 끼어들면 새 라운드의 1번 홀을 건너뛰었다 (2026-09-23 재현)
         strokes = 0
         // 티샷 기본 클럽: 파4·5 드라이버, 파3 7번 아이언 (관례 — 2026-08-15 사용자 요청. ←→ 변경 자유)
         let teeClub = hole.par == 3 ? "7I" : "DR"
@@ -417,6 +420,21 @@ final class GameScene: SKScene {
         } else {
             enterAim()
         }
+    }
+
+    /// 홀 전환 타이머(홀아웃 → 줍기/다음 홀, 기권 → 다음 홀)는 씬에 직접 run하지 않고 이 노드에 건다 — `startHole`이 지운다.
+    /// 씬 직접 run은 R 새 라운드를 넘어 살아남아 새 라운드 1번 홀에 이전 홀의 줍기 의식이 끼어들고 `advanceHole`로 스코어 없이
+    /// 2번 홀로 넘어갔다 (Code Reviewer 범위 밖 관찰 → `--demo-pickup --demo-restart-after-holed 0.5`로 재현, 2026-09-23)
+    static let holeFlowNodeName = "holeFlowTimer"
+    private func afterHoleFlow(_ delay: Double, _ block: @escaping () -> Void) {
+        let timer = SKNode()
+        timer.name = Self.holeFlowNodeName
+        addChild(timer)
+        timer.run(.sequence([.wait(forDuration: delay), .run(block), .removeFromParent()]))
+    }
+
+    private func cancelHoleFlow() {
+        enumerateChildNodes(withName: Self.holeFlowNodeName) { node, _ in node.removeFromParent() }
     }
 
     /// --demo-settle: 홀에서 티 쪽으로 훑어 처음 만나는 러프 급경사(|경사| > 0.42 — 러프 마찰 4.5가 중력 3.5를 이겨 서는 자리).
@@ -1227,6 +1245,16 @@ final class GameScene: SKScene {
         if demoMode {
             print("HOLED diff \(diff)")
             fflush(stdout)
+            if let t = demoRestartAfterHoled, !demoRestartedAfterHoled { // 홀 전환 타이머 위에 R을 얹는다 (관찰)
+                demoRestartedAfterHoled = true
+                let n = SKNode()
+                addChild(n)
+                n.run(.sequence([.wait(forDuration: t), .run { [weak self] in
+                    print("DEMO-R")
+                    fflush(stdout)
+                    self?.newRound()
+                }, .removeFromParent()]))
+            }
         }
         toast(
             scoreName(strokes: strokes, par: hole.par),
@@ -1240,11 +1268,9 @@ final class GameScene: SKScene {
         // 미터 기준 (픽셀은 홀 전장에 따라 스케일이 달라 긴 홀에서 오판 — 2026-08-29 실측)
         let nearCup = abs(stickX - hole.holeX) < 9 || demoPickupForce
         if nearCup {
-            run(.sequence([.wait(forDuration: 1.3), .run { [weak self] in
-                self?.startRitual(.ballPickup)
-            }]))
+            afterHoleFlow(1.3) { [weak self] in self?.startRitual(.ballPickup) }
         } else {
-            run(.sequence([.wait(forDuration: 1.7), .run { [weak self] in self?.advanceHole() }]))
+            afterHoleFlow(1.7) { [weak self] in self?.advanceHole() }
         }
     }
 
@@ -1485,7 +1511,7 @@ final class GameScene: SKScene {
         reactionKind = .dejected
         reactionAt = lastTime
         toast("기권", sub: "\(Phys.maxStrokes)타 초과", titleScale: 0.88)
-        run(.sequence([.wait(forDuration: 1.4), .run { [weak self] in self?.advanceHole() }]))
+        afterHoleFlow(1.4) { [weak self] in self?.advanceHole() }
     }
 
     private func advanceHole() {
