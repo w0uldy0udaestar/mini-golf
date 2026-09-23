@@ -110,6 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scene.demoTrademarkForce = args.contains("--demo-trademark") // 풀샷마다 굿샷 판정 + 리그 덤프 (트레이드마크 관찰)
         scene.demoBackdrop = args.contains("--demo-bg") // 불투명 배경 — 캡처 판독용 (데스크탑 위 겹침 제거)
         PlayLog.toStdout = scene.demoMode
+        if let i = args.firstIndex(of: "--demo-ball"), i + 1 < args.count, let x = Double(args[i + 1]) {
+            scene.demoBallX = x // 홀 시작 공 위치(m) — 조준 자세 관찰
+        }
+        if let i = args.firstIndex(of: "--demo-hole"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            scene.demoStartHole = n // N번 홀부터 (관찰용)
+        }
         if let i = args.firstIndex(of: "--demo-restart-after-holed"), i + 1 < args.count, let t = Double(args[i + 1]) {
             scene.demoRestartAfterHoled = t // 첫 홀아웃 T초 뒤 R — 홀 전환 타이머 인터럽트 관찰 (IDEAS 2026-09-23)
         }
