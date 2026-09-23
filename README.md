@@ -269,6 +269,7 @@ docs/                모션 카탈로그 · QA 보고서 · 리서치 노트
 | `--demo-restart-after-holed T` | 첫 홀아웃 T초 뒤 새 라운드(R) — 홀 전환 타이머 인터럽트 관찰 |
 | `--demo-hole N` | 새 라운드를 N번 홀부터 (미러 홀·특정 아키타입 관찰, `--seed`와 함께) |
 | `--demo-ball X` | 홀 시작 공 위치를 X m로 (특정 라이·거리의 조준 자세 관찰, 예: `--demo-idle --club SW --demo-power 0.43`) |
+| `--demo-turn` | 첫 샷을 뒤로 22m 떨어뜨려 걷기 방향 반전(출발·도착 제자리 돌기) 관찰 — 로그 `TURN start/flip/arrival` |
 | `--demo-memes` | 밈 쇼피스 12종 순환 시연 |
 | `--seed N` | 코스 시드 고정 |
 | `--demo-wall` | 벽 반사 스탠스 관찰 |
