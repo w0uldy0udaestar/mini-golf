@@ -270,6 +270,7 @@ docs/                모션 카탈로그 · QA 보고서 · 리서치 노트
 | `--demo-hole N` | 새 라운드를 N번 홀부터 (미러 홀·특정 아키타입 관찰, `--seed`와 함께) |
 | `--demo-ball X` | 홀 시작 공 위치를 X m로 (특정 라이·거리의 조준 자세 관찰, 예: `--demo-idle --club SW --demo-power 0.43`) |
 | `--demo-turn` | 첫 샷을 뒤로 22m 떨어뜨려 걷기 방향 반전(출발·도착 제자리 돌기) 관찰 — 로그 `TURN start/flip/arrival` |
+| `--demo-mood M` | 모든 걷기에 무드 강제 (`elated` / `sad` / `neutral`) — 랜덤 잔동작은 끔, 로그 `MOOD` |
 | `--demo-memes` | 밈 쇼피스 12종 순환 시연 |
 | `--seed N` | 코스 시드 고정 |
 | `--demo-wall` | 벽 반사 스탠스 관찰 |

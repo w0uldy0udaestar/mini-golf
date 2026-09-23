@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""범용 관찰 캡처: capture2.py OUTDIR MAXSEC --trigger "PREFIX:dur:gap:count" [...] -- <MiniGolf args...>"""
+"""범용 관찰 캡처: capture-demo.py OUTDIR MAXSEC --trigger "PREFIX:dur:gap:count" [...] [--display N] -- <MiniGolf args...>
+--display N: screencapture -D N (1 = 메인). 메인 화면에 다른 앱 창이 겹치면 --screen 1 + --display 2로 두 번째 디스플레이에서 찍는다"""
 import subprocess, sys, time, threading, os, re, signal
 out, maxsec = sys.argv[1], float(sys.argv[2])
 args = sys.argv[3:]
-triggers, app, i = [], [], 0
+triggers, app, i, display = [], [], 0, None
 while i < len(args):
-    if args[i] == "--trigger":
+    if args[i] == "--display":
+        display = args[i + 1]; i += 2
+    elif args[i] == "--trigger":
         pre, dur, gap, cnt = args[i + 1].rsplit(":", 3)
         triggers.append((pre, float(dur), float(gap), int(cnt))); i += 2
     elif args[i] == "--":
@@ -21,7 +24,7 @@ def burst(tag, dur, gap):
         tb = time.time(); k = 0
         while time.time() - tb < dur:
             fn = os.path.join(out, f"{tag}-{k:02d}.png")
-            subprocess.run(["screencapture", "-x", "-C", fn], check=False)
+            subprocess.run(["screencapture", "-x", "-C"] + (["-D", display] if display else []) + [fn], check=False)
             subprocess.run(["sips", "-Z", "1600", fn], check=False, stdout=subprocess.DEVNULL)
             shots[0] += 1; k += 1; time.sleep(gap)
     finally:
