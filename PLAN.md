@@ -104,9 +104,11 @@ Render  (SpriteKit)
 - [x] 사운드(타격·홀인·휘시·착지·립아웃·워터·차임 — 합성음 SoundKit)·궤적 이펙트·미세 파티클 FX (feature/m3-sound-fx). 사용자 청음 튜닝 피드백은 열려 있음
 - [x] **/design-review 게이트 통과** — 발견 4건(critical 1: 밝은 배경 시인성) 전부 수정, Design Score A- · AI Slop A. 보고서: `~/.gstack/projects/mini-golf/designs/design-audit-20260814/`. 밝은 배경 대응은 **'고대비 모드' 토글(기본 꺼짐)** 로 확정 — 상시 듀얼톤은 이질감(사용자 판정)이라 기본값은 원래 디자인 유지. Palette 상수 도입. M4 README에 고대비 모드 안내 필요
 
-### M4 · 오픈소스 공개 — [게이트: 공개 전 사용자 최종 확인]
-- [ ] README (빌드·실행 방법, 미서명 실행 `xattr` 안내), 데모 GIF, MIT LICENSE, CHANGELOG
-- [ ] 저장소 public 전환 + GitHub Release
+### M4 · 오픈소스 공개 ✅ 완료 (2026-08 공개 → 2026-09-23 v0.8.0 기준 상태 반영)
+- [x] README (빌드·실행 방법, 미서명 실행 `xattr` 안내, Homebrew cask, 고대비 모드 팁), 데모 GIF + 모션 카탈로그 GIF 49종, MIT LICENSE, CHANGELOG
+- [x] 저장소 public 전환(과거 캡처 개인정보로 히스토리 재작성 후 재생성) + GitHub Release v0.1.0 ~ **v0.8.0**(2026-09-23) + homebrew-tap cask
+- 이후 계획 밖 확장(전부 머지·릴리스됨): 관절 뼈대 리그·걷기 모션 37종·프로 스윙 스타일 3종(실측)·트레이드마크 연출·서프라이즈 1·2차(12종)·
+  코스 표고 재예산(봇 밸런스 프로브)·공 줍기·온그린 연출·QA P1 잔여. 남은 것은 백로그(HANDOFF·IDEAS)뿐
 
 ## 검증 계획
 
