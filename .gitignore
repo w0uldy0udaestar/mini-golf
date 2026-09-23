@@ -24,3 +24,6 @@ credentials*
 # CMU 모캡 원본 (재배포 대신 로컬 참조 — docs/research-mocap-index.md)
 refs/*
 !refs/video/
+
+# 서브에이전트 워크트리 (git worktree — 내장 저장소로 잡히지 않게)
+.claude/worktrees/
