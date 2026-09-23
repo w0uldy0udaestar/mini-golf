@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — v0.8.0 릴리스 완료 → v0.8.1 미배포: 타이거 테이크어웨이(9cffbc5)·제자리 돌기(341b4b5)·톱 역K 규칙(174418f). 판정 대기)
+## 현재 상태 (2026-09-23 — **v0.8.1 릴리스 완료**(065abcf, gh release v0.8.1, tap 갱신). 다음: 백로그 선택)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -86,6 +86,7 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       5분 이상 뒤 재개 시 조준 중이면 shoo 손 흔들기 + "어서 와" — 포커스 상실은 일시정지가 아니라 홀드 해제만이라 ⛳️ 수동 정지 기준).
       관찰 `--demo-setback`(모든 샷 좌절 계열)·`--demo-idle --demo-greet`(3s 뒤 정지→1s 재개)·`--demo-pickup`(홀마다 홀인원 → 스트릭).
       프레임 3종 확인. 남긴 것: 벙커 탈출 힌트(사용자 미선택), 파워 라벨–깃대 겹침(미검증)
+- [x] **v0.8.1 릴리스** (2026-09-23, 065abcf): zip 825,127B SHA bc0e5a94… → gh release → 공개 SHA 일치 → tap → tap·fetch·untap 검증
 - [x] **v0.8.0 릴리스** (2026-09-23, fa7a8a1): zip 815,772B SHA 936eb712… → gh release → 공개 SHA 일치 → tap 58e1cb8 → tap·fetch·untap 검증
 - [x] **v0.7.0 릴리스** (2026-09-16, f3a7c8f 버전 범프): `make zip`(796,042B, SHA b6cd497e…) → gh release v0.7.0 → 공개 에셋 재다운로드 SHA 일치 →
       homebrew-tap 45a4431(version·sha256) push → `brew tap` → `brew fetch --cask` 통과(캐시 SHA 일치) → `brew untap`(이 머신엔 tap 미설치 상태가
@@ -156,18 +157,9 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 9935736로 재빌드된 로컬 실행본(brew는 아직 0.7.0). 실플레이 로그 `~/Library/Logs/MiniGolf/play.log`.
 
-1. ~~v0.8.0 릴리스~~ **완료** (2026-09-23): fa7a8a1 버전 범프 → `make zip`(815,772B, SHA 936eb712…) → gh release v0.8.0(노트 = CHANGELOG
-   요약 + 설치 + SHA) → 공개 에셋 재다운로드 SHA 일치 → homebrew-tap 58e1cb8(version·sha256) push → tap→fetch→untap 검증.
-   **제자리 돌기**(341b4b5, 백로그 선택 2026-09-23): 출발·도착 2걸음 스텝 턴 0.65s(`WalkAnim.TurnPlan`·`turnRig`), 반전은 실루엣이 가장 좁은
-   50% 지점. 리서치 docs/research-turn-in-place.md. 관찰 `--demo-turn --demo-trademark`(RIG 덤프로 발 미끄러짐 0.3px 확인). 판정 뒤 조정
-   후보: 스텝 들림 6px(렌더 3~4px로 감쇠), 머리 선행 6px, 턴 0.65s. 남은 것: 걷기 중 방향 반전(공이 뒤로 굴러갈 때 등)은 startWalk에서만
-   판정하므로 미처리 — 필요하면 walk 중 재계획
-   **판정 3차 스크린샷**(3I 94% "디섐보랑 로리도 그런데?") → 톱(p4) 9세트 역K 규칙(174418f): 힙 ≥ +4·tilt ≤ −22·머리 [−2, 2]. 스타일 값보다
-   실루엣 규칙이 우선인 채널(톱의 힙·척추·머리). 판정 뒤 조정 후보: 규칙 세기(tilt −22 → −26, 힙 +4 → +6), 어드레스(p1)에도 같은 점검
-   **판정 2차 스크린샷**(타이거 SW 43% 조준 "아직도 어정쩡"): 원인은 tilt가 아니라 p2 handA 2.5배 과장(손은 엉덩이, 클럽만 코킹) →
-   3인 평균으로(9cffbc5). 재현 도구 `--demo-hole N --demo-ball X --demo-power P --demo-idle --club SW`(조준 프리뷰 고정) + RIG 덤프.
-   남은 2차 판정(선택, 다음 릴리스로 미뤄도 됨): 타이거 아이언·웨지 기울기 · 스타일 차이(로리 점프 12·타이거 트월 문턱 0.3·브라이슨
-   암록 14) · ⑥ 서프라이즈 2차. 무릎 떨림은 "한 번 봤다/재현 안 됨" → 보류(조건이 나오면 `--demo-power`·`--demo-settle`·시드로 60Hz 덤프)
+1. ~~v0.8.0·v0.8.1 릴리스~~ 완료 (2026-09-23). 백로그에서 다음 선택: 서프라이즈 3차 · QA 잔여 소규모 묶음(벙커 탈출 힌트·파워 라벨–깃대
+   겹침·HUD–지형 겹침) · Apple 공증 · 무드 워크 · 클럽 리밸런스 · 걷기 중 방향 재계획. 판정 반영 이력(타이거 테이크어웨이·톱 역K·제자리
+   돌기)은 아래 항목 참조
 2. ~~온그린 추적~~ 해결(4번 항목). 참고: 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권) —
    자연 원온 재현은 `--seed 8 --demo-power 0.92`(파4 협곡 298m)
 3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
