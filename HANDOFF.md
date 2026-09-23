@@ -164,7 +164,9 @@ main = e2c2afa(플레이 판정 1차 반영 머지), 작업 트리 클린, 원�
    실플레이 로그로 추적 — 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권)
 3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
    봇 표(`swift test --filter CourseBalanceProbe`, GIR% 열 포함)로 전후 비교
-4. **온그린 미발동 추적 중** (2026-09-23): 사용자 확인 "파5 2타·파4 1타 만에 올렸는데도 안 나왔다". 데모에서는 자연 원온(seed 8 파4
+4. ~~온그린 미발동 추적~~ **해결** (2026-09-23 play.log 증거): 4번 홀 파4 summitGreen 드라이버 h0.95 → `REST strokes 1 x 297.5 lie green
+   label 원온!` 발동 확인. 앞선 "안 보임"은 조건 미달(파4 2타째 그린·파5 2타째 러프 — 라벨 `-`). 설계(파4 원온·파5 투온만)는 유지.
+   (추적 경위) 사용자 확인 "파5 2타·파4 1타 만에 올렸는데도 안 나왔다". 데모에서는 자연 원온(seed 8 파4
    협곡 298m, `--demo-power 0.92`)으로 발동 확인(4회 중 2회 원온·2회 발동) → 정지 분기 로직 정상, 실플레이 전용 원인 미상. 코드 점검 완료:
    strokes 변이(발사·워터 +1·멀리건 복원), 정지 분기 순서(giveUp → 온그린 → 갤러리 → 좌절), 키 입력(조준 외 무시), toast 호출자.
    **PlayLog**(9fe8594, `Sources/MiniGolf/PlayLog.swift`) 추가 — `~/Library/Logs/MiniGolf/play.log`에 HOLE/SHOT/REST(lie·strokes·label)/

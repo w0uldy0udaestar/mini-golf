@@ -2,6 +2,7 @@ import Foundation
 
 /// 실플레이 증거 로그 — `~/Library/Logs/MiniGolf/play.log`에 append. `.app` 실행은 데모 stdout이 닿지 않아 판정 근거가
 /// 남지 않았다(2026-09-23 "온그린 연출이 보이지 않음" — 데모에서는 발동, 실플레이 원인 미상). 홀·샷·정지·홀인·워터만 한 줄씩.
+/// `--demo`에서는 파일 대신 stdout(`PLAY …`)으로 — 사용자 play.log 오염 방지, 캡처 스크립트 트리거 겸용.
 enum PlayLog {
     static let handle: FileHandle? = {
         let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/MiniGolf")
@@ -21,7 +22,14 @@ enum PlayLog {
         return f
     }()
 
+    nonisolated(unsafe) static var toStdout = false
+
     static func note(_ line: String) {
+        if toStdout {
+            print("PLAY " + line)
+            fflush(stdout)
+            return
+        }
         guard let h = handle,
               let d = (stamp.string(from: Date()) + " " + line + "\n").data(using: .utf8) else { return }
         h.write(d)
