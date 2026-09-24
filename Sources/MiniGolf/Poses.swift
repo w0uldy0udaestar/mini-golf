@@ -399,12 +399,20 @@ func backswingPose(heightPct: Double, profile: SwingProfile, topScale: Double? =
         : Pose.lerp(k.p2, k.p4, (s - 0.35) / 0.65)
 }
 
-func finishPose(profile: SwingProfile) -> Pose {
-    profile.isPutter ? profile.putt.fin : Pose.lerp(profile.keys.p8, profile.keys.p10, profile.finishScale)
+/// 퍼터 팔로스루 폭 — 백스트로크(heightPct)의 거울. 풀 팔로 고정은 탭인에서도 헤드가 공을 한참 지나쳐 "맞고 나아가는 느낌이
+/// 없다"(2026-09-24 플레이 판정): 공은 코스 스케일(3px/m)로 굴러 나가고 헤드는 스틱맨 스케일(≈39px/m)로 움직여 화면 속도가 10배쯤 어긋난다
+func putterFollowAmp(_ heightPct: Double) -> Double {
+    0.15 + 0.85 * heightPct // 탭인 0.25·풀 스트로크 1.0 — 0.3 하한은 탭인에서 헤드가 공을 2.6px 앞질렀다 (RIG 실측)
+}
+
+func finishPose(profile: SwingProfile, heightPct: Double) -> Pose {
+    profile.isPutter
+        ? Pose.lerp(profile.putt.imp, profile.putt.fin, putterFollowAmp(heightPct))
+        : Pose.lerp(profile.keys.p8, profile.keys.p10, profile.finishScale)
 }
 
 /// 스윙 애니메이션 타임라인에서 포즈 샘플 (t: 스윙 시작 후 경과 초)
-func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct _: Double) -> Pose {
+func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct: Double) -> Pose {
     if t < profile.down { // 다운스윙: 급가속 (퍼터는 펜듈럼 — 최하점=임팩트에서 속도 최대)
         if profile.isPutter {
             let v = t / profile.down
@@ -434,14 +442,22 @@ func swingPose(t: Double, fromPose: Pose, profile: SwingProfile, heightPct _: Do
         )
     }
     let t2 = t - profile.down
-    if profile.isPutter { // 퍼터: 임팩트 → 짧은 팔로만
-        let v = min(1, t2 / 0.25)
-        return Pose.lerp(profile.putt.imp, profile.putt.fin, 1 - (1 - v) * (1 - v))
+    if profile.isPutter {
+        // 퍼터: 임팩트 뒤 0.1s(6프레임)는 헤드가 거의 멈춰(4% 전진) 공이 페이스에서 떨어져 나가고, 그 뒤 스트로크에 비례한 팔로.
+        // 실측(2026-09-24 RIG): 임팩트 직후 헤드 2.9px/프레임 vs 공 0.9(롱 퍼트)·0.3(탭인) — 헤드가 공을 뚫고 지나가 "맞은 느낌"이 없었다
+        let fin = Pose.lerp(profile.putt.imp, profile.putt.fin, putterFollowAmp(heightPct))
+        let hold = 0.1
+        if t2 < hold {
+            return Pose.lerp(profile.putt.imp, fin, 0.04 * t2 / hold)
+        }
+        let v = min(1, (t2 - hold) / 0.35)
+        let e = 0.04 + 0.96 * (1 - pow(1 - v, 3))
+        return Pose.lerp(profile.putt.imp, fin, e)
     }
     let k = profile.keys
     if t2 < k.follow {
         return Pose.lerp(k.p7, k.p8, t2 / k.follow)
     }
     let v = min(1, (t2 - k.follow) / k.finish)
-    return Pose.lerp(k.p8, finishPose(profile: profile), 1 - (1 - v) * (1 - v)) // 감속하며 피니시
+    return Pose.lerp(k.p8, finishPose(profile: profile, heightPct: heightPct), 1 - (1 - v) * (1 - v)) // 감속하며 피니시
 }

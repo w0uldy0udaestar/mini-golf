@@ -73,6 +73,9 @@ final class GameScene: SKScene {
     /// 급경사 정착(`Ballistics.settleOffSteepSlope`)의 스냅을 렌더에서 굴림으로 — 물리 위치는 즉시 확정, 그림만 from→to
     /// (프로브 실측 2026-09-23: 샷의 1.2%, 최대 18.5m·평균 5.4m — 한 프레임 점프는 순간이동으로 보인다)
     var settleRoll: (from: Double, to: Double, t: Double, dur: Double)?
+    /// 퍼팅 출발 킥 (렌더 전용, 2026-09-24): 공은 코스 스케일(≈3px/m)로 굴러 헤드(스틱맨 스케일)보다 늘 느리다 — 임팩트 뒤 0.1s에
+    /// 3~6px 앞서 나갔다가 1s에 걸쳐 물리 위치로 돌아온다(프레임당 0.1px 이하라 감속으로 안 읽힌다). 물리는 그대로
+    var puttKick: (t0: TimeInterval, amp: Double)?
     var galleryState: GalleryState?
     var surprise3 = Surprise3State() // 서프라이즈 3차 (Surprises3.swift) — 스프링클러·캐디·뻐꾸기·강아지 상태
     var demoBumperFracs: [[Double]] = [] // --demo-bumpers: 창이 없는 관찰 환경용 합성 범퍼 (화면 비율 x,y,w,h)
@@ -1329,6 +1332,7 @@ final class GameScene: SKScene {
         // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
         settleRoll = nil // 직전 정착 굴림이 남아 있으면 발사 순간 공이 뒤로 보인다
+        puttKick = nil
         Ballistics.launch(
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
@@ -1376,7 +1380,20 @@ final class GameScene: SKScene {
             preShot.x,
             "\(lie)"
         ))
-        if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어 (퍼터는 조용히)
+        if club.isPutter { // 퍼팅 타격감 (2026-09-24 판정): 작은 스쿼시 + 접촉 링 — 헤드보다 느리게 굴러 나가는 공을 '출발'로 읽히게
+            let ks = ballKind.renderScale
+            ballNode.xScale = 1.22 * ks
+            ballNode.yScale = 0.84 * ks
+            ballNode.run(.group([.scaleX(to: ks, duration: 0.12), .scaleY(to: ks, duration: 0.12)]))
+            FX.contactTick(on: self, at: CGPoint(x: px(ball.x), y: py(ball.y) + 5.5))
+            puttKick = (lastTime, 4 + 3 * heightPct)
+            if demoMode { // 임팩트 순간 헤드 팁(로컬, 공 = 원점) — 접촉 타이밍 계측
+                let tipX = Double(renderRig.grip.x) + sin(renderRig.clubPhi) * renderRig.clubLen
+                print(String(format: "PUTT impact tip %.1f phi %.2f v0 %.2f", tipX, renderRig.clubPhi, ball.vx))
+                fflush(stdout)
+            }
+        }
+        if !club.isPutter { // 임팩트 타격감: 공 신장 + 헤드 스미어
             // 히트스톱은 실플레이에서 '렉'으로 읽혀 제거 (2026-08-14 사용자 판정 —
             // 골프처럼 한 번의 연속 동작에선 정지가 타격감이 아니라 프레임 드랍으로 보인다)
             ballNode.zRotation = CGFloat(atan2(ball.vy, ball.vx))
@@ -2163,7 +2180,7 @@ final class GameScene: SKScene {
                 launchBall()
             }
             if anim.t >= SwingTiming.total {
-                lastFinishPose = finishPose(profile: anim.prof)
+                lastFinishPose = finishPose(profile: anim.prof, heightPct: heightPct)
                 finishAt = currentTime
                 swingAnim = nil
             } else {
@@ -2819,6 +2836,16 @@ final class GameScene: SKScene {
                 bx = r.from + (r.to - r.from) * (u * u * (3 - 2 * u))
                 by = hole.ground(at: bx)
                 settleRoll = u >= 1 ? nil : r
+            }
+            if let k = puttKick { // 퍼팅 출발 킥 — 페이스에서 떨어져 나가는 첫 0.1s를 렌더로 보강
+                let t = currentTime - k.t0
+                if t > 1.1 || mode != .motion {
+                    puttKick = nil
+                } else {
+                    let up = smoothstep(min(1, t / 0.1))
+                    let down = min(1, max(0, (t - 0.1) / 1.0))
+                    bx += dir * k.amp * up * (1 - down) / Double(pxPerM)
+                }
             }
             ballNode.position = CGPoint(x: px(bx), y: py(by) + 5.5)
             let heightAbove = by - hole.ground(at: bx)

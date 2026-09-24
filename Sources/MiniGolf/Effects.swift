@@ -49,6 +49,21 @@ enum FX {
     }
 
     /// 홀인 — 컵 위로 점 몇 개가 톡 튀고, 깃발이 살짝 흔들린다
+    /// 퍼팅 접촉 링 — 페이스가 공에 닿는 순간 공 뒤에서 작은 고리가 퍼졌다 사라진다 (0.18s). 임팩트 스쿼시와 함께 '맞았다'를 읽히게
+    static func contactTick(on parent: SKNode, at p: CGPoint) {
+        let ring = SKShapeNode(circleOfRadius: 3)
+        ring.strokeColor = NSColor(white: 1, alpha: 0.7)
+        ring.lineWidth = 1
+        ring.fillColor = .clear
+        ring.position = p
+        ring.zPosition = 6
+        parent.addChild(ring)
+        ring.run(.sequence([
+            .group([.scale(to: 3.2, duration: 0.18), .fadeOut(withDuration: 0.18)]),
+            .removeFromParent(),
+        ]))
+    }
+
     static func holePop(on parent: SKNode, at p: CGPoint) {
         for _ in 0 ..< 3 {
             let dot = SKShapeNode(circleOfRadius: 1.2)
