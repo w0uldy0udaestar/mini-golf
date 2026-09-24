@@ -77,7 +77,7 @@ final class PosesTests: XCTestCase {
                         "\(style) \(cat) 백스윙 h=\(h) \(p)"
                     )
                 }
-                let fin = finishPose(profile: prof)
+                let fin = finishPose(profile: prof, heightPct: 0.6)
                 XCTAssertTrue(fin.handA.isFinite && fin.clubA.isFinite, "\(style) \(cat) 피니시 \(fin)")
             }
         }

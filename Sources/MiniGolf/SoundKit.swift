@@ -72,7 +72,7 @@ final class SoundKit {
         var soft = Biquad.lowpass(700, q: 0.8, sr: sr)
         var rng = NoiseLCG()
         let lieAmp = lie == .rough ? 0.4 : lie == .bunker ? 0.55 : 0.0
-        let dur = lieAmp > 0 ? 0.2 : cat == .putter ? 0.05 : 0.1
+        let dur = lieAmp > 0 ? 0.2 : cat == .putter ? 0.09 : 0.1 // 퍼터 0.05 → 0.09: 접촉 '톡'이 들리게 (2026-09-24)
         play(duration: dur) { t in
             let n = rng.white()
             var s = 0.0
@@ -88,7 +88,8 @@ final class SoundKit {
                 s += crack.process(n) * exp(-t / 0.005) * 0.3
             case .putter:
                 s += sin(2 * .pi * 1200 * t) * exp(-t / 0.008) * 0.35
-                s += crack.process(n) * exp(-t / 0.006) * 0.6
+                s += sin(2 * .pi * 430 * t) * exp(-t / 0.022) * 0.45 // 몸통 '톡'
+                s += crack.process(n) * exp(-t / 0.006) * 0.8
             }
             if lieAmp > 0 { // 러프 스치는 소리 / 벙커 모래 퍽
                 s += turf.process(n) * exp(-t / 0.06) * lieAmp
