@@ -29,14 +29,18 @@ final class PosesTests: XCTestCase {
         }
     }
 
-    func testPutterAddressTipIsFiveBehindBallAndImpactOnBall() {
+    /// 퍼터 페이스 = 팁 + 헤드 블록 6.5 + 선폭/2 (faceReach). 어드레스: 공 뒤 가장자리(−5.5) 근처 [−8, −4.5], 임팩트: 살짝 압축 [−5.5, −2]
+    /// (2026-09-24 "헤드면을 맞고 나가는 게 안 보인다" — 구 기준 '팁 = 공 뒤 5px'는 페이스가 공 안쪽 +4.8이었다)
+    func testPutterFaceTouchesBallBackAtAddressAndImpact() {
+        let reach = 6.5 + 3.25
         for style in SwingStyle.allCases {
             let k = PutterKeyframes.table(style)
             let a = tip(k.a, ballFwd: k.ballFwd, clubLen: k.len)
-            XCTAssertEqual(a.x, -5, accuracy: 1.0, "\(style) 퍼터 어드레스: 팁이 공 뒤 5px에서 벗어남 \(a)")
+            XCTAssertGreaterThan(a.x + reach, -8, "\(style) 퍼터 어드레스: 페이스가 공에서 너무 멀다 \(a)")
+            XCTAssertLessThan(a.x + reach, -4.5, "\(style) 퍼터 어드레스: 페이스가 공 안쪽에 그려진다 \(a)")
             let imp = tip(k.imp, ballFwd: k.ballFwd, clubLen: k.len)
-            XCTAssertGreaterThan(imp.x, -4.5, "\(style) 퍼터 임팩트: 헤드가 공에 못 미침 \(imp)")
-            XCTAssertLessThan(imp.x, 0, "\(style) 퍼터 임팩트: 헤드가 공을 지나침 \(imp)")
+            XCTAssertGreaterThan(imp.x + reach, -5.5, "\(style) 퍼터 임팩트: 페이스가 공에 못 미침 \(imp)")
+            XCTAssertLessThan(imp.x + reach, -2, "\(style) 퍼터 임팩트: 페이스가 공을 지나침 \(imp)")
             for (name, t) in [("어드레스", a), ("임팩트", imp)] {
                 XCTAssertGreaterThan(t.y, 1.5, "\(style) 퍼터 \(name): 헤드가 지면 아래 \(t)")
                 XCTAssertLessThan(t.y, 6.5, "\(style) 퍼터 \(name): 헤드가 공 위로 떠 있음 \(t)")

@@ -512,6 +512,9 @@ public enum CourseGenerator {
             : nil
         let plannedRise = signature.map { plannedNetRise(kind: $0, par: par, rand: &rand) } ?? 0
         let dist = effDist - effectiveBonus(netRise: plannedRise)
+        // 티 여백은 월드 폭의 8% (최소 25m): 25m 고정은 긴 홀(≈3px/m)에서 스틱맨이 화면 끝 52px에 서 벽 스탠스(80px)·펀치(73px)에
+        // 매번 걸렸다 (2026-09-24 판정 "티샷이 왜 화면 끝하고 가까워서 매번 걸리냐"). 비율이라 화면 폭과 무관하게 벽 밖(≥ 7%·W − 25px)
+        let teeX = max(Self.teeX, 0.08 * (dist + 45) / 0.92)
         let holeX = teeX + dist
         let worldW = holeX + 45
 
@@ -753,6 +756,7 @@ public enum CourseGenerator {
             greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
             segments: segments, elevation: elev,
             waterRange: waterRange, greenSlope: gSlope,
+            teeX: teeX,
             obstacles: obstacles,
             signature: signature,
             wind: wind

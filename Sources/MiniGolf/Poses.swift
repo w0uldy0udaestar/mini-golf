@@ -143,29 +143,29 @@ struct PutterKeyframes {
     let ballFwd: Double // 스탠스에서 공 위치(px) — 실측 자세에서 헤드가 공 뒤 5px에 오도록 손 각을 수치 해로 맞췄다 (gen_table2.py)
 
     static let roryPutt = PutterKeyframes(
-        a: Pose(hipDx: 0.0, tilt: -10.1, handA: 5.9, handD: 30, clubA: 3.9, heel: 0, headDx: 3.7),
-        top: Pose(hipDx: 0.1, tilt: -10.7, handA: -25.8, handD: 30, clubA: -33.8, heel: 0, headDx: 3.0),
-        imp: Pose(hipDx: 0.3, tilt: -11.7, handA: 8.6, handD: 30, clubA: 6.6, heel: 0, headDx: 2.7),
-        fin: Pose(hipDx: 3, tilt: -7.6, handA: 34.7, handD: 30, clubA: 46.7, heel: 0, headDx: 4.7),
-        len: 34, butt: 0, ballFwd: 6
+        a: Pose(hipDx: 0.0, tilt: -10.1, handA: -3.6, handD: 30, clubA: -0.6, heel: 0, headDx: 3.7),
+        top: Pose(hipDx: 0.1, tilt: -10.7, handA: -35.3, handD: 30, clubA: -38.3, heel: 0, headDx: 3.0),
+        imp: Pose(hipDx: 0.3, tilt: -11.7, handA: -0.9, handD: 30, clubA: 2.1, heel: 0, headDx: 2.7),
+        fin: Pose(hipDx: 3, tilt: -7.6, handA: 25.2, handD: 30, clubA: 42.2, heel: 0, headDx: 4.7),
+        len: 34, butt: 0, ballFwd: 10 // 6 → 10: 페이스를 공 뒤 가장자리에 (2026-09-24, 공은 리드 발꿈치 안쪽)
     )
 
     static let tigerPutt = PutterKeyframes(
-        a: Pose(hipDx: 0.0, tilt: -10.8, handA: 6.2, handD: 30, clubA: 4.2, heel: 0, headDx: 6.3),
-        top: Pose(hipDx: 2.4, tilt: -14, handA: -24.3, handD: 30, clubA: -32.3, heel: 0, headDx: 5.9),
-        imp: Pose(hipDx: 0.4, tilt: -11.6, handA: 8.6, handD: 30, clubA: 6.6, heel: 0, headDx: 5.3),
-        fin: Pose(hipDx: -0.6, tilt: -9.4, handA: 19.4, handD: 30, clubA: 31.4, heel: 0, headDx: 5.7),
-        len: 34, butt: 0, ballFwd: 6
+        a: Pose(hipDx: 0.0, tilt: -10.8, handA: -3.3, handD: 30, clubA: -0.3, heel: 0, headDx: 6.3),
+        top: Pose(hipDx: 2.4, tilt: -14, handA: -33.8, handD: 30, clubA: -36.8, heel: 0, headDx: 5.9),
+        imp: Pose(hipDx: 0.4, tilt: -11.6, handA: -0.9, handD: 30, clubA: 2.1, heel: 0, headDx: 5.3),
+        fin: Pose(hipDx: -0.6, tilt: -9.4, handA: 9.9, handD: 30, clubA: 26.9, heel: 0, headDx: 5.7),
+        len: 34, butt: 0, ballFwd: 10 // 6 → 10: 페이스를 공 뒤 가장자리에 (2026-09-24, 공은 리드 발꿈치 안쪽)
     )
 
     /// 암록: 샤프트가 리드 전완과 한 직선(clubA == handA)이고 손목이 꺾이지 않아 어깨 회전만으로 흔든다. handD 34는 RigBuilder의
     /// 긴 클럽 보정(−12) 후 22 — 곧은 팔의 원근 단축. 전진 프레스 15°를 지키려면 공이 앞쪽(ballFwd 16)이어야 한다
     static let brysonPutt = PutterKeyframes(
-        a: Pose(hipDx: 0.0, tilt: -14, handA: 15.2, handD: 34, clubA: 15.2, heel: 0, headDx: 0.0),
-        top: Pose(hipDx: -1.1, tilt: -14, handA: -16.8, handD: 34, clubA: -16.8, heel: 0, headDx: 0.0),
-        imp: Pose(hipDx: 0.2, tilt: -14, handA: 17.2, handD: 34, clubA: 17.2, heel: 0, headDx: 0.0),
-        fin: Pose(hipDx: -2.6, tilt: -14, handA: 37.9, handD: 34, clubA: 37.9, heel: 0, headDx: 0.0),
-        len: 43, butt: 14, ballFwd: 16 // butt 10 → 14: 그립 위 연장부가 전완에 붙은 게 읽히도록 (2026-09-23 플레이 판정)
+        a: Pose(hipDx: 0.0, tilt: -14, handA: 9.2, handD: 34, clubA: 9.2, heel: 0, headDx: 0.0),
+        top: Pose(hipDx: -1.1, tilt: -14, handA: -22.8, handD: 34, clubA: -22.8, heel: 0, headDx: 0.0),
+        imp: Pose(hipDx: 0.2, tilt: -14, handA: 11.2, handD: 34, clubA: 11.2, heel: 0, headDx: 0.0),
+        fin: Pose(hipDx: -2.6, tilt: -14, handA: 31.9, handD: 34, clubA: 31.9, heel: 0, headDx: 0.0),
+        len: 43, butt: 14, ballFwd: 20 // butt 10 → 14(2026-09-23), ballFwd 16 → 20: 페이스를 공 뒤 가장자리에 (2026-09-24)
     )
 
     static func table(_ style: SwingStyle) -> PutterKeyframes {
