@@ -2,7 +2,7 @@
 #   make app  → dist/MiniGolf.app (유니버설: arm64 + x86_64)
 #   make zip  → dist/MiniGolf-$(VERSION).zip (Release 업로드용)
 
-VERSION := 0.8.1
+VERSION := 0.8.2
 APP     := dist/MiniGolf.app
 BIN     := .build/apple/Products/Release/MiniGolf
 
