@@ -1,6 +1,6 @@
 # HANDOFF.md
 
-## 현재 상태 (2026-09-23 — v0.8.1 릴리스 뒤 백로그 4종 + 서프라이즈 3차 리뷰 반영(1c56c86) main 머지. v0.8.2 미배포 — 판정·릴리스 확인 대기)
+## 현재 상태 (2026-09-24 — **v0.8.2 릴리스 완료**(9de1cd0, gh release v0.8.2, tap 77341fa). git 정리 완료: 브랜치는 main만, 워크트리 없음. 다음: 백로그 선택)
 
 v0.6.0 릴리스 뒤 **서프라이즈 2차**(사용자 선택 "계열별 1종, 5종")를 `feature/surprises-2`에 구현하고 Code Reviewer(critical 0·major 1·
 minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)·핀 이동(규칙·rare)·공 바꿔치기(물리·rare)·갤러리(스틱맨·common)·
@@ -86,6 +86,8 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       5분 이상 뒤 재개 시 조준 중이면 shoo 손 흔들기 + "어서 와" — 포커스 상실은 일시정지가 아니라 홀드 해제만이라 ⛳️ 수동 정지 기준).
       관찰 `--demo-setback`(모든 샷 좌절 계열)·`--demo-idle --demo-greet`(3s 뒤 정지→1s 재개)·`--demo-pickup`(홀마다 홀인원 → 스트릭).
       프레임 3종 확인. 남긴 것은 2026-09-23 47bcada에서 처리(벙커 탈출 힌트 구현, 파워 라벨–깃대 겹침 불가 확인)
+- [x] **v0.8.2 릴리스** (2026-09-24, 9de1cd0): zip 922,056B SHA 78993af9… → gh release → 공개 SHA 일치 → tap 77341fa → tap·fetch·untap 검증.
+      git 정리: 머지된 feature 브랜치 로컬 14·원격 8 삭제, 서브에이전트 워크트리 제거, 태그 동기화, gc
 - [x] **v0.8.1 릴리스** (2026-09-23, 065abcf): zip 825,127B SHA bc0e5a94… → gh release → 공개 SHA 일치 → tap → tap·fetch·untap 검증
 - [x] **v0.8.0 릴리스** (2026-09-23, fa7a8a1): zip 815,772B SHA 936eb712… → gh release → 공개 SHA 일치 → tap 58e1cb8 → tap·fetch·untap 검증
 - [x] **v0.7.0 릴리스** (2026-09-16, f3a7c8f 버전 범프): `make zip`(796,042B, SHA b6cd497e…) → gh release v0.7.0 → 공개 에셋 재다운로드 SHA 일치 →
@@ -157,14 +159,10 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격 동기화됨. `dist/MiniGolf.app`은 9935736로 재빌드된 로컬 실행본(brew는 아직 0.7.0). 실플레이 로그 `~/Library/Logs/MiniGolf/play.log`.
 
-1. **백로그 4종 완료** (2026-09-23 "전부 진행", 커밋 순): 클럽 리밸런스(5cf2825 — 우드 69/65/62, DR 306 → 286m, 봇 GIR 42~49 → 33~38%) ·
-   무드 워크(03284e9 — `WalkMood`·`applyMood`, `--demo-mood`) · 걷기 중 방향 재계획(e943b62 — `walkTarget`·`replanAhead`·`startWalk(fromBody:)`,
-   `--demo-replan`) · 서프라이즈 3차(faf48d2 — 서브에이전트 general-purpose(opus) 워크트리 구현, `Surprises3.swift`, 17종, `--demo-hour`).
-   서프라이즈 3차 리뷰 완료·반영(1c56c86: critical·major 0·minor 2·nit 2 — 드롭 뒤 settleRoll 잔존(1차 종 4곳도 정리), 같은 프레임
-   정리 가드 3곳, 바람 역전 0.6s·착지 뒤 문구, 문서 48px). **다음**: ① `dist/MiniGolf.app`(1c56c86) 사용자 판정(무드 워크 과장 폭, 턴·재계획 자연스러움,
-   스프링클러 감쇠 강도(서브에이전트가 "꽤 강함" 지적), 캐디 빈도 7%, 강아지) ③ v0.8.2 릴리스(사용자 확인 뒤, v0.8.1 절차).
-   교훈: 서브에이전트 워크트리(.claude/worktrees)를 `git add -A`가 gitlink로 잡았다 → .gitignore 처리(d526a5f). 데모 인자를 zsh 변수로
-   넘기면 단어 분리가 안 돼 플래그가 무시된다 — 함수 인자("$1")나 직접 나열로
+1. ~~백로그 4종~~·~~v0.8.2 릴리스~~ 완료 (2026-09-24, 사용자 판정 "괜찮네"). 남은 백로그: Apple 공증(Developer 계정 필요) ·
+   서프라이즈 4차 후보(라이벌 스틱맨 — 리그 파이프라인 분리 필요, 대규모) · docs/surprises.md 끝의 아이디어 · IDEAS.md 장기 후보
+   (도그레그·2단 그린, 연습장 모드, 마우스 조작, 단축키 설정 UI, 크로스플랫폼). 판정 미수집(선택): 서프라이즈 1~3차 빈도·강도 감,
+   스프링클러 감쇠, 캐디 7%. 교훈: 브랜치 삭제 루프도 zsh 단어 분리에 걸린다 — `while read -r`/`xargs`로
 2. ~~온그린 추적~~ 해결(4번 항목). 참고: 데모 봇은 클럽 고정·파워 랜덤이라 GIR 관찰에 부적합(4분 데모 GIR 0·12타 기권) —
    자연 원온 재현은 `--seed 8 --demo-power 0.92`(파4 협곡 298m)
 3. 파5가 쉽다는 판정이 나오면: 클럽 거리 리밸런스(IDEAS "클럽 거리 리밸런스 검토" — club.power 테이블, CourseStrategy 앵커는 자동 추종).
