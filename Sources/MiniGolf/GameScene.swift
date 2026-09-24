@@ -259,6 +259,8 @@ final class GameScene: SKScene {
     private let terrainNode = SKNode()
     let stickman = StickmanNode()
     let ballNode = SKShapeNode(circleOfRadius: 5.5)
+    let teeNode = SKNode() // 티 페그 (2026-09-24 사용자 요청): 티 꽂기 의식에 나타나 공을 받치고, 임팩트에 튕겨 날아간다
+    static let teeHeightPx = 4.0
     let shadowNode = SKShapeNode(ellipseOf: CGSize(width: 15, height: 4.5))
     let trailNode = SKShapeNode()
     let trailUnderNode = SKShapeNode() // 궤적 언더스트로크 (밝은 배경 대비)
@@ -298,6 +300,17 @@ final class GameScene: SKScene {
 
         ballNode.fillColor = .white
         ballNode.lineWidth = 1.2
+        for (rect, alpha) in [
+            (CGRect(x: -0.7, y: 0, width: 1.4, height: 4), 0.9),
+            (CGRect(x: -2.6, y: 3.4, width: 5.2, height: 1.3), 0.9),
+        ] {
+            let part = SKShapeNode(rect: rect, cornerRadius: 0.5) // 기둥 + 머리 — 공과 같은 흰색, 굵고 둥근 선 규칙
+            part.fillColor = NSColor(white: 1, alpha: alpha)
+            part.strokeColor = .clear
+            teeNode.addChild(part)
+        }
+        teeNode.isHidden = true
+        addChild(teeNode) // 공 노드보다 먼저 — 공이 티 위에 그려진다
         shadowNode.fillColor = NSColor(white: 0, alpha: 0.28)
         shadowNode.strokeColor = .clear
         trailNode.strokeColor = NSColor(white: 1, alpha: 0.28)
@@ -439,6 +452,8 @@ final class GameScene: SKScene {
         settleRoll = nil
         ballNode.removeAllActions() // 홀인 드롭 연출 복구
         ballNode.alpha = 1
+        teeNode.removeAllActions()
+        teeNode.isHidden = true // 다음 티 의식에서 다시 꽂는다
         ballNode.setScale(1)
         rebuildTerrain()
         PlayLog.note(
@@ -477,7 +492,7 @@ final class GameScene: SKScene {
     private func replanAhead(_ w: inout WalkAnim, to: Double) {
         let sgn: Double = w.toX >= w.fromX ? 1 : -1
         let dNowPx = abs(stickX - w.fromX) * Double(pxPerM)
-        let moodSpeed = w.mood == .elated ? 0.85 : w.mood == .sad ? 1.45 : 1.0
+        let moodSpeed = w.mood == .elated ? 0.85 : w.mood == .sad ? 1.15 : 1.0
         var xIn = 6.0 // 램프인 거리(m) 초기 추정 → 프로파일에서 다시 읽는다
         var prof = WalkProfile(dist: abs(to - stickX) + xIn, dur: 1)
         for _ in 0 ..< 2 {
@@ -1176,8 +1191,10 @@ final class GameScene: SKScene {
         if walkMoodLeft > 0 {
             walkMoodLeft -= 1
         }
-        let moodSpeed = mood == .elated ? 0.85 : mood == .sad ? 1.45 : 1.0
-        let dur = min(14.0, max(1.2, dist / 10 * (1 + 0.4 * hardness) * moodSpeed))
+        // 처진 걸음 1.45 + 험한 길 1.4가 겹치면 2배까지 느려져 "어떨 땐 너무 느리다"(2026-09-24 판정) → 처짐 1.15·험한 길 최대 1.2·합계 상한 1.3
+        let moodSpeed = mood == .elated ? 0.85 : mood == .sad ? 1.15 : 1.0
+        let slow = min(1.3, (1 + 0.2 * hardness) * moodSpeed)
+        let dur = min(14.0, max(1.2, dist / 10 * slow))
         var anim = WalkAnim(
             fromX: from, toX: to, dur: dur,
             // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
@@ -1317,6 +1334,17 @@ final class GameScene: SKScene {
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
             kind: ballKind // 공 바꿔치기 (Surprises2)
         )
+        if !teeNode.isHidden { // 임팩트에 티가 튕겨 날아간다 — 앞으로 살짝 뜨며 한 바퀴 반 돌고 떨어져 사라진다
+            let d = CGFloat(dir)
+            teeNode.run(.sequence([
+                .group([
+                    .rotate(byAngle: -d * 4.5, duration: 0.55),
+                    .sequence([.moveBy(x: d * 7, y: 11, duration: 0.22), .moveBy(x: d * 5, y: -15, duration: 0.33)]),
+                    .sequence([.wait(forDuration: 0.35), .fadeOut(withDuration: 0.2)]),
+                ]),
+                .run { [weak self] in self?.teeNode.isHidden = true },
+            ]))
+        }
         shotHitBumper = false
         shotLipped = false
         // 창 범퍼 모드: 샷 순간의 창 배치를 스냅샷 — 이 샷의 비행 동안 고정 범퍼
@@ -2854,7 +2882,18 @@ private extension GameScene {
             anim.touchFired = true
             let at = CGPoint(x: px(ball.x), y: groundY(ball.x))
             if anim.kind == .teePlace {
-                ball = BallState(x: ball.x, y: hole.ground(at: ball.x))
+                let onTee = hole.surface(at: ball.x) == .tee // 관찰 모드(그린·지정 위치 시작)엔 티 없음
+                ball = BallState(
+                    x: ball.x,
+                    y: hole.ground(at: ball.x) + (onTee ? Self.teeHeightPx / Double(pxPerM) : 0)
+                )
+                if onTee { // 티가 먼저 꽂히고 공이 그 위에 올라앉는다 (물리도 티 높이에서 시작 — 첫 프레임 점프 없음)
+                    teeNode.removeAllActions()
+                    teeNode.alpha = 1
+                    teeNode.zRotation = 0
+                    teeNode.position = CGPoint(x: px(ball.x), y: groundY(ball.x))
+                    teeNode.isHidden = false
+                }
                 ballNode.removeAllActions()
                 ballNode.setScale(0.6)
                 ballNode.alpha = 1
