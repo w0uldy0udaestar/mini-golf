@@ -527,7 +527,11 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(abs(hole.slope(at: b.x)), 0.5)
         let water = Ballistics.settleOffSteepSlope(&b, hole: hole)
         XCTAssertFalse(water)
-        XCTAssertLessThanOrEqual(abs(hole.slope(at: b.x)), Ballistics.steepRest + 0.05, "완경사까지 내려와야 함 (\(b.x))")
+        XCTAssertLessThanOrEqual(
+            abs(hole.slope(at: b.x)),
+            Ballistics.settleTail + 0.05,
+            "바닥(settleTail)까지 내려와야 함 (\(b.x))"
+        )
         XCTAssertLessThan(b.x, 112, "내리막(발치) 쪽으로 내려와야 함")
         XCTAssertEqual(b.y, hole.ground(at: b.x), accuracy: 1e-9)
         // 완경사에 있는 공은 그대로
@@ -670,6 +674,38 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(atan2(up.vy, up.vx), atan2(flat.vy, flat.vx) + 0.05, "오르막 라이가 더 뜨지 않음")
         XCTAssertLessThan(atan2(down.vy, down.vx), atan2(flat.vy, flat.vx) - 0.05, "내리막 라이가 더 낮지 않음")
         XCTAssertLessThan(hypot(up.vx, up.vy), hypot(flat.vx, flat.vy), "경사 라이 스피드 손실 없음")
+    }
+
+    /// 트레드 굴곡 (2026-09-28): 티~에이프런의 비라이저·비수면 지면 중 |경사| ≥ 0.05가 충분히 있어야 경사 라이가 체감된다.
+    /// 티런은 평탄. 급경사(> 0.3)는 라이저로 보고 분모에서 뺀다
+    func testTreadsAreUndulatedButTeeFlat() {
+        var sloped = 0, total = 0
+        for seed: UInt32 in 1 ... 40 {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                let d = h.holeX >= h.teeX ? 1.0 : -1.0 // 미러 홀은 티가 오른쪽 — 홀 방향으로 스캔 (리뷰 2026-09-28)
+                for k in 1 ..< 9 { // 티런은 평탄
+                    XCTAssertLessThan(
+                        abs(h.slope(at: h.teeX + d * Double(k))),
+                        0.02,
+                        "티런에 굴곡 @\(h.teeX + d * Double(k))"
+                    )
+                }
+                var x = h.teeX + d * 10
+                while d > 0 ? x < h.greenStart - 12 : x > h.greenEnd + 12 {
+                    let s = abs(h.slope(at: x))
+                    if h.surface(at: x) != .water, s <= 0.3 { // 라이저(급경사) 밖만 센다 — 필터이지 단언이 아니다
+                        total += 1
+                        if s >= 0.05 {
+                            sloped += 1
+                        }
+                    }
+                    x += d
+                }
+            }
+        }
+        let share = Double(sloped) / Double(max(1, total))
+        XCTAssertGreaterThan(share, 0.40, "경사 라이 지면 비율이 낮음 (\(share)) — 굴곡이 사라졌나")
+        XCTAssertLessThan(share, 0.80, "평지가 거의 없음 (\(share)) — 굴곡 과다")
     }
 
     // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──

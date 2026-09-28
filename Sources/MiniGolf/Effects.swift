@@ -30,6 +30,47 @@ enum FX {
         }
     }
 
+    /// 디봇 (2026-09-28 사용자 요청): 아이언·웨지 풀샷이 잔디를 파낸다 — 덩어리 몇 개가 샷 방향으로 낮게 날아가 굴러 떨어진다(0.7s).
+    /// 페어웨이는 지형선 색, 러프는 러프 색 — 팔레트 밖의 색은 쓰지 않는다
+    static func divot(on parent: SKNode, at p: CGPoint, dir: Double, surface: Surface, intensity: Double) {
+        let color = surface == .rough ? Palette.roughGray.withAlphaComponent(0.85) : Palette.hairline
+            .withAlphaComponent(0.8)
+        let count = 3 + Int(intensity * 3)
+        for i in 0 ..< count {
+            let w = CGFloat.random(in: 4 ... 8), h = CGFloat.random(in: 2.2 ... 3.5)
+            let clod = SKShapeNode(rectOf: CGSize(width: w, height: h), cornerRadius: h / 2)
+            clod.fillColor = color
+            clod.strokeColor = .clear
+            clod.position = CGPoint(x: p.x + CGFloat(dir) * 2, y: p.y + 1)
+            clod.zPosition = 5
+            parent.addChild(clod)
+            let dx = CGFloat(dir) * CGFloat.random(in: 16 ... 40) * CGFloat(0.6 + intensity * 0.5)
+            let dy = CGFloat.random(in: 9 ... 20)
+            let up = SKAction.moveBy(x: dx * 0.55, y: dy, duration: 0.2)
+            up.timingMode = .easeOut
+            let down = SKAction.moveBy(x: dx * 0.45, y: -dy - 1, duration: 0.3)
+            down.timingMode = .easeIn
+            let spin = SKAction.rotate(byAngle: CGFloat(dir) * CGFloat.random(in: -2.5 ... -0.8), duration: 0.5)
+            clod.run(.sequence([
+                .group([.sequence([up, down]), spin]),
+                .wait(forDuration: 0.25 + Double(i) * 0.05),
+                .fadeOut(withDuration: 0.35),
+                .removeFromParent(),
+            ]))
+        }
+    }
+
+    /// 디봇 자국 — 공 자리에서 샷 방향으로 파인 짧은 타원. 호출측이 terrainNode에 얹어 홀 전환 때 함께 지워진다.
+    /// 지형선(0.94)보다 어둡고 두꺼운 중회색 — 어두운 배경에서도 밝은 배경에서도 '파인 자국'으로 읽힌다
+    static func divotMark(at p: CGPoint, dir: Double, intensity: Double) -> SKNode {
+        let mark = SKShapeNode(ellipseOf: CGSize(width: 7 + 6 * intensity, height: 3.5))
+        mark.fillColor = NSColor(white: 0.62, alpha: 0.9)
+        mark.strokeColor = .clear
+        mark.position = CGPoint(x: p.x + CGFloat(dir) * (3 + 2 * intensity), y: p.y - 0.3)
+        mark.zPosition = 0 // terrainNode의 마지막 자식 — 지형 위, 씬의 공·스틱맨 아래 (전역 z가 형제 순서보다 우선, 리뷰 #8)
+        return mark
+    }
+
     /// 입수 파문 — 수면에서 퍼지는 동심 타원 두 개
     static func ripple(on parent: SKNode, at p: CGPoint) {
         for i in 0 ..< 2 {

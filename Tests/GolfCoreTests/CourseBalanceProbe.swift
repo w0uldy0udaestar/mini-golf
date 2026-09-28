@@ -56,6 +56,18 @@ final class CourseBalanceProbe: XCTestCase {
         var gir = false // 파4 원온·파5 투온 (그린 위 정지) — GameScene.greenChanceLabel과 같은 조건
     }
 
+    /// 나무 캐노피가 샷 방향에 드리우는 정도 0~1 — GameScene.treePunchT와 같은 식
+    static func treeT(_ hole: Hole, x: Double, dir: Double) -> Double {
+        var t = 0.0
+        for ob in hole.obstacles where ob.kind == .tree {
+            let ahead = (ob.x - x) * dir
+            if ahead > -ob.size, ahead < ob.size + 14 {
+                t = max(t, 1 - max(0, ahead - ob.size) / 14)
+            }
+        }
+        return t
+    }
+
     /// 봇 한 홀 플레이. elevK > 0이면 표고차를 거리로 환산해 클럽을 고른다(중수)
     static func play(_ hole: Hole, elevK: Double) -> HoleResult {
         var b = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX))
@@ -79,6 +91,9 @@ final class CourseBalanceProbe: XCTestCase {
             } else if lie == .bunker {
                 club = ClubTable.all.first { $0.id == "SW" }!
                 h = 1
+            } else if lastMoved < 3, treeT(hole, x: b.x, dir: dir) > 0.5 { // 캐노피 밑에 갇혔다 — 롱아이언 펀치로 낮게 빠져나간다 (사람의 반응)
+                club = ClubTable.all.first { $0.id == "4I" }!
+                h = 1
             } else if lastMoved < 3 { // 벽에 막혔다 — 피칭으로 넘긴다 (러프 SW는 45m밖에 못 간다)
                 club = ClubTable.all.first { $0.id == "PW" }!
                 h = 1
@@ -95,7 +110,11 @@ final class CourseBalanceProbe: XCTestCase {
                     h = 1
                 }
             }
-            Ballistics.launch(&b, club: club, heightPct: h, lie: lie, dir: dir)
+            // 게임과 동일한 자동 규칙: 경사 라이(stanceSlopeRatio×경사)와 캐노피 근접 펀치(GameScene.treePunchT×0.85) — 봇이 평지 가정으로
+            // 치면 굴곡 지형에서 실제 플레이와 다른 고착이 난다 (2026-09-28 seed 12: 나무 밑 PW가 매 샷 캐노피에 삼켜짐)
+            let slope = club.isPutter ? 0 : hole.slope(at: b.x) * Phys.stanceSlopeRatio
+            let punch = club.isPutter ? 0 : treeT(hole, x: b.x, dir: dir) * 0.85
+            Ballistics.launch(&b, club: club, heightPct: h, lie: lie, dir: dir, punch: punch, slope: slope)
             strokes += 1
             let fromX = b.x
             var t = 0.0
@@ -221,7 +240,10 @@ final class CourseBalanceProbe: XCTestCase {
             sm.filter { $0 > 1 }.count, sm.filter { $0 > 2 }.count
         ))
         print("BOTBAL\n" + lines.joined(separator: "\n"))
-        // ── 회귀 대역 (2026-09-23 클럽 리밸런스(우드 69/65/62) 뒤 실측: 아키타입 −0.31~−0.81(terraces가 가장 쉬움 쪽), canyon 고착 1%·
+        // ── 회귀 대역. 2026-09-28 경사 라이 체감(반영 1.0·트레드 굴곡·라이저 바닥 정착, 봇도 경사·캐노피 펀치 적용) 뒤 실측: 아키타입
+        //    −0.08(canyon)~−0.62(terraces), ALL −0.27, 고착 1%(seed 37 벙커 루프 — 봇의 SW 정책 한계)·입수 0.15/홀, SETTLE 1.6%·max
+        //    19m.
+        //    (구 2026-09-23 클럽 리밸런스(우드 69/65/62) 뒤 실측: 아키타입 −0.31~−0.81(terraces가 가장 쉬움 쪽), canyon 고착 1%·
         //    입수 0.15/홀, 급경사 정지 0. terraces 하한 −1.0까지 여유 0.19) ──
         XCTAssertEqual(Self.steepRests, 0, "공이 급경사면에 정지함 (\(Self.steepRests)회)")
         for k in Set(naive.map(\.kind)) {

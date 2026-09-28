@@ -20,8 +20,10 @@ public enum Phys {
     public static let captureFly = 10.0
     public static let wallRestitution = 0.5
     public static let maxStrokes = 12
-    /// 경사 라이 스탠스 기울기 = 로프트 전달 비율 — 물리·애니메이션이 이 하나를 공유해야 정합 (리뷰 S-6)
-    public static let stanceSlopeRatio = 0.7
+    /// 경사 라이 스탠스 기울기 = 로프트 전달 비율 — 물리·애니메이션이 이 하나를 공유해야 정합 (리뷰 S-6).
+    /// 1.0 = 클럽이 지면을 따라가 경사각이 로프트에 그대로 더해진다(실제 라이). 구 0.7은 봇 실측 풀샷의 65%가 |경사| < 0.05인
+    /// 지형과 겹쳐 발사각 변화 중앙값 1.1°로 체감 불가 판정(2026-09-28 "경사 위에서도 평지에서 치는 느낌")
+    public static let stanceSlopeRatio = 1.0
     public static let dt = 1.0 / 240.0 // 고정 물리 스텝
 }
 
@@ -151,15 +153,25 @@ public enum Ballistics {
     }
 
     /// 급경사면(|경사| > steepRest)에서 멈추려는 공을 내리막으로 굴려 완경사까지 내려놓는다 — 실제 공은 43° 잔디에 서지 않는다.
-    /// 구 V자 가드가 라이저 발치의 진동을 경사면 위에서 얼렸고, 그 자리의 경사 스탠스(0.7×경사)가 샷 로프트를 30° 넘게 세워
+    /// 구 V자 가드가 라이저 발치의 진동을 경사면 위에서 얼렸고, 그 자리의 경사 스탠스(stanceSlopeRatio×경사)가 샷 로프트를 30° 넘게 세워
     /// 매 샷이 수직으로 떠 제자리에 떨어졌다 (2026-09-17 협곡 "도저히 못 나온다"의 원인 — 봇 추적 240→240 반복).
-    /// 내려놓은 자리가 물이면 true (호출측이 입수로 처리)
+    /// 내려놓은 자리가 물이면 true (호출측이 입수로 처리).
+    /// 2026-09-28 리뷰 실측: 발치 꼬리(경사 ≤ 0.3)에 세우면 협곡 근측 발치가 홀 쪽 **내리막** 라이(−16.7°)가 되어 PW 발사각이 29°로 낮아져
+    /// 반대편 림을 86% 못 넘겼다(0.7 시절도 55%). 라이저에서 굴러 내려온 공은 settleTail(0.12) 이하의 바닥까지, 처음 방향으로만
+    /// 내려놓는다 — 부호가 뒤집히면 바닥을 지난 것이니 멈춘다. 벙커 벽·굴곡 정점(≤ 0.3)은 라이저가 아니라 여기 안 걸린다(급경사 라이 유지)
     public static let steepRest = 0.3
+    public static let settleTail = 0.12
     static func settleOffSteepSlope(_ b: inout BallState, hole: Hole) -> Bool {
+        guard abs(hole.slope(at: b.x)) > steepRest else { return false } // 발동은 라이저 몸통(> 0.3)에 서려 할 때만
         var x = b.x
         var steps = 0
-        while abs(hole.slope(at: x)) > steepRest, steps < 200 {
-            x += hole.slope(at: x) > 0 ? -0.5 : 0.5 // 내리막 방향
+        let down: Double = hole.slope(at: b.x) > 0 ? -0.5 : 0.5 // 내리막 방향 (고정)
+        while steps < 200 {
+            let s = hole.slope(at: x)
+            if abs(s) <= settleTail || s * down > 0 { // 완경사에 닿았거나 바닥을 지나 오르막(부호 반전)
+                break
+            }
+            x += down
             steps += 1
         }
         x = min(max(x, 0.5), hole.worldW - 0.5)

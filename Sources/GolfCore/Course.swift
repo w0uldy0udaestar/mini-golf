@@ -240,6 +240,47 @@ public enum CourseGenerator {
         return interpolate(nodes: nodes, worldW: worldW)
     }
 
+    /// 트레드 굴곡 (2026-09-28 판정 "경사 위에서도 평지에서 치는 느낌"): 봇 실측 풀샷의 65%가 |경사| < 0.05였다 — 계단 지형은 트레드가
+    /// 평탄하고 라이저엔 공이 못 서서 경사 라이 자체가 드물었다. 평탄 구간에 파장 18~24m·32~44m 사인 둘을 겹쳐 페어웨이 라이에
+    /// |경사| 0.05~0.15의 기복을 준다. 굴곡 단독 정점 경사 ≤ 0.17(페어웨이 감속 2.2m/s² > 중력 성분 1.6 — 공은 골에서 멈춘다);
+    /// 저지대 rolls(최대 ≈0.25)와 겹치는 고립 지점은 0.3을 넘을 수 있고 그곳은 굴러 내려가 settle이 흡수한다(리뷰 실측 2026-09-28).
+    /// 티런·라이저(±4m)·물(±4m)·벙커(±4m, 모래 딥 수평 유지)·에이프런 이후는 제외, 경계 6m smoothstep 페이드.
+    /// makeHole이 해저드·나무 배치를 **끝낸 뒤** 부른다 — 배치 가드(벙커 3점 경사 > 0.15 기각)가 굴곡을 보지 않아 기존 시드의
+    /// 벙커·나무 자리가 그대로다. 난수는 홀 기하에서 파생한 부속 열이라 메인 열도 안 건드린다
+    static let undulationAmp = (short: 0.22, long: 0.45)
+    static func addUndulation(
+        _ elev: inout [Double], teeEnd: Double, apronStart: Double,
+        risers: [ClosedRange<Double>], water: ClosedRange<Double>?, bunkers: [ClosedRange<Double>], worldW: Double
+    ) {
+        let mix = Int(worldW * 100) ^ (Int(teeEnd * 100) << 8) ^ (Int(apronStart * 100) << 16)
+        var r = SeededRandom(seed: UInt32(truncatingIfNeeded: mix))
+        let l1 = r.next(18, 24), l2 = r.next(32, 44)
+        let p1 = r.next() * 2 * .pi, p2 = r.next() * 2 * .pi
+        var exclude: [ClosedRange<Double>] = [(-1) ... (teeEnd + 8), (apronStart - 6) ... (worldW + 2)]
+        exclude += risers.map { ($0.lowerBound - 4) ... ($0.upperBound + 4) }
+        exclude += bunkers.map { ($0.lowerBound - 4) ... ($0.upperBound + 4) }
+        if let w = water {
+            exclude.append((w.lowerBound - 4) ... (w.upperBound + 4))
+        }
+        let fade = 6.0
+        for i in 0 ..< elev.count {
+            let x = Double(i)
+            var w = 1.0
+            for ex in exclude {
+                if ex.contains(x) {
+                    w = 0
+                    break
+                }
+                let d = x < ex.lowerBound ? ex.lowerBound - x : x - ex.upperBound
+                w = min(w, d / fade)
+            }
+            guard w > 0 else { continue }
+            let u = w * w * (3 - 2 * w)
+            elev[i] += u *
+                (undulationAmp.short * sin(2 * .pi * x / l1 + p1) + undulationAmp.long * sin(2 * .pi * x / l2 + p2))
+        }
+    }
+
     /// 제어점 → 1m 표고 샘플 (cos 완충 보간)
     static func interpolate(nodes: [(x: Double, e: Double)], worldW: Double) -> [Double] {
         var elev = [Double](repeating: 0, count: Int(ceil(worldW)) + 2)
@@ -745,6 +786,19 @@ public enum CourseGenerator {
             let rx = teeEnd + 35 + rand.next() * (apronStart - teeEnd - 70)
             if hazardFree(rx, margin: 3), gentleGround(rx) {
                 obstacles.append(Obstacle(kind: .rock, x: rx, size: rand.next(1.2, 2.0)))
+            }
+        }
+
+        // 트레드 굴곡 (2026-09-28) — 해저드·나무·바위 배치 뒤(배치 가드가 굴곡을 보지 않아 v0.8.3 시드의 자리 보존), Hole 생성 전. 그린·에이프런은 제외 구간이라 앞선 평탄화와
+        // 무관. 시그니처 홀만(클래식 경로는 baseElevation이 자체 기복)
+        if signature != nil {
+            let bunkers = segments.filter { $0.type == .bunker }.map { $0.from ... $0.to }
+            addUndulation(
+                &elev, teeEnd: teeEnd, apronStart: apronStart, risers: sigRisers, water: waterRange, bunkers: bunkers,
+                worldW: worldW
+            )
+            for i in 0 ..< elev.count { // 절대 클램프 재적용 (+2는 그린 브레이크 여유)
+                elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
             }
         }
 

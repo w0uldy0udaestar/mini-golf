@@ -49,6 +49,11 @@ final class GameScene: SKScene {
     /// 퍼팅 출발 킥 (렌더 전용, 2026-09-24): 공은 코스 스케일(≈3px/m)로 굴러 헤드(스틱맨 스케일)보다 늘 느리다 — 임팩트 뒤 0.1s에
     /// 3~6px 앞서 나갔다가 1s에 걸쳐 물리 위치로 돌아온다(프레임당 0.1px 이하라 감속으로 안 읽힌다). 물리는 그대로
     var puttKick: (t0: TimeInterval, amp: Double)?
+    /// 경사 넘어지기 (2026-09-28 사용자 요청): 급경사 라이 풀샷 뒤 피니시에서 균형을 잃고 내리막으로 넘어져 미끄러졌다 일어난다
+    struct SlipAnim { let t0: TimeInterval; let downDir: Double; var fxDone = false; var slid = 0.0 }
+    var slip: SlipAnim?
+    private var walkAfterSlip = false // 넘어져 있는 동안 공이 멈추면 걷기는 일어난 뒤에
+    private var renderSlipRot = 0.0 // 발을 축으로 한 몸 전체 회전 (zRotation에 더한다)
     var galleryState: GalleryState?
     var surprise3 = Surprise3State() // 서프라이즈 3차 (Surprises3.swift) — 스프링클러·캐디·뻐꾸기·강아지 상태
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
@@ -420,6 +425,9 @@ final class GameScene: SKScene {
         trailPoints = []
         swingAnim = nil
         walkAnim = nil
+        slip = nil // 넘어지기 잔존 — R 새 라운드 뒤 티 의식이 회전·미끄러지지 않게 (리뷰 #4)
+        walkAfterSlip = false
+        renderSlipRot = 0
         ballHeld = false
         settleRoll = nil
         ballNode.removeAllActions() // 홀인 드롭 연출 복구
@@ -913,7 +921,7 @@ final class GameScene: SKScene {
 
     /// 경사 라이 스탠스 — 발·무릎이 실제 지면 높이를 정확히 딛고(zRotation 잔차 보정),
     /// 체중이 내리막 발로 흘러 오르막/내리막 라이가 실루엣으로 읽힌다 (2026-08-15 사용자 요청 3번).
-    /// zRotation(경사×0.7)은 몸 전체 기울기만 담당 — 여기서 발 접지·체중 배분을 더한다.
+    /// zRotation(경사×stanceSlopeRatio)은 몸 전체 기울기만 담당 — 여기서 발 접지·체중 배분을 더한다.
     /// 벽 스탠스와는 상충(벽 클램프가 무회전 평면 가정)이라 renderWallT만큼 약해진다
     private func applySlopeStance(_ rig: inout Rig) {
         let strength = 1 - renderWallT
@@ -939,6 +947,98 @@ final class GameScene: SKScene {
         rig.shoulder.x -= 2.5 * shift
         rig.knee1.x -= 3 * shift
         rig.knee2.x -= 3 * shift
+    }
+
+    // ── 경사 넘어지기 (2026-09-28 사용자 요청 "경사가 심한 곳에서 치면 경사 밑으로 넘어지기도") ──
+    // 걷기 넘어지기(tripAt)와 같은 연속 램프 문법. 휘청(0~0.4s) → 발을 축으로 내리막 쪽 72° 넘어지며 11px 미끄러짐(0.4~0.75) →
+    // 바닥(~1.6, 철푸덕 소리·먼지) → 일어나기(~2.4). 공 물리 무관·연출만. 몸 자리(stickX)가 실제로 옮겨져 다음 걷기는 거기서 출발
+
+    /// 스윙이 끝난 순간(피니시 도달) — 급경사 라이(|경사| ≥ 0.15: 벙커 벽·굴곡 정점)에서 풀파워(≥ 0.8)면 30~80% 확률
+    private func maybeStartSlip() {
+        guard !club.isPutter, mode == .motion, renderWallT < 0.3 else { return }
+        let s = hole.slope(at: stickX)
+        let steep = abs(s) >= 0.15
+        let p = 0.3 + 0.5 * min(1, max(0, (abs(s) - 0.15) / 0.15))
+        let forced = demo.slipForce && abs(s) > 0.03
+        guard forced || (steep && heightPct >= 0.8 && Double.random(in: 0 ..< 1) < p) else { return }
+        let down: Double = s > 0 ? -1 : 1
+        if down == -dir, wallBehindPx < 100 { // 뒤로 누우면 머리가 원점 뒤 ≈90px — 벽 클램프는 무회전 가정이라 화면 밖으로 나간다 (리뷰 #7)
+            return
+        }
+        slip = SlipAnim(t0: lastTime, downDir: down)
+        lastShotGood = false // 트월·어퍼컷 억제 — 미끄러지는 사람은 클럽을 못 돌린다
+        if demo.active {
+            print(String(format: "SLIP slope %+.2f down %d p %.2f", s, Int(s > 0 ? -1 : 1), p))
+            fflush(stdout)
+        }
+    }
+
+    private func updateSlip(currentTime: TimeInterval, dt: Double) {
+        guard var sl = slip else {
+            renderSlipRot *= exp(-8 * dt) // 취소로 남은 회전은 감쇠로 풀린다 — 한 프레임 직립 스냅 방지 (리뷰 #5)
+            return
+        }
+        let te = currentTime - sl.t0
+        let fall = smoothstep(min(1, max(0, (te - 0.4) / 0.35)))
+        let rise = smoothstep(min(1, max(0, (te - 1.6) / 0.8)))
+        let wobble = te < 0.4 ? 0.07 * sin(2 * .pi * 4.5 * te) * min(1, te / 0.15) : 0
+        let lean = 0.12 * min(1, te / 0.4)
+        renderSlipRot = wobble - sl.downDir * (lean * (1 - fall) + 1.25 * fall * (1 - rise))
+        let slideTarget = 11.0 * fall // 넘어지는 동안 내리막으로 11px — 몸 자리 자체가 옮겨진다
+        if slideTarget > sl.slid {
+            stickX += sl.downDir * (slideTarget - sl.slid) / Double(pxPerM)
+            sl.slid = slideTarget
+        }
+        if !sl.fxDone, te >= 0.75 { // 철푸덕 — 걷기 넘어지기와 같은 소리·먼지
+            sl.fxDone = true
+            SoundKit.shared.bounce(speed: 5, surface: .rough)
+            let s = hole.surface(at: stickX)
+            FX.dust(
+                on: self,
+                at: CGPoint(x: px(stickX), y: groundY(stickX)),
+                surface: s == .bunker ? .bunker : .rough,
+                intensity: 0.8
+            )
+        }
+        if te >= 2.4 || mode != .motion { // 자연 종료, 또는 홀아웃·서프라이즈·의식·조준이 씬을 가져갔다
+            let natural = te >= 2.4 && mode == .motion
+            slip = nil
+            if natural {
+                renderSlipRot = 0
+                lastFinishPose = Poses.upright // 일어선 자세 유지 — 피니시 포즈로 되돌아가지 않게 (리뷰 #6)
+                if walkAfterSlip {
+                    walkAfterSlip = false
+                    startWalk()
+                }
+            } else {
+                walkAfterSlip = false // 새 소유자(서프라이즈·홀 플로)가 자기 걷기 연결을 가진다 (리뷰 #3)
+            }
+            return
+        }
+        slip = sl
+    }
+
+    /// 휘청(팔 허우적) → 넘어짐(다리 벌리고 팔 뻗음) → 일어나기(직립). 몸 전체 회전은 renderSlipRot이 맡는다
+    private func slipRig(_ sl: SlipAnim, now: TimeInterval) -> Rig {
+        let te = now - sl.t0
+        let base = lastFinishPose ?? profile.keys.p10
+        let flail = Pose(
+            hipDx: base.hipDx,
+            tilt: base.tilt - 4,
+            handA: -150,
+            handD: 30,
+            clubA: -170,
+            heel: 0,
+            headDx: base.headDx
+        )
+        let sprawl = Pose(hipDx: 6, tilt: -28, handA: -70, handD: 32, clubA: -40, heel: 4, headDx: 3)
+        let w = smoothstep(min(1, te / 0.4))
+        let f = smoothstep(min(1, max(0, (te - 0.4) / 0.35)))
+        let r = smoothstep(min(1, max(0, (te - 1.6) / 0.8)))
+        var pose = Pose.lerp(base, flail, w)
+        pose = Pose.lerp(pose, sprawl, f)
+        pose = Pose.lerp(pose, Poses.upright, r)
+        return RigBuilder.fromPose(pose, ballFwd: renderBallFwd, clubLen: renderLen)
     }
 
     // ── 선수 트레이드마크 연출 (2026-09-15, docs/research-swing-styles.md §트레이드마크) ──
@@ -1135,6 +1235,10 @@ final class GameScene: SKScene {
 
     /// fromBody: 걷기 도착 자리(몸 원점)에서 다시 출발 — 걷는 동안 공이 옮겨져 도착해 보니 공이 없을 때 (2026-09-23 재계획)
     func startWalk(fromBody: Bool = false) {
+        if slip != nil { // 넘어져 있다 — 일어난 뒤 updateSlip이 다시 부른다
+            walkAfterSlip = true
+            return
+        }
         endShotTrail()
         // 원점 통일 (2026-09-14 전환 개편): 포즈 리그는 공이 원점이고 몸(힙)은 공 뒤 ballFwd+5px에 선다.
         // 걷기 리그는 몸이 원점이므로, 걷기의 출발·도착을 '몸이 서는 자리'로 잡아야 전환 순간 좌표 점프가 0이다
@@ -1298,7 +1402,7 @@ final class GameScene: SKScene {
         // 파워 문턱 0.45 → 0.3: 트월이 세컨샷·어프로치에서도 나오게 (2026-09-23 플레이 판정 "차이가 많이 나 보이지 않음")
         lastShotGood = !club.isPutter && (demo.trademarkForce || (heightPct >= 0.3 && abs(mishit) < 0.12))
         // 벽·나무 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
-        // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
+        // 경사 라이는 스탠스 기울기와 같은 비율(Phys.stanceSlopeRatio)로 로프트에 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
         settleRoll = nil // 직전 정착 굴림이 남아 있으면 발사 순간 공이 뒤로 보인다
         puttKick = nil
@@ -1321,6 +1425,20 @@ final class GameScene: SKScene {
         shotLipped = false
         preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건·갤러리 스냅샷
         strokes += 1
+        // 디봇 (2026-09-28 사용자 요청): 아이언·웨지 풀샷은 페어웨이·러프를 파낸다 — 덩어리가 날고 자국이 홀 끝까지 남는다. 벙커는 모래 튀김
+        if club.cat == .iron || club.cat == .wedge, heightPct >= 0.4, lie == .fairway || lie == .rough {
+            let at = CGPoint(x: px(ball.x), y: groundY(ball.x))
+            let strength = min(1, (heightPct - 0.4) / 0.6)
+            FX.divot(on: self, at: at, dir: dir, surface: lie, intensity: strength)
+            terrainNode.addChild(FX.divotMark(at: at, dir: dir, intensity: strength))
+        } else if !club.isPutter, lie == .bunker {
+            FX.dust(
+                on: self,
+                at: CGPoint(x: px(ball.x), y: groundY(ball.x)),
+                surface: .bunker,
+                intensity: 0.6 + 0.4 * heightPct
+            )
+        }
         PlayLog.note(String(
             format: "SHOT %d %@ h%.2f from %.1f lie %@",
             strokes,
@@ -2129,10 +2247,13 @@ final class GameScene: SKScene {
                 lastFinishPose = finishPose(profile: anim.prof, heightPct: heightPct)
                 finishAt = currentTime
                 swingAnim = nil
+                maybeStartSlip()
             } else {
                 swingAnim = anim
             }
         }
+
+        updateSlip(currentTime: currentTime, dt: dt)
 
         if mode == .ritual {
             stepRitual(dt: dt)
@@ -2332,7 +2453,7 @@ final class GameScene: SKScene {
             }
         }
 
-        if mode == .motion {
+        if mode == .motion, !walkAfterSlip { // 넘어져 있는 동안 공이 멈추면 정지 분기가 매 프레임 재실행되지 않게 (리뷰 #2)
             acc += dt * timeScale
             var terminal = StepEvent.none
             var landing: (speed: Double, surface: Surface, x: Double)?
@@ -2664,6 +2785,9 @@ final class GameScene: SKScene {
             targetRig = RigBuilder.fromPose(Poses.upright, ballFwd: renderBallFwd, clubLen: renderLen)
             targetRig.shiftX(walkAnim?.relaxShift ?? 0) // 방향 반전 시 몸이 있는 자리에
             rigRate = 5
+        } else if let sl = slip { // 경사 넘어지기 — 트레이드마크·경사 스탠스 대신 (몸 전체가 회전한다)
+            targetRig = slipRig(sl, now: currentTime)
+            rigRate = 12
         } else {
             let ft = currentTime - finishAt
             var pose = lastFinishPose ?? profile.keys.p10
@@ -2706,9 +2830,15 @@ final class GameScene: SKScene {
         // 벽 근처에선 억제 — 벽 경성 클램프가 무회전 평면을 가정하기 때문
         let tiltTarget = mode == .walking ? 0 : slopeTiltRatio * atan(hole.slope(at: stickX)) * (1 - renderWallT)
         renderSlopeTilt += (tiltTarget - renderSlopeTilt) * (1 - exp(-6 * dt))
-        stickman.zRotation = CGFloat(renderSlopeTilt)
+        stickman.zRotation = CGFloat(renderSlopeTilt + renderSlipRot)
         // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
+        if abs(renderSlipRot) > 1e-4 { // 넘어지기 회전축을 발 중심으로 — 노드 원점은 공 자리라 발(−ballFwd−2.5px)이 회전으로 뜨거나 박힌다 (리뷰 #1)
+            let p = dir * -(renderBallFwd + 2.5) // 발 중심의 노드 로컬 x (리그 x는 dir 미러)
+            let t = renderSlopeTilt, th = renderSlopeTilt + renderSlipRot
+            stickman.position.x += CGFloat(p * (cos(t) - cos(th)))
+            stickman.position.y += CGFloat(p * (sin(t) - sin(th)))
+        }
         var drawRig = renderRig
         if !demo.noWallClamp {
             clampRigToWalls(&drawRig)
