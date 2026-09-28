@@ -17,6 +17,7 @@ struct DemoOptions: Equatable {
     // ── 시나리오 강제 ──
     var wallForce = false // --demo-wall: 매 홀을 벽 옆에서 시작 (벽 스탠스 관찰)
     var tripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제
+    var slipForce = false // --demo-slip: 경사(|경사| > 0.03) 풀샷마다 피니시 넘어지기 강제 (경사 넘어지기 관찰)
     var idleForce = false // --demo-idle: 조준을 25s 유지 (아이들 잔동작 관찰)
     var setbackForce = false // --demo-setback: 모든 샷을 좌절 계열로
     var greetForce = false // --demo-greet: 조준 3s 뒤 일시정지→1s 뒤 재개, 인사 임계 0 (--demo-idle과 함께)
@@ -64,6 +65,7 @@ struct DemoOptions: Equatable {
         switchAfter = value("--demo-switch").flatMap { Double($0) }
         wallForce = flag("--demo-wall")
         tripForce = flag("--demo-trip")
+        slipForce = flag("--demo-slip")
         idleForce = flag("--demo-idle")
         setbackForce = flag("--demo-setback")
         greetForce = flag("--demo-greet")

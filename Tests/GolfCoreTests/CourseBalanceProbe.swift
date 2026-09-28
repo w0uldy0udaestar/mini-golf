@@ -113,7 +113,7 @@ final class CourseBalanceProbe: XCTestCase {
             // 게임과 동일한 자동 규칙: 경사 라이(stanceSlopeRatio×경사)와 캐노피 근접 펀치(GameScene.treePunchT×0.85) — 봇이 평지 가정으로
             // 치면 굴곡 지형에서 실제 플레이와 다른 고착이 난다 (2026-09-28 seed 12: 나무 밑 PW가 매 샷 캐노피에 삼켜짐)
             let slope = club.isPutter ? 0 : hole.slope(at: b.x) * Phys.stanceSlopeRatio
-            let punch = club.isPutter ? 0 : treeT(hole, x: b.x, dir: dir) * (lastMoved < 3 ? 1.0 : 0.85)
+            let punch = club.isPutter ? 0 : treeT(hole, x: b.x, dir: dir) * 0.85
             Ballistics.launch(&b, club: club, heightPct: h, lie: lie, dir: dir, punch: punch, slope: slope)
             strokes += 1
             let fromX = b.x
@@ -240,7 +240,10 @@ final class CourseBalanceProbe: XCTestCase {
             sm.filter { $0 > 1 }.count, sm.filter { $0 > 2 }.count
         ))
         print("BOTBAL\n" + lines.joined(separator: "\n"))
-        // ── 회귀 대역 (2026-09-23 클럽 리밸런스(우드 69/65/62) 뒤 실측: 아키타입 −0.31~−0.81(terraces가 가장 쉬움 쪽), canyon 고착 1%·
+        // ── 회귀 대역. 2026-09-28 경사 라이 체감(반영 1.0·트레드 굴곡·라이저 바닥 정착, 봇도 경사·캐노피 펀치 적용) 뒤 실측: 아키타입
+        //    −0.08(canyon)~−0.62(terraces), ALL −0.27, 고착 1%(seed 37 벙커 루프 — 봇의 SW 정책 한계)·입수 0.15/홀, SETTLE 1.6%·max
+        //    19m.
+        //    (구 2026-09-23 클럽 리밸런스(우드 69/65/62) 뒤 실측: 아키타입 −0.31~−0.81(terraces가 가장 쉬움 쪽), canyon 고착 1%·
         //    입수 0.15/홀, 급경사 정지 0. terraces 하한 −1.0까지 여유 0.19) ──
         XCTAssertEqual(Self.steepRests, 0, "공이 급경사면에 정지함 (\(Self.steepRests)회)")
         for k in Set(naive.map(\.kind)) {

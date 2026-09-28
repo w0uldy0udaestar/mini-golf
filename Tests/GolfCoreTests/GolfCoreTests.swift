@@ -673,26 +673,29 @@ final class GolfCoreTests: XCTestCase {
     }
 
     /// 트레드 굴곡 (2026-09-28): 티~에이프런의 비라이저·비수면 지면 중 |경사| ≥ 0.05가 충분히 있어야 경사 라이가 체감된다.
-    /// 티런은 평탄, 라이저 밖 굴곡은 정지 가능 경사(0.3) 안
+    /// 티런은 평탄. 급경사(> 0.3)는 라이저로 보고 분모에서 뺀다
     func testTreadsAreUndulatedButTeeFlat() {
         var sloped = 0, total = 0
         for seed: UInt32 in 1 ... 40 {
             for h in CourseGenerator.makeCourse(seed: seed) {
-                var x = h.teeX + 1
-                while x < h.teeX + 9 { // 티런은 평탄
-                    XCTAssertLessThan(abs(h.slope(at: x)), 0.02, "티런에 굴곡 @\(x)")
-                    x += 1
+                let d = h.holeX >= h.teeX ? 1.0 : -1.0 // 미러 홀은 티가 오른쪽 — 홀 방향으로 스캔 (리뷰 2026-09-28)
+                for k in 1 ..< 9 { // 티런은 평탄
+                    XCTAssertLessThan(
+                        abs(h.slope(at: h.teeX + d * Double(k))),
+                        0.02,
+                        "티런에 굴곡 @\(h.teeX + d * Double(k))"
+                    )
                 }
-                x = h.teeX + 10
-                while x < h.greenStart - 12 {
+                var x = h.teeX + d * 10
+                while d > 0 ? x < h.greenStart - 12 : x > h.greenEnd + 12 {
                     let s = abs(h.slope(at: x))
-                    if h.surface(at: x) != .water, s <= 0.3 { // 라이저(급경사) 밖
+                    if h.surface(at: x) != .water, s <= 0.3 { // 라이저(급경사) 밖만 센다 — 필터이지 단언이 아니다
                         total += 1
                         if s >= 0.05 {
                             sloped += 1
                         }
                     }
-                    x += 1
+                    x += d
                 }
             }
         }
