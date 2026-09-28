@@ -5,6 +5,7 @@ import XCTest
 final class DemoOptionsTests: XCTestCase {
     func testNoArgumentsIsAllDefaults() {
         let d = DemoOptions(arguments: ["MiniGolf"])
+        XCTAssertEqual(d, DemoOptions(), "인자 없는 실플레이는 전 필드가 기본값")
         XCTAssertFalse(d.active)
         XCTAssertNil(d.seed)
         XCTAssertNil(d.power)
@@ -18,6 +19,7 @@ final class DemoOptionsTests: XCTestCase {
         let d = DemoOptions(arguments: ["MiniGolf", "--demo-pickup"])
         XCTAssertTrue(d.active)
         XCTAssertTrue(d.pickupForce)
+        XCTAssertTrue(DemoOptions(arguments: ["MiniGolf", "--demo"]).active)
         XCTAssertFalse(DemoOptions(arguments: ["MiniGolf", "--seed", "19"]).active, "--seed만으로는 관찰 모드가 아니다")
     }
 
@@ -34,6 +36,8 @@ final class DemoOptionsTests: XCTestCase {
         XCTAssertEqual(d.mood, .sad)
         XCTAssertEqual(d.startHole, 4)
         XCTAssertEqual(d.screenIndex, 1)
+        XCTAssertEqual(DemoOptions(arguments: ["x", "--demo-power", "0.01"]).power, 0.05, "파워 하한")
+        XCTAssertEqual(DemoOptions(arguments: ["x", "--demo-hour", "27"]).hour, 3, "시각은 24로 랩")
     }
 
     func testMalformedOrMissingValuesFallBack() {

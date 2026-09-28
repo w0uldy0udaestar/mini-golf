@@ -161,7 +161,8 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 제거**(사용자 판정 "잘 작동되지도 않고 플레이에 방해만", `feature/remove-window-bumpers`)하고 README 드리프트(테스트 수·코드량·로드맵)를 정정했다 —
 둘 다 v0.8.3에 포함. 이어서 사용자 "하자"로 **관찰 플래그 27개를 `DemoOptions`로 분리**(`Sources/MiniGolf/DemoOptions.swift`, 게임 로직은
 `demo.xxx`로 읽고 main.swift는 파싱 한 줄, 런타임 관찰 상태 demoWait·motionCursor 등은 씬에 남김)하고 **GitHub Actions CI**를 추가했다
-(`.github/workflows/ci.yml`: macos-26 · build · swiftformat 0.62.1 고정 · test, `feature/demo-options-ci`). `dist/MiniGolf.app`은 범퍼 제거 후
+(`.github/workflows/ci.yml`: macos-26 · build · swiftformat 0.62.1 고정 · test, 모든 브랜치 push·PR에서 실행, `feature/demo-options-ci`,
+Code Reviewer 리뷰 블로커 0·minor 2·nit 4 반영, 첫 실행 64초 통과). `dist/MiniGolf.app`은 범퍼 제거 후
 재빌드본(1930815), brew는 0.8.2. 사용자는 **공개를 염두**에 두고 있다(결정은 아님).
 
 **다음 세션 첫 일**

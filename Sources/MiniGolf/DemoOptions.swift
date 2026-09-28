@@ -4,7 +4,7 @@ import GolfCore
 /// 관찰·디버그 실행 인자 한 묶음 (2026-09-28 — GameScene에 흩어져 있던 플래그 저장 프로퍼티 27개와 main.swift의 파싱을 여기로).
 /// 실플레이는 인자가 없으니 전부 기본값이고, 게임 로직은 `demo.xxx`로만 읽는다. 런타임에 변하는 관찰 상태(demoWait·motionCursor 등)는
 /// 씬에 남긴다 — 여기는 "실행 시 정해진 설정"만.
-struct DemoOptions {
+struct DemoOptions: Equatable {
     // ── 모드·환경 ──
     var active = false // --demo 계열 아무 플래그: 조준 1.2s 뒤 자동 스윙 반복, 사운드 끔, PlayLog는 stdout
     var screenIndex: Int? // --screen N: 실행 시 모니터 지정 (0부터, 저장 안 함)
