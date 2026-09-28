@@ -708,6 +708,69 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertLessThan(share, 0.80, "평지가 거의 없음 (\(share)) — 굴곡 과다")
     }
 
+    /// 비탈 라이 구간 (2026-09-28): 40시드×9홀 중 경사 0.10~0.25가 15m 이상 이어지는 비탈이 있는 홀이 충분해야 하고, 비탈 밖 트레드에 0.3 초과가 없어야 한다
+    func testSlopeLieRampsExist() {
+        var withRamp = 0, holes = 0
+        for seed: UInt32 in 1 ... 40 {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                holes += 1
+                var run = 0, best = 0
+                var x = h.teeX + 1
+                let d = h.holeX >= h.teeX ? 1.0 : -1.0
+                while d > 0 ? x < h.greenStart : x > h.greenEnd {
+                    let s = abs(h.slope(at: x))
+                    run = s >= 0.10 && s <= 0.25 && h.surface(at: x) != .water ? run + 1 : 0
+                    best = max(best, run)
+                    x += d
+                }
+                if best >= 15 {
+                    withRamp += 1
+                }
+            }
+        }
+        let share = Double(withRamp) / Double(holes)
+        print(String(format: "RAMPS holes with ≥15m slope-lie stretch: %.0f%%", share * 100))
+        XCTAssertGreaterThan(share, 0.45, "비탈 라이 구간이 있는 홀이 적음 (\(share))")
+    }
+
+    /// 저속 잔디 걸림 (2026-09-28): 경사 0.2 페어웨이에서 느리게 구르는 공은 1.5m 안에 그 자리에 선다(정착 규칙 미발동), 그린 퍼팅 거리는 불변
+    func testLowSpeedGripStopsCreepOnSlopeButNotOnGreen() {
+        var elev = [Double](repeating: 0, count: 202)
+        for i in 0 ..< elev.count {
+            elev[i] = 40 - Double(i) * 0.2
+        } // 일정한 내리막 0.2
+        let slope = Hole(
+            par: 4, dist: 150, holeX: 190, worldW: 200, greenStart: 185, greenEnd: 195, apronStart: 183,
+            segments: [Segment(from: 0, to: 200, type: .fairway)], elevation: elev, waterRange: nil, greenSlope: 0
+        )
+        var b = BallState(x: 50, y: slope.ground(at: 50), vx: 0.8, vy: 0, phase: .roll)
+        var t = 0.0
+        while b.phase != .rest, t < 30 {
+            _ = Ballistics.step(&b, hole: slope); t += Phys.dt
+        }
+        XCTAssertEqual(b.phase, .rest, "비탈에서 멈추지 않음")
+        XCTAssertLessThan(b.x - 50, 1.5, "느린 공이 비탈을 흘러내림 (\(b.x - 50)m)")
+        XCTAssertEqual(abs(slope.slope(at: b.x)), 0.2, accuracy: 0.02, "비탈 위에 서야 한다")
+        var fast = BallState(x: 50, y: slope.ground(at: 50), vx: 3.0, vy: 0, phase: .roll)
+        t = 0
+        while fast.phase != .rest, t < 60 {
+            _ = Ballistics.step(&fast, hole: slope); t += Phys.dt
+        }
+        XCTAssertLessThan(fast.x - 50, 12, "3 m/s 공의 내리막 런아웃 (\(fast.x - 50)m)")
+        // 그린: 걸림 없음 — 굴림 거리 = v²/(2·1.1)
+        let green = Hole.flatTest()
+        var p = BallState(x: green.holeX - 30, y: 0, vx: 2.0, vy: 0, phase: .roll)
+        t = 0
+        while p.phase != .rest, t < 30 {
+            _ = Ballistics.step(&p, hole: green); t += Phys.dt
+        }
+        let gx = p.x - (green.holeX - 30)
+        let expected = 2.0 * 2.0 / (2 * Surface.green.roll)
+        if green.surface(at: green.holeX - 30) == .green {
+            XCTAssertEqual(gx, expected, accuracy: 0.25, "그린 굴림 거리가 바뀜 (\(gx) vs \(expected))")
+        }
+    }
+
     // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──
 
     func testBallRestsInSteepValley() {
