@@ -2151,7 +2151,10 @@ final class GameScene: SKScene {
         let dz = hole.ground(at: hole.holeX) - hole.ground(at: ball.x)
         let elevStr = abs(dz) < 1 ? "" : " \(dz > 0 ? "↑" : "↓")\(Int(abs(dz).rounded()))m"
         scoreTitle.setText("\(holeIdx + 1)번 홀 · 파 \(hole.par)")
-        scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lie.label) · \(Int(remain))m" + elevStr)
+        // 비탈 라이 단어 (2026-09-28): 발밑이 홀 쪽으로 0.10 이상 기울면 '오르막/내리막' — 수치가 아니라 라이 이름이라 어시스트 금지 원칙 안
+        let facing = hole.slope(at: ball.x) * dir
+        let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lie.label
+        scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lieWord) · \(Int(remain))m" + elevStr)
         clubTitle.setText(club.name)
         let cat = club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터"
         // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
@@ -2542,9 +2545,9 @@ final class GameScene: SKScene {
                     let inBunker = hole.surface(at: ball.x) == .bunker
                     let frustrated = noteSetback(demo.setbackForce || inBunker || shotLipped)
                     PlayLog.note(String(
-                        format: "REST strokes %d x %.1f lie %@ label %@", strokes, ball.x,
+                        format: "REST strokes %d x %.1f lie %@ label %@ slope %+.2f", strokes, ball.x,
                         "\(hole.surface(at: ball.x))",
-                        greenChanceLabel() ?? "-"
+                        greenChanceLabel() ?? "-", hole.slope(at: ball.x)
                     ))
                     if strokes >= Phys.maxStrokes {
                         giveUp()

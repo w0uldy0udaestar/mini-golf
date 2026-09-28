@@ -708,7 +708,7 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertLessThan(share, 0.80, "평지가 거의 없음 (\(share)) — 굴곡 과다")
     }
 
-    /// 비탈 라이 구간 (2026-09-28): 40시드×9홀 중 경사 0.10~0.25가 15m 이상 이어지는 비탈이 있는 홀이 충분해야 하고, 비탈 밖 트레드에 0.3 초과가 없어야 한다
+    /// 급경사 언덕 사면 (2026-09-28): 40시드×9홀 중 경사 0.18~0.30이 12m 이상 이어지는 사면이 있는 홀이 충분해야 한다
     func testSlopeLieRampsExist() {
         var withRamp = 0, holes = 0
         for seed: UInt32 in 1 ... 40 {
@@ -719,17 +719,17 @@ final class GolfCoreTests: XCTestCase {
                 var x = h.teeX + d
                 while d > 0 ? x < h.greenStart : x > h.greenEnd {
                     let s = abs(h.slope(at: x))
-                    run = s >= 0.10 && s <= 0.25 && h.surface(at: x) != .water ? run + 1 : 0
+                    run = s >= 0.18 && s <= 0.30 && h.surface(at: x) != .water ? run + 1 : 0
                     best = max(best, run)
                     x += d
                 }
-                if best >= 15 {
+                if best >= 12 {
                     withRamp += 1
                 }
             }
         }
         let share = Double(withRamp) / Double(holes)
-        print(String(format: "RAMPS holes with ≥15m slope-lie stretch: %.0f%%", share * 100))
+        print(String(format: "RAMPS holes with ≥12m steep-hill stretch (0.18~0.30): %.0f%%", share * 100))
         XCTAssertGreaterThan(share, 0.45, "비탈 라이 구간이 있는 홀이 적음 (\(share))")
     }
 

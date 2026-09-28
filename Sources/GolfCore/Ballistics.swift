@@ -176,6 +176,11 @@ public enum Ballistics {
             if abs(s) <= settleTail || s * down > 0 { // 완경사에 닿았거나 바닥을 지나 오르막(부호 반전)
                 break
             }
+            // 직선 언덕 사면(경사가 2m 앞까지 일정, ≤ 0.3)에 들어섰으면 거기서 선다 — 러프·페어웨이 정지 마찰이 붙잡는 곳을 바닥까지 미끄러뜨리지
+            // 않는다(SETTLE max 32m). cos 꼬리(협곡 벽)는 경사가 계속 줄어 여기 안 걸리고 바닥(0.12)까지 간다
+            if abs(s) <= steepRest, abs(s - hole.slope(at: x + down * 4)) < 0.01 {
+                break
+            }
             x += down
             steps += 1
         }
