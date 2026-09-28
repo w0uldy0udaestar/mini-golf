@@ -770,6 +770,62 @@ final class GolfCoreTests: XCTestCase {
         }
     }
 
+    /// 언덕 사면 불변식 (2026-09-28 리뷰 제안): 홀 쪽 내리막 직선 사면(0.18~0.30, 6m+ 일정)은 전부 러프, 사면 ±8m 안 벙커 없음,
+    /// 8m 이상 오르막 절벽 발치 20m 안 벙커 없음(SW 정점 9m 소프트락)
+    func testHillsideInvariants() {
+        var descending = 0, ascending = 0
+        for seed: UInt32 in 1 ... 40 {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                let d = h.holeX >= h.teeX ? 1.0 : -1.0
+                var x = h.teeX + d * 10
+                var runStart: Double? = nil
+                func closeRun(at xEnd: Double) {
+                    guard let x0 = runStart else { return }
+                    runStart = nil
+                    guard abs(xEnd - x0) >= 6 else { return }
+                    let lo = min(x0, xEnd), hi = max(x0, xEnd)
+                    let down = h.slope(at: (lo + hi) / 2) * d < 0 // 홀 쪽 내리막
+                    if down {
+                        descending += 1
+                        var xs = lo + 1
+                        while xs < hi - 1 {
+                            XCTAssertEqual(h.surface(at: xs), .rough, "내리막 사면이 러프가 아님 seed \(seed) @\(xs)")
+                            xs += 1
+                        }
+                    }
+                    var xb = lo - 8
+                    while xb <= hi + 8 {
+                        XCTAssertNotEqual(h.surface(at: xb), .bunker, "사면 ±8m 안 벙커 seed \(seed) @\(xb)")
+                        xb += 1
+                    }
+                }
+                while d > 0 ? x < h.greenStart : x > h.greenEnd {
+                    let s = h.slope(at: x)
+                    let steady = abs(s) >= 0.18 && abs(s) <= 0.30 && abs(s - h.slope(at: x + d)) <
+                        0.003 // 직선 사면만 (cos 굴곡은 변곡점 ±0.15m 밖에서 탈락)
+                    if steady, runStart == nil {
+                        runStart = x
+                    } else if !steady {
+                        closeRun(at: x)
+                    }
+                    // 오르막 절벽(|경사| > 0.5, 발치→정상 8m+) 발치 20m 안 벙커 없음
+                    if abs(h.slope(at: x)) > 0.5, h.ground(at: x + d * 12) - h.ground(at: x - d * 2) > 8 {
+                        ascending += 1
+                        var xb = x - d * 20
+                        while d > 0 ? xb < x - 2 : xb > x + 2 {
+                            XCTAssertNotEqual(h.surface(at: xb), .bunker, "오르막 절벽 발치 20m 안 벙커 seed \(seed) @\(xb)")
+                            xb += d
+                        }
+                    }
+                    x += d
+                }
+                closeRun(at: x)
+            }
+        }
+        XCTAssertGreaterThan(descending, 50, "내리막 사면이 너무 적음 (\(descending))")
+        XCTAssertGreaterThan(ascending, 50, "오르막 절벽 샘플이 너무 적음 (\(ascending))")
+    }
+
     // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──
 
     func testBallRestsInSteepValley() {

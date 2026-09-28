@@ -345,10 +345,9 @@ public enum CourseGenerator {
         var nodes: [(x: Double, e: Double)] = []
         var risers: [ClosedRange<Double>] = []
         var water: ClosedRange<Double>? = nil
-        // 비탈 라이 구간 (2026-09-28 사용자 판정 "경사에 공이 서지를 않아서 그런 샷이 안 나온다"): 라이저(절벽, 공이 못 섬)와 평탄 트레드
-        // 사이에 공이 설 수 있는 비탈을 둔다 — 트레드를 기울이거나 절벽 아래·림 위에 램프를 붙인다. cos 보간은 구간 중앙 경사가 평균의
-        // π/2배라 평균 0.08~0.13(정점 0.13~0.2)로 잡는다 — 정점이 0.3을 넘으면 정착 규칙에 걸린다. 낙차 예산은
-        // 그대로(라이저가 그만큼 낮아진다). 굴곡은 이 구간을 피한다(겹치면 0.3을 넘어 정착 규칙에 걸린다). 난수는 부속 열(홀 기하 파생)
+        // 비탈 라이 구간 (2026-09-28 사용자 판정 "경사에 공이 서지를 않아서 그런 샷이 안 나온다" → 완경사 cos 굴곡은 2차 판정 "안 서가지고 샷이
+        // 달라지는지도 확인 안 됨" → 12~16° 직선 사면으로 재설계, 3차 판정 통과): 절벽(공이 못 섬)과 평탄 트레드 사이에 addRamp가 직선 사면을 둔다.
+        // 굴곡은 이 구간을 피한다. 난수는 부속 열(홀 기하 파생)
         var ramps: [ClosedRange<Double>] = []
         var roughRamps: [ClosedRange<Double>] = [] // 내리막 사면 — 페어웨이 잔디로는 구르는 공을 못 붙잡아 러프로 깐다 (makeHole이 carve)
         var tiltRand =
@@ -367,7 +366,8 @@ public enum CourseGenerator {
         /// 현재 끝에서 rise만큼 12~16°(0.22~0.28, 정착 규칙 0.3 아래) 직선 사면으로 오르거나(+) 내리고(−) 새 x를 반환. 러프(정지 마찰 0.70)는
         /// 물론 페어웨이(0.34)도 멈춘 공을 붙잡고, 오르막은 구르는 공도 세운다. 내리막 사면은 러프로 깔린다
         func addRamp(from x: Double, rise: Double) -> Double {
-            let w = abs(rise) / tiltRand.next(0.22, 0.28)
+            // 오르막(페어웨이일 수 있음)은 페어웨이 굴림 한계 0.264 안(0.22~0.26) — 되굴러 내려오는 공도 사면 위에서 선다. 내리막은 러프라 0.28까지
+            let w = abs(rise) / (rise > 0 ? tiltRand.next(0.22, 0.26) : tiltRand.next(0.22, 0.28))
             let e0 = nodes.last?.e ?? 0
             nodes.append((x + w, e0 + rise))
             ramps.append(x ... (x + w))
@@ -398,7 +398,7 @@ public enum CourseGenerator {
             let teeH = max(10, min(-plannedRise, room / 1.9)) // 계획 낙차 12~32m (구 예산 82~98% = 100m대)
             nodes = [(0, teeH), (cliffTop, teeH)]
             var x = cliffTop
-            // 절벽 아래 착지 지대의 60%는 급경사 언덕 사면(4~8m, 12~16°, 러프)으로 이어진다 — 낙차는 절벽에서 뺀다 (비탈 라이)
+            // 절벽 아래 착지 지대의 60%는 급경사 언덕 사면(3~8m = min(8, 0.3·teeH), 12~16°, 러프)으로 이어진다 — 낙차는 절벽에서 뺀다 (비탈 라이)
             let landingRamp = tiltRand.next() < 0.6 ? min(8, teeH * 0.3) : 0
             let cliffH = teeH - landingRamp
             if teeH > 24, room > teeH * 2.2 { // 2단 절벽 — 중간 벤치가 레이업 지점이 된다
@@ -494,16 +494,17 @@ public enum CourseGenerator {
             // 깊이 12~20m (2026-09-17 재예산): 구 36m는 SW 풀샷 정점(42m@37m)이 라이저 끝(59m 폭)에서 이미 하강해 벽을
             // 맞았다 — 봇 실측 12타 탈출 불가 15%. 20m 라이저(폭 33m)는 SW·PW·9I 모두 정점 전에 넘는다.
             // 협곡 폭 = 바닥 24~40 + 2×1.65×깊이 ≈ 64~106m — 7I 캐리(153m) 안이라 림에서 끊어 가면 넘긴다
-            // 반대편 림 위 오르막 어프로치(비탈 라이, 60%)는 림을 3~5m 높인다 — 깊이 예산이 그만큼 줄어야 PW 한 방 탈출이 유지된다
+            // 반대편 림 위 오르막 어프로치(비탈 라이, 60%)는 림을 4~5.5m 높인다 — 깊이 예산이 그만큼 줄어야 PW 한 방 탈출이 유지된다
             // 높이는 폭 예산으로 깎는다: 림 x ≤ midHi = apronStart−45라 apronStart−20까지 최소 25m — 램프가 항상 붙어 깊이 예산이 헛되지 않다 (리뷰 #3).
-            // 림이 u만큼 오르면 그린도 u 오른다(순낙차 +u ≤ 5m, 유효거리 보정에 미반영 — 의도된 소량 누수)
+            // 림이 u만큼 오르면 그린도 u 오른다(순낙차 +u ≤ 5.5m, 유효거리 보정에 미반영 — 의도된 소량 누수)
             let approachU = tiltRand.next() < 0.6 ? min(tiltRand.next(4, 8), 25 * 0.22) : 0 // 사면 12~16°, 폭 ≤ 25m
             let depth = max(8, min(
                 rand.next(12, maxCanyonDepth),
                 canyonDepthLimit(floorW: floorW, rim: rim + approachU), // PW 한 방으로 나온다 (램프 포함 림 높이)
                 (midHi - midLo - floorW) / (2 * riserRatio)
             ))
-            let gorgeW = floorW + depth * 2 * riserRatio
+            let gorgeW = floorW + 2 * riserRatio *
+                (depth + rim) // 라이저는 depth+rim을 오르내린다 — rim을 빼먹으면 협곡이 3.3·rim 넓어져 폭 예산이 어긋난다 (리뷰)
             let cLo = midLo + gorgeW / 2
             let cHi = midHi - gorgeW / 2
             let cx = cHi > cLo ? rand.next(cLo, cHi) : (midLo + midHi) / 2
@@ -752,7 +753,8 @@ public enum CourseGenerator {
                     1,
                     min(elev.count - 2, Int(r.upperBound))
                 )
-                return elev[hi] > elev[lo] + 3 && bTo > r.lowerBound - 20 && bFrom < r.lowerBound
+                return elev[hi] > elev[lo] + 8 && bTo > r.lowerBound - 20 && bFrom < r
+                    .lowerBound // 8m 이상만 — 벙커 SW 정점 ≈ 9m (리뷰)
             }) {
                 return false
             }

@@ -22,6 +22,7 @@ final class GameScene: SKScene {
     private let timeScale = 2.5
     var isGamePaused = false
     var demo = DemoOptions() // 관찰·디버그 플래그 (DemoOptions.swift — main.swift가 실행 인자에서 채운다, 실플레이는 기본값)
+    private var roundSeed: UInt32 = 0 // 이번 라운드 코스 시드 (play.log HOLE 줄)
     var demoGreeted = false
     private var demoReplanCount = 0
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
@@ -229,7 +230,11 @@ final class GameScene: SKScene {
 
     private var groundBase: CGFloat = 96 // 홀 최저 표고에 맞춰 rebuildTerrain에서 보정 (HUD 침범 방지)
     /// 경사 라이: 스탠스 기울기 = 로프트 전달 비율 — 단일 출처는 Phys (리뷰 S-6)
-    private let slopeTiltRatio = Phys.stanceSlopeRatio
+    private let slopeTiltRatio = Phys.stanceSlopeRatio // 물리: 클럽이 지면을 따라간다 (발사각·속도 손실)
+    /// 연출: 몸 전체 회전은 경사각의 45%만 — 경사면에 수직으로 세우면(1.0) 12~16° 언덕에서 몸이 뒤로 눕고 앞다리가 공까지 벌어진다
+    /// (2026-09-28 판정 "이 이상한 자세는 절대 고칠 수 없는 거야", 이전 "뒤로 기울고·뒤로 쏠린다"도 같은 계열). 실제 골퍼는 중력 때문에 몸은
+    /// 거의 수직을 지키고 발·무릎·체중만 경사를 따른다 — 발은 applySlopeStance의 지면 잔차 보정이 경사 위에 세운다
+    private let renderTiltRatio = 0.45
     private var renderSlopeTilt = 0.0 // 경사 스탠스 기울기 (스무딩)
 
     // 노드
@@ -381,9 +386,10 @@ final class GameScene: SKScene {
     }
 
     func newRound() {
+        // play.log HOLE 줄에 시드를 남긴다 — 판정 자리(x·경사)를 나중에 같은 코스로 재현하기 위해 (2026-09-28)
+        roundSeed = demo.seed ?? UInt32(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 2_000_000_000))
         course = CourseGenerator.makeCourse(
-            seed: demo.seed
-                ?? UInt32(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 2_000_000_000))
+            seed: roundSeed
         )
         holeIdx = demo.active ? min(8, max(0, demo.startHole - 1)) : 0
         results = []
@@ -438,7 +444,7 @@ final class GameScene: SKScene {
         rebuildTerrain()
         PlayLog.note(
             "HOLE \(holeIdx + 1) par \(hole.par) \(hole.signature?.rawValue ?? "plain") tee \(Int(hole.teeX)) cup \(Int(hole.holeX)) "
-                + "green \(Int(hole.greenStart))-\(Int(hole.greenEnd))"
+                + "green \(Int(hole.greenStart))-\(Int(hole.greenEnd)) seed \(roundSeed)"
         )
         if demo.active, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
             print("SIGNATURE \(sig.rawValue)")
@@ -658,7 +664,7 @@ final class GameScene: SKScene {
             print(String(
                 format: "AIM x %.1f lie %@ slope %+.3f tilt %+.1f° obs %d",
                 ball.x, hole.surface(at: ball.x).label,
-                s, slopeTiltRatio * atan(s) * 180 / .pi, hole.obstacles.count
+                s, renderTiltRatio * atan(s) * 180 / .pi, hole.obstacles.count
             ))
             fflush(stdout)
         }
@@ -2152,7 +2158,8 @@ final class GameScene: SKScene {
         let elevStr = abs(dz) < 1 ? "" : " \(dz > 0 ? "↑" : "↓")\(Int(abs(dz).rounded()))m"
         scoreTitle.setText("\(holeIdx + 1)번 홀 · 파 \(hole.par)")
         // 비탈 라이 단어 (2026-09-28): 발밑이 홀 쪽으로 0.10 이상 기울면 '오르막/내리막' — 수치가 아니라 라이 이름이라 어시스트 금지 원칙 안
-        let facing = hole.slope(at: ball.x) * dir
+        let toward: Double = hole.holeX >= ball.x ? 1 : -1 // 렌더 dir은 걷는 동안 직전 샷 방향일 수 있다 (리뷰) — 홀 방향으로
+        let facing = hole.slope(at: ball.x) * toward
         let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lie.label
         scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lieWord) · \(Int(remain))m" + elevStr)
         clubTitle.setText(club.name)
@@ -2831,7 +2838,7 @@ final class GameScene: SKScene {
 
         // 경사 라이: 걷기 외에는 스탠스가 지면 경사를 따라 기운다 (물리와 동일 비율 — 3eccc4f 복원).
         // 벽 근처에선 억제 — 벽 경성 클램프가 무회전 평면을 가정하기 때문
-        let tiltTarget = mode == .walking ? 0 : slopeTiltRatio * atan(hole.slope(at: stickX)) * (1 - renderWallT)
+        let tiltTarget = mode == .walking ? 0 : renderTiltRatio * atan(hole.slope(at: stickX)) * (1 - renderWallT)
         renderSlopeTilt += (tiltTarget - renderSlopeTilt) * (1 - exp(-6 * dt))
         stickman.zRotation = CGFloat(renderSlopeTilt + renderSlipRot)
         // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
