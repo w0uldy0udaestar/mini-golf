@@ -188,7 +188,7 @@ extension GameScene {
                 toast("핀 이동!", sub: farther ? "\(delta)m 멀어졌다" : "\(-delta)m 가까워졌다")
                 react(farther ? .slump : .fistPump)
                 updateHUD()
-                if demoMode {
+                if demo.active {
                     print(String(format: "PIN %.1f → %.1f (%@)", oldX, hole.holeX, farther ? "farther" : "closer"))
                     fflush(stdout)
                 }
@@ -257,7 +257,7 @@ extension GameScene {
                 ]))
                 react(kind == .rubber ? .laugh : .startled)
                 toast(kind == .rubber ? "고무공!" : "볼링공!", sub: kind == .rubber ? "다음 한 샷 — 튄다" : "다음 한 샷 — 안 뜬다")
-                if demoMode {
+                if demo.active {
                     print("BALLKIND \(kind.rawValue)")
                     fflush(stdout)
                 }
@@ -309,7 +309,7 @@ extension GameScene {
     func revertBallKind() {
         ballKind = .standard
         applyBallStyle()
-        if demoMode {
+        if demo.active {
             print("BALLKIND standard")
             fflush(stdout)
         }
@@ -359,7 +359,7 @@ extension GameScene {
             g.phase = .watching
             galleryState = g
         }
-        if demoMode {
+        if demo.active {
             print("GALLERY arrive side \(Int(side))")
             fflush(stdout)
         }
@@ -427,7 +427,7 @@ extension GameScene {
             toast(verdict == .cheer ? "와아—!" : verdict == .clap ? "짝짝짝" : "우우…", sub: nil)
         }
         afterSurprise(2.6) { [weak self] in self?.galleryLeave() }
-        if demoMode {
+        if demo.active {
             print("GALLERY \(verdict) gain \(Int(gain))/\(Int(before)) \(surface)")
             fflush(stdout)
         }
@@ -562,7 +562,7 @@ extension GameScene {
                 let roll = SKAction.move(to: CGPoint(x: px(newX), y: groundY(newX) + 5.5), duration: 0.5)
                 roll.timingMode = .easeOut
                 ballNode.run(roll)
-                if demoMode {
+                if demo.active {
                     print(String(format: "GEESE scatter kick %.1f → %.1f", kick, newX))
                     fflush(stdout)
                 }

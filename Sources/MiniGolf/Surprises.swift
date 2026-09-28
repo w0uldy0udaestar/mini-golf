@@ -96,9 +96,9 @@ extension GameScene {
         }
         let candidates = SurpriseKind.allCases.filter { $0.hook == hook && surpriseEligible($0) }
         let pick: SurpriseKind?
-        if let forced = demoSurpriseKind { // --surprise KIND: 그 종류를 해당 훅마다
+        if let forced = demo.surpriseKind { // --surprise KIND: 그 종류를 해당 훅마다
             pick = forced.hook == hook ? forced : nil
-        } else if demoSurpriseForce { // --demo-surprise: 훅별로 순환 (관찰용)
+        } else if demo.surpriseForce { // --demo-surprise: 훅별로 순환 (관찰용)
             let pool = SurpriseKind.allCases.filter { $0.hook == hook }
             guard !pool.isEmpty else { return nil }
             if hook == .ballRest {
@@ -137,7 +137,7 @@ extension GameScene {
 
     /// 라운드 상한(종류별·전체 5)과 종류별 전제 조건
     private func surpriseEligible(_ kind: SurpriseKind) -> Bool {
-        if demoSurpriseKind != nil || demoSurpriseForce {
+        if demo.surpriseKind != nil || demo.surpriseForce {
             return true
         }
         let count = surpriseCounts[kind, default: 0]
@@ -172,10 +172,10 @@ extension GameScene {
         if kind.ownsScene {
             mode = .surprise
         }
-        if demoMode {
+        if demo.active {
             print("SURPRISE \(kind.rawValue) @\(Int(ball.x)) tier \(kind.tier)")
             fflush(stdout)
-            if let t = demoRestartIn { // 인터럽트 정리 관찰: T초 뒤 R과 같은 경로
+            if let t = demo.restartIn { // 인터럽트 정리 관찰: T초 뒤 R과 같은 경로
                 run(.sequence([.wait(forDuration: t), .run { [weak self] in
                     print("DEMO restart (newRound) during \(kind.rawValue)")
                     fflush(stdout)
@@ -243,7 +243,7 @@ extension GameScene {
         if let c = catState {
             updateCat(c, dt: dt, currentTime: currentTime)
         }
-        if napping, demoMode, aimTime - napStart >= 2.5 {
+        if napping, demo.active, aimTime - napStart >= 2.5 {
             wakeUp() // 관찰 모드는 키가 없으니 스스로 깬다
         }
         updateSurprises3(dt: dt, currentTime: currentTime)
@@ -400,7 +400,7 @@ extension GameScene {
     private func playFrogRescue() {
         endShotTrail()
         roundHadWater = true // 물에 들어간 건 사실 — 무입수 배지는 안 주고 통계도 센다 (벌타만 면제)
-        if !demoMode {
+        if !demo.active {
             Records.shared.waterBalls += 1
             Records.shared.save()
         }
@@ -625,7 +625,7 @@ extension GameScene {
         SoundKit.shared.snore()
         z.run(.repeatForever(.sequence([.wait(forDuration: 2.4), .run { SoundKit.shared.snore() }])))
         toast("쿨쿨…", sub: nil)
-        if demoMode {
+        if demo.active {
             print("SURPRISE nap start aim \(String(format: "%.1f", aimTime))")
             fflush(stdout)
         }
@@ -641,7 +641,7 @@ extension GameScene {
         react(.startled)
         SoundKit.shared.chirp()
         toast("앗!", sub: nil)
-        if demoMode {
+        if demo.active {
             print("SURPRISE nap wake")
             fflush(stdout)
         }
@@ -737,7 +737,7 @@ extension GameScene {
             1,
             abs(c.vx) / 80
         )
-        if demoMode, Int(currentTime * 2) != Int((currentTime - dt) * 2) { // 관찰: 0.5s마다 위치·목표·커서
+        if demo.active, Int(currentTime * 2) != Int((currentTime - dt) * 2) { // 관찰: 0.5s마다 위치·목표·커서
             let mx = mouseInScene().map { String(format: "%.0f", $0.x) } ?? "-"
             print(String(
                 format: "CAT %@ x %.0f target %.0f mouse %@ ball %.0f",
@@ -771,7 +771,7 @@ extension GameScene {
         ballNode.run(roll)
         react(.shoo)
         toast("툭.", sub: "고양이가 공을 건드렸다")
-        if demoMode {
+        if demo.active {
             print("SURPRISE cat paw → \(Int(newX))")
             fflush(stdout)
         }
