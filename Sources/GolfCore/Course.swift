@@ -376,7 +376,7 @@ public enum CourseGenerator {
             let teeH = max(10, min(-plannedRise, room / 1.9)) // 계획 낙차 12~32m (구 예산 82~98% = 100m대)
             nodes = [(0, teeH), (cliffTop, teeH)]
             var x = cliffTop
-            // 절벽 아래 착지 지대의 60%는 내리막 비탈(3~6m, 경사 0.12~0.2)로 이어진다 — 낙차는 절벽에서 뺀다 (비탈 라이)
+            // 절벽 아래 착지 지대의 60%는 내리막 비탈(3~6m, 정점 경사 0.13~0.2)로 이어진다 — 낙차는 절벽에서 뺀다 (비탈 라이)
             let landingRamp = tiltRand.next() < 0.6 ? min(6, teeH * 0.25) : 0
             let cliffH = teeH - landingRamp
             if teeH > 24, room > teeH * 2.2 { // 2단 절벽 — 중간 벤치가 레이업 지점이 된다
@@ -431,7 +431,7 @@ public enum CourseGenerator {
             rolls(from: teeEnd + 8, to: x, around: 0, amp: 2.2)
             for i in 0 ..< n {
                 let tw = treadW
-                // 중간 트레드의 절반은 접시 대신 오르막 비탈(경사 0.12~0.2) — 등반 예산은 그대로, 라이저가 그만큼 낮아진다 (비탈 라이)
+                // 중간 트레드의 60%는 접시 대신 오르막 비탈(정점 경사 0.13~0.2, 평균 0.08~0.13) — 등반 예산은 그대로, 라이저가 그만큼 낮아진다 (비탈 라이)
                 let sl = tiltRand.next(0.08, 0.13)
                 let tilt = i < n - 1 && tiltRand.next() < 0.6 ? min(tw * sl, 0.35 * step) : 0
                 x = addRiser(from: x, rise: step - tilt)
@@ -474,7 +474,10 @@ public enum CourseGenerator {
             // 맞았다 — 봇 실측 12타 탈출 불가 15%. 20m 라이저(폭 33m)는 SW·PW·9I 모두 정점 전에 넘는다.
             // 협곡 폭 = 바닥 24~40 + 2×1.65×깊이 ≈ 64~106m — 7I 캐리(153m) 안이라 림에서 끊어 가면 넘긴다
             // 반대편 림 위 오르막 어프로치(비탈 라이, 60%)는 림을 3~5m 높인다 — 깊이 예산이 그만큼 줄어야 PW 한 방 탈출이 유지된다
-            let approachU = tiltRand.next() < 0.6 ? tiltRand.next(3, 5) : 0
+            // 높이는 폭 예산으로 깎는다: 림 x ≤ midHi = apronStart−45라 apronStart−20까지 최소 25m — 램프가 항상 붙어 깊이 예산이 헛되지 않다 (리뷰 #3).
+            // 림이 u만큼 오르면 그린도 u 오른다(순낙차 +u ≤ 5m, 유효거리 보정에 미반영 — 의도된 소량 누수)
+            let approachSl = tiltRand.next(0.08, 0.12)
+            let approachU = tiltRand.next() < 0.6 ? min(tiltRand.next(3, 5), 25 * approachSl) : 0
             let depth = max(8, min(
                 rand.next(12, maxCanyonDepth),
                 canyonDepthLimit(floorW: floorW, rim: rim + approachU), // PW 한 방으로 나온다 (램프 포함 림 높이)
@@ -494,17 +497,14 @@ public enum CourseGenerator {
             }
             x += floorW
             x = addRiser(from: x, rise: depth + rim)
-            // 반대편 림에서 그린 쪽으로 60%는 오르막 비탈(3~5m, 경사 0.12~0.18) — 어프로치가 오르막 라이가 된다 (비탈 라이)
+            // 반대편 림에서 그린 쪽으로 60%는 오르막 비탈(≤ 3~5m, 정점 경사 0.13~0.19) — 어프로치가 오르막 라이가 된다 (비탈 라이)
             var approachBase = rim
             if approachU > 0 {
-                let u = approachU
-                let w = u / tiltRand.next(0.08, 0.12)
-                if x + w < apronStart - 20 {
-                    ramps.append(x ... (x + w))
-                    nodes.append((x + w, rim + u))
-                    x += w
-                    approachBase = rim + u
-                }
+                let w = approachU / approachSl
+                ramps.append(x ... (x + w))
+                nodes.append((x + w, rim + approachU))
+                x += w
+                approachBase = rim + approachU
             }
             rolls(from: x, to: worldW, around: approachBase, amp: 2.2)
 
@@ -521,7 +521,7 @@ public enum CourseGenerator {
             nodes = [(0, teeH), (spanFrom, teeH)]
             var x = spanFrom
             for _ in 0 ..< n {
-                // 트레드의 절반은 내리막 비탈(경사 0.12~0.2) — 낙차 예산은 그대로, 라이저가 그만큼 낮아진다 (비탈 라이)
+                // 트레드의 60%는 내리막 비탈(정점 경사 0.13~0.2, 평균 0.08~0.13) — 낙차 예산은 그대로, 라이저가 그만큼 낮아진다 (비탈 라이)
                 let tw = treadW * rand.next(0.85, 1.15)
                 let sl = tiltRand.next(0.08, 0.13)
                 let tilt = tiltRand.next() < 0.6 ? min(tw * sl, 0.35 * step) : 0

@@ -715,8 +715,8 @@ final class GolfCoreTests: XCTestCase {
             for h in CourseGenerator.makeCourse(seed: seed) {
                 holes += 1
                 var run = 0, best = 0
-                var x = h.teeX + 1
                 let d = h.holeX >= h.teeX ? 1.0 : -1.0
+                var x = h.teeX + d
                 while d > 0 ? x < h.greenStart : x > h.greenEnd {
                     let s = abs(h.slope(at: x))
                     run = s >= 0.10 && s <= 0.25 && h.surface(at: x) != .water ? run + 1 : 0
@@ -733,41 +733,40 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(share, 0.45, "비탈 라이 구간이 있는 홀이 적음 (\(share))")
     }
 
-    /// 저속 잔디 걸림 (2026-09-28): 경사 0.2 페어웨이에서 느리게 구르는 공은 1.5m 안에 그 자리에 선다(정착 규칙 미발동), 그린 퍼팅 거리는 불변
+    /// 저속 잔디 걸림·정지 마찰 (2026-09-28, 리뷰 #1로 재작성 — 구 규칙과 갈리는 경사에서만 단언한다):
+    /// 경사 0.25 페어웨이의 1.4 m/s 크립은 구 규칙(상수 감속 0.12 m/s²)이면 8m 흘러내리고 신 규칙(저속 걸림)이면 2m 안에 선다.
+    /// 경사 0.28은 구 정지 한계(0.26) 밖·신 한계(0.34) 안이라 신 규칙만 선다. 그린·에이프런은 걸림이 없어 굴림 거리 = v²/(2·roll)
     func testLowSpeedGripStopsCreepOnSlopeButNotOnGreen() {
-        var elev = [Double](repeating: 0, count: 202)
-        for i in 0 ..< elev.count {
-            elev[i] = 40 - Double(i) * 0.2
-        } // 일정한 내리막 0.2
-        let slope = Hole(
-            par: 4, dist: 150, holeX: 190, worldW: 200, greenStart: 185, greenEnd: 195, apronStart: 183,
-            segments: [Segment(from: 0, to: 200, type: .fairway)], elevation: elev, waterRange: nil, greenSlope: 0
-        )
-        var b = BallState(x: 50, y: slope.ground(at: 50), vx: 0.8, vy: 0, phase: .roll)
-        var t = 0.0
-        while b.phase != .rest, t < 30 {
-            _ = Ballistics.step(&b, hole: slope); t += Phys.dt
+        func slopeHole(_ s: Double, type: Surface) -> Hole {
+            var elev = [Double](repeating: 0, count: 202)
+            for i in 0 ..< elev.count {
+                elev[i] = 40 - Double(i) * s
+            }
+            return Hole(
+                par: 4, dist: 150, holeX: 190, worldW: 200, greenStart: 185, greenEnd: 195, apronStart: 183,
+                segments: [Segment(from: 0, to: 200, type: type)], elevation: elev, waterRange: nil, greenSlope: 0
+            )
         }
-        XCTAssertEqual(b.phase, .rest, "비탈에서 멈추지 않음")
-        XCTAssertLessThan(b.x - 50, 1.5, "느린 공이 비탈을 흘러내림 (\(b.x - 50)m)")
-        XCTAssertEqual(abs(slope.slope(at: b.x)), 0.2, accuracy: 0.02, "비탈 위에 서야 한다")
-        var fast = BallState(x: 50, y: slope.ground(at: 50), vx: 3.0, vy: 0, phase: .roll)
-        t = 0
-        while fast.phase != .rest, t < 60 {
-            _ = Ballistics.step(&fast, hole: slope); t += Phys.dt
+        func roll(_ hole: Hole, from x0: Double, v: Double) -> BallState {
+            var b = BallState(x: x0, y: hole.ground(at: x0), vx: v, vy: 0, phase: .roll)
+            var t = 0.0
+            while b.phase != .rest, t < 60 {
+                _ = Ballistics.step(&b, hole: hole)
+                t += Phys.dt
+            }
+            return b
         }
-        XCTAssertLessThan(fast.x - 50, 12, "3 m/s 공의 내리막 런아웃 (\(fast.x - 50)m)")
-        // 그린: 걸림 없음 — 굴림 거리 = v²/(2·1.1)
-        let green = Hole.flatTest()
-        var p = BallState(x: green.holeX - 30, y: 0, vx: 2.0, vy: 0, phase: .roll)
-        t = 0
-        while p.phase != .rest, t < 30 {
-            _ = Ballistics.step(&p, hole: green); t += Phys.dt
-        }
-        let gx = p.x - (green.holeX - 30)
-        let expected = 2.0 * 2.0 / (2 * Surface.green.roll)
-        if green.surface(at: green.holeX - 30) == .green {
-            XCTAssertEqual(gx, expected, accuracy: 0.25, "그린 굴림 거리가 바뀜 (\(gx) vs \(expected))")
+        let creep = roll(slopeHole(0.25, type: .fairway), from: 50, v: 1.4)
+        XCTAssertEqual(creep.phase, .rest, "경사 0.25에서 멈추지 않음")
+        XCTAssertLessThan(creep.x - 50, 2.0, "느린 공이 비탈을 흘러내림 (\(creep.x - 50)m — 구 규칙 ≈ 8m)")
+        let hold = roll(slopeHole(0.28, type: .fairway), from: 50, v: 0.3)
+        XCTAssertEqual(hold.phase, .rest, "경사 0.28에서 정지 마찰이 버티지 못함")
+        XCTAssertLessThan(hold.x - 50, 1.0, "정지 마찰 범위에서 흘러내림 (\(hold.x - 50)m)")
+        XCTAssertEqual(abs(slopeHole(0.28, type: .fairway).slope(at: hold.x)), 0.28, accuracy: 0.02, "비탈 위에 서야 한다")
+        for type in [Surface.green, .apron] { // 걸림 없음
+            let flat = slopeHole(0, type: type)
+            let p = roll(flat, from: 50, v: 2.0)
+            XCTAssertEqual(p.x - 50, 2.0 * 2.0 / (2 * type.roll), accuracy: 0.25, "\(type) 굴림 거리가 바뀜 (\(p.x - 50))")
         }
     }
 

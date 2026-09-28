@@ -369,7 +369,9 @@ public enum Ballistics {
                 b.lowSpeedTime = 0
             }
             // 정지: 정지 마찰(굴림 저항 × staticHoldGain)이 경사 중력을 이길 때만 — 페어웨이 0.34·러프 0.70까지. 라이저(> 0.3)는 정착 규칙이 바닥으로
-            if abs(b.vx) < Phys.stopSpeed, surfType.roll * Phys.staticHoldGain >= Phys.g * abs(s) * 0.85 {
+            let hold = abs(s) > steepRest ? 1.0 : Phys
+                .staticHoldGain // 라이저(> 0.3)는 main과 같은 정지 조건 — 정착 텔레포트 거리 불변 (리뷰 #2)
+            if abs(b.vx) < Phys.stopSpeed, surfType.roll * hold >= Phys.g * abs(s) * 0.85 {
                 b.vx = 0
                 b.phase = .rest
                 if settleOffSteepSlope(&b, hole: hole) {
