@@ -88,7 +88,9 @@ final class CourseBalanceProbe: XCTestCase {
             if lie == .green ||
                 (remain < 25 && (lie == .apron || lie == .fairway || lie == .tee)) { // 텍사스 웨지 — 칩 모델 오차 회피
                 club = ClubTable.all.last! // PT
-                let v = sqrt(2 * Surface.green.roll * remain * 1.08) + 0.3
+                // 턱(2단 그린)·오르막은 보이니 봇도 표고차를 더한다 — 평지 공식만으론 턱 아래로 되굴러 왕복 고착 (M5-② 실측)
+                let dzCup = hole.ground(at: hole.holeX) - hole.ground(at: b.x)
+                let v = sqrt(2 * Surface.green.roll * remain * 1.08 + 2 * Phys.g * 0.85 * max(0, dzCup) * 1.2) + 0.3
                 h = min(1, max(0.02, (v / club.power - Phys.putterMinRatio) / (1 - Phys.putterMinRatio)))
             } else if lie == .bunker {
                 club = ClubTable.all.first { $0.id == "SW" }!
