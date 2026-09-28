@@ -86,6 +86,9 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       5분 이상 뒤 재개 시 조준 중이면 shoo 손 흔들기 + "어서 와" — 포커스 상실은 일시정지가 아니라 홀드 해제만이라 ⛳️ 수동 정지 기준).
       관찰 `--demo-setback`(모든 샷 좌절 계열)·`--demo-idle --demo-greet`(3s 뒤 정지→1s 재개)·`--demo-pickup`(홀마다 홀인원 → 스트릭).
       프레임 3종 확인. 남긴 것은 2026-09-23 47bcada에서 처리(벙커 탈출 힌트 구현, 파워 라벨–깃대 겹침 불가 확인)
+- [x] **v0.8.4 릴리스** (2026-09-28, 4094b4d): zip 911,802B SHA cbf71aa8… → gh release(latest) → 공개 SHA 일치 → tap ac49031 → tap·fetch·untap 검증
+      (`✔︎ Cask mini-golf (0.8.4)`). 포함: 경사 라이 체감·급경사 언덕 사면·스탠스 45%·경사 넘어지기·디봇·라이저 바닥 정착·저속 잔디 걸림·
+      봇 규칙·프로브 상시화·HOLE seed 로그
 - [x] **v0.8.3 릴리스** (2026-09-28, b55ca52): zip 888,642B SHA 604b96c6… → gh release(latest) → 공개 에셋 재다운로드 SHA 일치 → tap 676529c →
       tap·fetch·untap 검증(`✔︎ Cask mini-golf (0.8.3)`, 이 머신은 tap 미설치가 원래 상태). 포함: 판정 반영 5건(걸음 속도·티 페그·퍼팅 타격감·
       퍼터 페이스·티 여백) + 창 범퍼·창 터널 제거 + DemoOptions 분리·GitHub Actions CI + README 정정. 머지된 feature 브랜치 2개(remove-window-bumpers·
