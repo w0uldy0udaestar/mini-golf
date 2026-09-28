@@ -90,7 +90,7 @@ extension GameScene {
         var b = ball
         var t = 0.0
         while t < 30 {
-            let ev = Ballistics.step(&b, hole: hole, bumpers: shotBumpers, wind: gustWind, kind: ballKind)
+            let ev = Ballistics.step(&b, hole: hole, wind: gustWind, kind: ballKind)
             switch ev {
             case let .bounce(_, surface): return (b.x, surface)
             case .water: return (b.x, .water)
@@ -234,7 +234,7 @@ extension GameScene {
     /// 분사 중 — 물줄기 속 비행 공은 속도 감쇠, 젖은 구간의 굴림은 마찰 증가. 샷이 끝나면 헤드를 거둔다
     private func updateSprinkler(dt: Double) {
         guard var s = surprise3.sprinkler else { return }
-        if s.spraying, !s.retracting, mode == .motion, tunnelTransit == nil {
+        if s.spraying, !s.retracting, mode == .motion {
             let inZone = abs(ball.x - s.x) < s.halfW
             let inColumn = ball.phase == .fly && inZone && ball.y - hole.ground(at: ball.x) < s.sprayH
             if s.inSpray, !inColumn { // 물줄기를 빠져나옴 — 감쇠량 계측

@@ -252,27 +252,6 @@ final class SoundKit {
 
     // ── 서프라이즈 2차 (2026-09-16) ──
 
-    /// 창 터널 예고 — 낮은 웅웅 (두 저음이 맥놀이)
-    func hum() {
-        play(duration: 1.4) { t in
-            let u = t / 1.4
-            return (sin(2 * .pi * 110 * t) + sin(2 * .pi * 113 * t)) * sin(.pi * u) * 0.05
-        }
-    }
-
-    /// 창 터널 진입(up)·출구(down) — 사인 스윕 + 밴드패스 노이즈
-    func warp(up: Bool) {
-        var bp = Biquad.bandpass(900, q: 1.5, sr: sr)
-        var rng = NoiseLCG()
-        play(duration: 0.45) { t in
-            let u = t / 0.45
-            let f = up ? 320 + 1100 * u * u : 1400 - 1100 * u
-            bp.retune(.bandpass, f, q: 1.5, sr: self.sr)
-            let env = sin(.pi * u)
-            return (sin(2 * .pi * f * t) * 0.6 + bp.process(rng.white()) * 1.2) * env * 0.07
-        }
-    }
-
     /// 깃대가 뽑히는 퉁 — 짧은 현
     func pluck() {
         play(duration: 0.22) { t in

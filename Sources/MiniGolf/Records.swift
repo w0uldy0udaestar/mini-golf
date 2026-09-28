@@ -16,7 +16,6 @@ enum Badge: String, CaseIterable, Codable {
     case dryRound // 워터 벌타 없는 라운드
     case canyonTamer // 대협곡 홀 파 이하
     case summiteer // 산정 그린 홀 파 이하
-    case bumperBank // 창 범퍼 뱅크샷 홀인
     case century // 누적 100홀
     case memeWitness // 밈 쇼피스 10회 목격
     case marathoner // 라운드 10회 완주
@@ -31,7 +30,6 @@ enum Badge: String, CaseIterable, Codable {
         case .dryRound: "무입수 라운드"
         case .canyonTamer: "협곡 정복"
         case .summiteer: "등정가"
-        case .bumperBank: "창문 뱅크샷"
         case .century: "100홀 달성"
         case .memeWitness: "밈 목격자 ×10"
         case .marathoner: "10라운드 마라톤"
@@ -73,12 +71,31 @@ struct Records: Codable {
     var eagles = 0
     var birdies = 0
     var waterBalls = 0
-    var bumperHits = 0
     var showpiecesSeen = 0
     var badges: Set<Badge> = []
     var hat: Hat = .none
 
     private static let key = "records"
+
+    init() {}
+
+    /// 저장본 복원 — 없는 키는 기본값, 사라진 배지 이름은 건너뛴다 (창 범퍼 제거 2026-09-28: 옛 `bumperBank`·`bumperHits`가
+    /// 남은 기록을 통째로 잃지 않게. 기본 디코딩은 모르는 enum 값 하나에 전체 실패한다)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        roundsCompleted = try c.decodeIfPresent(Int.self, forKey: .roundsCompleted) ?? 0
+        holesPlayed = try c.decodeIfPresent(Int.self, forKey: .holesPlayed) ?? 0
+        totalStrokes = try c.decodeIfPresent(Int.self, forKey: .totalStrokes) ?? 0
+        bestRound = try c.decodeIfPresent(Int.self, forKey: .bestRound)
+        holeInOnes = try c.decodeIfPresent(Int.self, forKey: .holeInOnes) ?? 0
+        eagles = try c.decodeIfPresent(Int.self, forKey: .eagles) ?? 0
+        birdies = try c.decodeIfPresent(Int.self, forKey: .birdies) ?? 0
+        waterBalls = try c.decodeIfPresent(Int.self, forKey: .waterBalls) ?? 0
+        showpiecesSeen = try c.decodeIfPresent(Int.self, forKey: .showpiecesSeen) ?? 0
+        let names = try c.decodeIfPresent([String].self, forKey: .badges) ?? []
+        badges = Set(names.compactMap(Badge.init(rawValue:)))
+        hat = try c.decodeIfPresent(Hat.self, forKey: .hat) ?? .none
+    }
 
     static var shared: Records = {
         guard let data = UserDefaults.standard.data(forKey: key),
@@ -113,7 +130,7 @@ struct Records: Codable {
             bestRound.map { "베스트 라운드 \($0 > 0 ? "+\($0)" : $0 == 0 ? "이븐 파" : "\($0)")" }
                 ?? "베스트 라운드 —",
             "홀인원 \(holeInOnes) · 이글 \(eagles) · 버디 \(birdies)",
-            "창 범퍼 \(bumperHits)회 · 입수 \(waterBalls)회 · 밈 목격 \(showpiecesSeen)회",
+            "입수 \(waterBalls)회 · 밈 목격 \(showpiecesSeen)회",
             "",
             "배지 \(badges.count)/\(Badge.allCases.count)",
         ]

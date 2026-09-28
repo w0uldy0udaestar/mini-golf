@@ -117,8 +117,8 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
       실제 원온·투온을 달성했는지 확인 필요 · 파5 난도 언급 없음 → 클럽 리밸런스 보류 · **브라이슨 드라이버 피니시 "무릎 떨림"** → 60Hz 렌더
       리그 덤프(`--demo-trademark --style bryson [--demo-power 1.0] [--demo-settle]`)로 평지·풀파워·경사 0.29 등 5회 스윙 모두 프레임
       교번 진동 없음(재현 실패, 스크래치 knee.py) — 재현 조건(매번인지·특정 홀·파워·어느 다리) 사용자 확인 필요
-- [ ] ⑥ 사용자 플레이 판정 대기 — 2차 5종의 강도·빈도(터널은 창 범퍼 켜짐+창 존재 시 라운드 1회, 핀은 그린 폭만큼, 공 바꿔치기는
-      >30m에서만). 실제 창으로 터널을 보려면 화면에 중간 크기 창을 둔 채 풀샷. 설치 빌드: `brew upgrade --cask mini-golf` 또는 릴리스 zip
+- [ ] ⑥ 사용자 플레이 판정 대기 — 2차 4종의 강도·빈도(핀은 그린 폭만큼, 공 바꿔치기는 >30m에서만). 창 터널은 2026-09-28 창 범퍼와 함께
+      제거. 설치 빌드: `brew upgrade --cask mini-golf` 또는 릴리스 zip
 
 ### 코스 밸런스 봇 (2026-09-17)
 
@@ -129,11 +129,10 @@ minor 6·nit 5) 반영 후 main에 머지했다. 창 터널(데스크탑·epic)�
 
 ### 서프라이즈 관찰 도구 (2026-09-16)
 
-`--demo --demo-bg --surprise KIND [--seed N] [--demo-bumpers "fx,fy,fw,fh;…"] [--demo-restart-in T]`. 로그 `SURPRISE kind`·`TUNNEL armed/in/out`·
+`--demo --demo-bg --surprise KIND [--seed N] [--demo-restart-in T]`. 로그 `SURPRISE kind`·
 `PIN old → new`·`BALLKIND kind`·`GALLERY verdict gain/before surface`·`GEESE scatter`. 캡처는 스크래치패드 `capture_surprise.py`(세션 한정 —
-데모 stdout의 트리거 prefix마다 `screencapture -x -C` 연사 → `sips -Z 1600`, pid로 종료). **⚠️ 화면에 실제 앱 창이 있으면 창 범퍼가
-데모 샷을 되받아쳐(BUMPER-HIT) 관찰이 오염된다** — 터널 외 관찰은 `--demo-bumpers "0.995,0.995,0.003,0.003"`(구석의 티끌 범퍼)로 실제
-창 스냅샷을 대체할 것. 터널 관찰은 `"0.3,0.28,0.1,0.3;0.6,0.33,0.08,0.28"`(공 궤적이 지나는 높이).
+데모 stdout의 트리거 prefix마다 `screencapture -x -C` 연사 → `sips -Z 1600`, pid로 종료). 창 범퍼가 2026-09-28 제거돼 화면의 실제 앱 창이
+데모 샷을 되받아치던 오염(`BUMPER-HIT`)과 `--demo-bumpers` 우회는 더 이상 없다.
 
 ### 트레이드마크 관찰 도구 (2026-09-15)
 
@@ -158,14 +157,19 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 ### 재개 지점 (2026-09-28 — 다음 세션은 여기서)
 
 **상태 요약**: 계획(PLAN.md M0~M4)과 백로그 4종(클럽 리밸런스·무드 워크·걷기 중 재계획·서프라이즈 3차)까지 모두 main에 있고 v0.8.2로
-릴리스됐다. 그 뒤 사용자 판정 5건을 반영했는데 아직 릴리스하지 않았다(v0.8.3 미배포). `dist/MiniGolf.app`은 fa5db53 빌드, brew는 0.8.2.
+릴리스됐다. 그 뒤 사용자 판정 5건을 반영했는데 아직 릴리스하지 않았다(v0.8.3 미배포). 2026-09-28 객관 평가 세션에서 **창 범퍼·창 터널을
+제거**(사용자 판정 "잘 작동되지도 않고 플레이에 방해만", `feature/remove-window-bumpers`)하고 README 드리프트(테스트 수·코드량·로드맵)를 정정했다 —
+둘 다 v0.8.3에 포함. `dist/MiniGolf.app`은 fa5db53 빌드(범퍼 제거 전), brew는 0.8.2. 사용자는 **공개를 염두**에 두고 있다(결정은 아님).
 
 **다음 세션 첫 일**
 1. 사용자 판정 수집(fa5db53 빌드로): 퍼팅 — 페이스가 공을 치고 공이 떨어져 나가는 게 보이는가 · 긴 홀 티샷이 벽에 안 걸리는가 ·
    걸음 속도 · 티 페그 · (선택) 무드 워크 과장 폭, 서프라이즈 3차 빈도·강도, 스프링클러 감쇠
 2. 판정 반영 후 **v0.8.3 릴리스**: Makefile VERSION 0.8.2→0.8.3 · CHANGELOG "미배포"→날짜 · `make zip` · `gh release create` · homebrew-tap
    cask(version·sha256) · tap→fetch→untap 검증 (v0.8.2 절차와 동일, 이 파일의 릴리스 항목 참조)
-3. 그 다음 백로그: Apple 공증(Developer 계정 필요) · 라이벌 스틱맨(대규모) · IDEAS 장기 후보. 새 아이디어는 IDEAS.md와 대조 후 진행
+3. **공개 준비**(사용자 "염두" — 착수 전 PLAN M5로 계획·승인): Apple 공증(Developer 계정 필요) · 영어 README/UI · 30초 영상 · 커뮤니티 게시.
+   2026-09-28 평가 근거: 스타 0·릴리스 다운로드 1~4회·조회 14일 13회, 미서명이라 Gatekeeper rejected, 한국어 전용
+4. 그 다음 백로그: 라이벌 스틱맨(대규모) · IDEAS 장기 후보. 새 아이디어는 IDEAS.md와 대조 후 진행. **체감 게이트**(2026-09-28 합의): 새 기능은
+   관찰 플래그 없이 한 라운드 플레이해서 알아채지 못하면 잘라낸다 — 기존 판정 "차이를 모르겠다" 계열 반복 방지
 
 **이번 세션(09-23~24) 주요 결정·교훈**
 - 포즈 과장은 채널별: 톱의 힙·척추·머리는 실루엣 규칙(역K)으로 클램프, 스타일 차이는 손·클럽·템포·트레이드마크에 (메모리 갱신)
@@ -250,7 +254,7 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 ## 실행·관찰
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
-플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-bumpers` `--demo-pickup` `--demo-trip`
+플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-pickup` `--demo-trip`
 `--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-turn` `--demo-mood M` `--demo-replan` `--demo-hour H` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
