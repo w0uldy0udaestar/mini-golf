@@ -629,8 +629,17 @@ public enum CourseGenerator {
         let holeX = teeX + dist
         let worldW = holeX + 45
 
-        let greenStart = holeX - rand.next(10, 15)
-        let greenEnd = holeX + rand.next(7, 11)
+        // 핀 위치 (M5-② 2026-09-28 판정 "코스가 단조롭다" — 핀이 늘 그린 가운데였다): 그린 길이 18~28m, 앞핀 25%(앞 가장자리 4~7m) ·
+        // 가운데 45% · 뒷핀 30%(뒤 가장자리 3~6m). 앞핀은 짧게 끊어 붙이고, 뒷핀은 넘기면 그린 뒤로 간다
+        let greenLen = rand.next(18, 28)
+        let pinRoll = rand.next()
+        let pinFromFront = pinRoll < 0.25 ? rand.next(4, 7) : pinRoll < 0.7 ? rand
+            .next(8, greenLen - 8) : greenLen - rand.next(
+                3,
+                6
+            )
+        let greenStart = holeX - pinFromFront
+        let greenEnd = greenStart + greenLen
         let apronStart = greenStart - rand.next(4, 7)
 
         // 티~에이프런 사이를 페어웨이/러프 랜덤 밴드로 채움
@@ -826,6 +835,24 @@ public enum CourseGenerator {
                 }
             }
         }
+        // 포대 그린 (M5-②): 시그니처 홀(산정 제외) 30% — 그린이 2~2.6m 솟고 앞 14m smoothstep 램프(최대 경사 ≤ 0.28 < 정착 0.3)는
+        // 짧은 어프로치를 되돌려 보낸다(에이프런 굴림 1.6 < 중력 성분 2.1). 그린 뒤는 기존 5m 블렌드로 내려간다(오버샷도 굴러 내린다)
+        let island = par == 3 && signature == .skyTee && waterRange == nil && rand
+            .next() < 0.25 // 아일랜드 그린 (아래) — 포대와 겹치지 않는다
+        if let sig = signature, sig != .summitGreen, sig != .canyon, !waterAtRampFoot, !island, rand.next() < 0.3 {
+            // 협곡은 제외(림 위 오르막 램프와 겹쳐 탈출·어프로치가 이중으로 어려워진다 — 봇 +0.38타 실측). 램프는 접근 지면(pFrom)에서 솟은 그린까지
+            // 하나의 smoothstep — 굴곡 위에 더하면 경사가 합쳐져 페어웨이 0.5를 넘는다. 총 상승(지형 차 + 포대) ≤ 3.6m → 최대 경사 0.39
+            let pFrom = max(0, gFrom - 14)
+            let e0 = elev[pFrom]
+            let podium = min(rand.next(2.0, 2.6), 3.6 - (elev[gFrom] - e0))
+            if podium >= 1 {
+                let e1 = elev[gFrom] + podium
+                for i in pFrom ... gTo where i < elev.count {
+                    let u = min(1, Double(i - pFrom) / Double(max(1, gFrom - pFrom)))
+                    elev[i] = i <= gFrom ? e0 + (e1 - e0) * (u * u * (3 - 2 * u)) : elev[i] + podium
+                }
+            }
+        }
         let trend: Double = elev[gTo] >= elev[gFrom] ? 1 : -1
         let gSlope = trend * rand.next(0.02, 0.06) // 2~6% 브레이크
         let gBase = elev[gFrom]
@@ -836,10 +863,66 @@ public enum CourseGenerator {
                 elev[i] = gBase + gSlope * Double(i - gFrom)
             }
         }
-        for k in 1 ... 5 { // 그린 뒤 러프와 자연 연결
+        // 2단 그린 (M5-②): 파4·5의 25%, 그린 22m 이상 — 뒤쪽 단이 0.6~1.0m 높고 턱은 6m smoothstep(최대 경사 0.15~0.25: 그린 정지 마찰 0.17 언저리라
+        // 턱 위에선 공이 굴러 내린다). 핀은 윗단 60%(턱을 넘겨 올려야 한다) / 아랫단 40%(넘기면 턱 위에서 굴러 돌아온다). 턱은 컵에서 3m 이상
+        if par >= 4, greenLen >= 22, rand.next() < 0.25 {
+            let tier = rand.next(0.6, 1.0) // 0.8~1.2는 봇 퍼팅이 턱을 못 넘겨 왕복 고착(3%) — 사람도 5.7~7.2 m/s 창이 좁다
+            let upperPin = rand.next() < 0.6
+            let lo = upperPin ? greenStart + 5 : holeX + 3
+            let hi = upperPin ? holeX - 9 : greenEnd - 9
+            if hi > lo {
+                let tierFrom = rand.next(lo, hi)
+                for i in Int(tierFrom) ... gTo where i < elev.count {
+                    let u = min(1, (Double(i) - tierFrom) / 6)
+                    elev[i] += tier * (u * u * (3 - 2 * u))
+                }
+            }
+        }
+        // 그린 뒤 러프와 자연 연결 — 길이는 낙차에 비례(경사 ≤ 0.28): 포대 그린(+2.6m)·높은 트레드 위 그린은 5m 고정이면 1m당 0.5~1.2 (M5-② 실측)
+        let backDrop = abs(elev[gTo] - elev[min(gTo + 6, elev.count - 1)])
+        let blendLen = min(24, max(5, Int(backDrop / 0.28) + 1))
+        for k in 1 ... blendLen {
             let ri = gTo + k
             if ri < elev.count {
-                elev[ri] = elev[gTo] * Double(5 - k) / 5 + elev[ri] * Double(k) / 5
+                elev[ri] = elev[gTo] * Double(blendLen - k) / Double(blendLen) + elev[ri] * Double(k) / Double(blendLen)
+            }
+        }
+
+        // 아일랜드 그린 (M5-②): 파3 절벽 티 홀의 25% — 그린 앞(에이프런 앞 4~16m)·뒤(그린 뒤 6~16m)가 물. 물 주변은 그린 높이의 평탄한
+        // 분지로 다듬고 둑은 5m smoothstep(경사 ≤ 0.29 — 급경사 정지 0.35·페어웨이 러프 규칙 0.5 안), 바깥 8m는 원래 지형으로 블렌드. waterRange는
+        // 앞뒤를 한 구간으로 묶어(드롭 규칙이 단일 구간 전제) 어느 쪽에 빠져도 앞 물가에 드롭한다. 겹치는 가드 벙커는 물로 대체된다
+        if island {
+            let front = (apronStart - 16) ... (apronStart - 4)
+            let back = (greenEnd + 6) ... min(greenEnd + 16, worldW - 3) // 둑(+3~+5)이 뒷핀(가장자리 3m)의 컵 주변 경사를 건드리지 않게
+            waterRange = front.lowerBound ... back.upperBound
+            let level = gBase, backLevel = elev[gTo]
+            let fa = Int(front.lowerBound), fb = Int(ceil(front.upperBound)), ba = Int(back.lowerBound),
+                bb = Int(ceil(back.upperBound))
+            func setBand(_ from: Int, _ to: Int, _ v: Double) {
+                for i in max(0, from) ... min(to, elev.count - 1) where from <= to {
+                    elev[i] = v
+                }
+            }
+            setBand(fa - 8, gFrom - 1, level)
+            setBand(gTo + 1, bb + 8, backLevel)
+            setBand(fa, fb, level - 1.2)
+            setBand(ba, bb, backLevel - 1.2)
+            for k in 1 ... 5 { // 둑 5m — 최대 경사 0.29 (급경사 정지 판정 0.35·러프 규칙 0.5 안)
+                let u = Double(k) / 6
+                let ss = u * u * (3 - 2 * u)
+                for (j, lv) in [(fa - k, level), (fb + k, level), (ba - k, backLevel), (bb + k, backLevel)]
+                    where j >= 0 && j < elev.count {
+                    elev[j] = lv - 1.2 * (1 - ss)
+                }
+            }
+            for k in 1 ... 8 { // 분지 바깥 → 원래 지형
+                let u = Double(k) / 9
+                for (j, lv) in [(fa - 8 - k, level), (bb + 8 + k, backLevel)] where j >= 0 && j < elev.count {
+                    elev[j] = lv + (elev[j] - lv) * u
+                }
+            }
+            for w in [front, back] {
+                segments = carve(segments, from: w.lowerBound, to: w.upperBound, type: .water)
             }
         }
 

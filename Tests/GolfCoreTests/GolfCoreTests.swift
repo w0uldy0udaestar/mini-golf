@@ -826,6 +826,49 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(ascending, 50, "오르막 절벽 샘플이 너무 적음 (\(ascending))")
     }
 
+    /// 핀 위치·그린 형태 변주 (M5-②): 40시드×9홀에서 앞핀·뒷핀·2단·포대·아일랜드가 충분히 나오고, 컵 주변은 여전히 평탄하다
+    func testPinAndGreenVariety() {
+        var front = 0, back = 0, tiered = 0, podium = 0, island = 0, holes = 0
+        for seed: UInt32 in 1 ... 40 {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                holes += 1
+                let d = h.holeX >= h.teeX ? 1.0 : -1.0
+                let gFront = d > 0 ? h.greenStart : h.greenEnd, gBack = d > 0 ? h.greenEnd : h.greenStart
+                let frac = abs(h.holeX - gFront) / abs(gBack - gFront)
+                if frac < 0.3 {
+                    front += 1
+                }
+                if frac > 0.7 {
+                    back += 1
+                }
+                XCTAssertLessThan(abs(h.slope(at: h.holeX - 2)), 0.09, "컵 앞이 가파름 seed \(seed)")
+                XCTAssertLessThan(abs(h.slope(at: h.holeX + 2)), 0.09, "컵 뒤가 가파름 seed \(seed)")
+                var maxOnGreen = 0.0 // 턱(0.15~0.25) vs 브레이크(≤ 0.06)
+                var gx = min(gFront, gBack) + 1
+                while gx < max(gFront, gBack) - 1 {
+                    maxOnGreen = max(maxOnGreen, abs(h.slope(at: gx)))
+                    gx += 1
+                }
+                if maxOnGreen >= 0.12 {
+                    tiered += 1
+                }
+                if h.ground(at: gFront) - h.ground(at: gFront - d * 22) >= 1.5 {
+                    podium += 1
+                }
+                if h.par == 3, h.surface(at: gFront - d * 12) == .water,
+                   h.surface(at: gBack + d * 10) == .water {
+                    island += 1
+                }
+            }
+        }
+        print("GREENS front \(front) back \(back) tiered \(tiered) podium \(podium) island \(island) / \(holes)")
+        XCTAssertGreaterThan(Double(front) / Double(holes), 0.15, "앞핀이 적음 (\(front))")
+        XCTAssertGreaterThan(Double(back) / Double(holes), 0.15, "뒷핀이 적음 (\(back))")
+        XCTAssertGreaterThan(tiered, 20, "2단 그린이 적음 (\(tiered))")
+        XCTAssertGreaterThan(podium, 30, "포대 그린이 적음 (\(podium))")
+        XCTAssertGreaterThan(island, 3, "아일랜드 그린이 적음 (\(island))")
+    }
+
     // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──
 
     func testBallRestsInSteepValley() {
