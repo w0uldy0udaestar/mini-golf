@@ -1,0 +1,40 @@
+# CI — push·PR마다 로컬 검증 루프와 같은 세 단계 (swift build → swiftformat --lint → swift test)
+# 러너 macos-26: 기본 Xcode 26.6 (로컬과 동일). SwiftFormat은 이미지 기본(0.63.0) 대신 로컬과 같은 0.62.1 바이너리를 고정
+name: CI
+
+on:
+  push:
+    branches: ['**'] # feature/fix 브랜치 push(원격 백업)에서도 — 머지 전에 신호가 온다 (리뷰 반영)
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }} # main은 커밋마다 판정을 남긴다
+
+jobs:
+  build-lint-test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: SwiftFormat lint (0.62.1 pinned)
+        run: |
+          curl -fsSL --retry 3 -o /tmp/swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat.zip
+          unzip -q -o /tmp/swiftformat.zip -d /tmp/swiftformat
+          chmod +x /tmp/swiftformat/swiftformat
+          /tmp/swiftformat/swiftformat --version
+          /tmp/swiftformat/swiftformat --lint .
+
+      - name: Test
+        run: swift test

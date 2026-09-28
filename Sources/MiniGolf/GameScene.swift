@@ -21,37 +21,14 @@ final class GameScene: SKScene {
     private var acc = 0.0
     private let timeScale = 2.5
     var isGamePaused = false
-    var demoMode = false // --demo: 조준에서 자동 스윙 반복 — 모션 관찰용 (디버그 전용)
-    var demoWallForce = false // --demo-wall: 매 홀을 벽 옆에서 시작 — 벽 스탠스 관찰용
-    var demoCardPreview = false // --demo-card: 스코어카드 레이아웃 즉시 표시 (디버그 전용)
-    var demoNoClamp = false // --no-wall-clamp: 벽 경성 클램프 끄기 — 침범 재현·검증 전용
-    var demoSeed: UInt32? // --seed N: 코스 시드 고정 — 특정 지형·장애물 시각 검증용 (디버그 전용)
-    var demoTripForce = false // --demo-trip: 긴 걸음마다 넘어지기 강제 — 모션 관찰용 (디버그 전용)
-    var demoIdleForce = false // --demo-idle: 조준을 25s 유지 — 아이들 잔동작 관찰용 (디버그 전용)
-    var demoSetbackForce = false // --demo-setback: 모든 샷을 좌절 계열로 — 좌절 반응 관찰용
-    var demoGreetForce = false // --demo-greet: 조준 3s 뒤 일시정지→1s 뒤 재개, 인사 임계 0 — 포커스 복귀 인사 관찰용
+    var demo = DemoOptions() // 관찰·디버그 플래그 (DemoOptions.swift — main.swift가 실행 인자에서 채운다, 실플레이는 기본값)
     var demoGreeted = false
-    var demoMotionShowcase = false // --demo-motions: 모션 37종 순서 시연 — 카탈로그 캡처용 (디버그 전용)
-    var demoShowpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환 (카탈로그 캡처용)
-    var demoSurpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (관찰용)
-    var demoPickupForce = false // --demo-pickup: 컵 앞 시작 — 공 줍기 의식 관찰
-    var demoSettleForce = false // --demo-settle: 첫 샷을 홀 쪽 라이저 상단(러프, |경사| > 0.42)에 떨어뜨려 정착 굴림 관찰
-    var demoPower: Double? // --demo-power P: 봇 파워 고정 (실플레이 풀파워 조건 재현용) — 조준 프리뷰에도 적용
-    var demoStartHole = 1 // --demo-hole N: 새 라운드를 N번 홀부터 (미러 홀·특정 아키타입 관찰)
-    var demoBallX: Double? // --demo-ball X: 홀 시작 공 위치(m) — 특정 라이·거리의 조준 자세 관찰
-    var demoTurnForce = false // --demo-turn: 첫 샷을 뒤로 22m 떨어뜨려 걷기 방향 반전(제자리 돌기) 관찰
-    var demoReplanForce = false // --demo-replan: 걷는 도중 공을 옮긴다 (1차 12m 앞 → 연속 재계획, 2차 25m 뒤 → 도착 후 재출발+턴)
     private var demoReplanCount = 0
-    var demoGIRForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출 (관찰용)
     // 공 줍기 의식 (2026-09-17 사용자 요청 "공이 튀어오르지 말고 손에 들게"): 공이 트레일 손을 따라간다
     var ballHeld = false
     var pickupVariant = 0 // 0 = 툭 던져 받기 · 1 = 주머니에 넣기
     var pickupCatchPlayed = false
-    var demoTrademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그 — 트레이드마크 관찰용
-    var demoClubId: String? // --club ID: 홀 시작 클럽 지정(DR·7I·SW·PT…) — 클럽별 어드레스 관찰용
-    var demoBackdrop = false // --demo-bg: 불투명 배경 (캡처 판독용)
     // ── 서프라이즈 상태 (Surprises.swift) ──
-    var demoSurpriseKind: SurpriseKind? // --surprise KIND: 해당 훅마다 그 종류 강제 (관찰용)
     var surpriseCounts: [SurpriseKind: Int] = [:] // 라운드당 종류별 발동 수 (등급 상한)
     var preShot = (x: CourseGenerator.teeX, strokes: 0, remain: 0.0) // 멀리건용 직전 샷 스냅샷
     var gustWind: Double? // 돌풍 중 바람 덮어쓰기 (m/s) — Ballistics.step에 전달
@@ -59,8 +36,6 @@ final class GameScene: SKScene {
     var napping = false // 낮잠 중 — 키 입력은 깨우기로 소비
     var napIdle = Double.infinity // 마지막 입력 뒤 이만큼 방치하면 낮잠 (초, 조준당 1회)
     var lastInputAim = 0.0 // 조준 중 마지막 키 입력 시각 (aimTime)
-    var demoRestartIn: Double? // --demo-restart-in T: 서프라이즈 시작 T초 뒤 새 라운드 (인터럽트 정리 관찰)
-    var demoRestartAfterHoled: Double? // --demo-restart-after-holed T: 첫 홀아웃 T초 뒤 새 라운드 (홀 전환 타이머 인터럽트 관찰)
     private var demoRestartedAfterHoled = false
     var napStart = 0.0
     var napNode: SKNode?
@@ -218,7 +193,6 @@ final class GameScene: SKScene {
     var bunkerHintShown = false // 벙커 탈출 힌트는 홀당 한 번 (QA 2026-08-15 "탈출 실패 루프")
     var walkMood = WalkMood.neutral // 무드 워크: 다음 걷기의 감정
     var walkMoodLeft = 0 // 남은 걷기 횟수 (버디·더블보기·기권 2, 온그린·워터·좌절 1)
-    var demoMood: WalkMood? // --demo-mood M: 모든 걷기에 무드 강제 (관찰)
     var shotLipped = false // 이번 샷에 립아웃이 있었나 (정지 시 좌절 판정)
     var birdieStreak = 0 // 연속 버디 이상 — 2회부터 홀아웃 토스트에 표시
     var pausedAt: Date? // 5분 이상 비웠다 돌아오면 손 흔들기
@@ -288,7 +262,7 @@ final class GameScene: SKScene {
 
     override func didMove(to _: SKView) {
         backgroundColor = .clear // ⚠️ skView.backgroundColor는 설정 금지
-        if demoBackdrop { // 관찰 전용: 데스크탑 위 겹침 없이 캡처하기 위한 불투명 배경 (실플레이 경로 아님)
+        if demo.backdrop { // 관찰 전용: 데스크탑 위 겹침 없이 캡처하기 위한 불투명 배경 (실플레이 경로 아님)
             let bg = SKShapeNode(rect: CGRect(x: -100, y: -100, width: size.width + 200, height: size.height + 200))
             bg.fillColor = NSColor(white: 0.16, alpha: 1)
             bg.strokeColor = .clear
@@ -349,7 +323,7 @@ final class GameScene: SKScene {
         applyContrastMode()
         newRound()
         didSetUp = true
-        if demoCardPreview { // 스코어카드 레이아웃 검증용 고정 샘플 (이글·버디·파·보기·더블·기권 포함)
+        if demo.cardPreview { // 스코어카드 레이아웃 검증용 고정 샘플 (이글·버디·파·보기·더블·기권 포함)
             let sample: [(par: Int, strokes: Int, gaveUp: Bool)] = [
                 (4, 4, false), (3, 2, false), (4, 5, false), (5, 3, false), (4, 4, false),
                 (3, 6, false), (4, 12, true), (5, 5, false), (4, 3, false),
@@ -403,10 +377,10 @@ final class GameScene: SKScene {
 
     func newRound() {
         course = CourseGenerator.makeCourse(
-            seed: demoSeed
+            seed: demo.seed
                 ?? UInt32(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 2_000_000_000))
         )
-        holeIdx = demoMode ? min(8, max(0, demoStartHole - 1)) : 0
+        holeIdx = demo.active ? min(8, max(0, demo.startHole - 1)) : 0
         results = []
         roundHadWater = false
         setbackStreak = 0
@@ -425,20 +399,20 @@ final class GameScene: SKScene {
         // 티샷 기본 클럽: 파4·5 드라이버, 파3 7번 아이언 (관례 — 2026-08-15 사용자 요청. ←→ 변경 자유)
         let teeClub = hole.par == 3 ? "7I" : "DR"
         clubIdx = ClubTable.all.firstIndex { $0.id == teeClub } ?? 0
-        if let id = demoClubId, let i = ClubTable.all.firstIndex(where: { $0.id == id }) {
+        if let id = demo.clubId, let i = ClubTable.all.firstIndex(where: { $0.id == id }) {
             clubIdx = i // 관찰용 클럽 고정
         }
         renderBallFwd = profile.ballFwd // 홀 시작 클럽의 스탠스로 즉시 — 퍼터(6)→드라이버(20) 활강이 티 의식 발 기준점을 미끄러뜨린다 (리뷰)
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
-        if demoPickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
+        if demo.pickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
             let x = hole.holeX - 1.2 * (hole.holeX >= hole.teeX ? 1 : -1)
             ball = BallState(x: x, y: hole.ground(at: x))
         }
-        if let x = demoBallX { // 공 위치 고정 관찰 (라이·거리별 조준 자세)
+        if let x = demo.ballX { // 공 위치 고정 관찰 (라이·거리별 조준 자세)
             let cx = min(max(x, 1), hole.worldW - 1)
             ball = BallState(x: cx, y: hole.ground(at: cx))
         }
-        if demoWallForce { // 벽 스탠스 관찰: 릴리프 하한(46px) 직후의 최소 이격 케이스로 시작
+        if demo.wallForce { // 벽 스탠스 관찰: 릴리프 하한(46px) 직후의 최소 이격 케이스로 시작
             let m = 48 / Double(pxPerM)
             let x = hole.holeX > hole.teeX ? m : hole.worldW - m
             ball = BallState(x: x, y: hole.ground(at: x))
@@ -458,12 +432,12 @@ final class GameScene: SKScene {
             "HOLE \(holeIdx + 1) par \(hole.par) \(hole.signature?.rawValue ?? "plain") tee \(Int(hole.teeX)) cup \(Int(hole.holeX)) "
                 + "green \(Int(hole.greenStart))-\(Int(hole.greenEnd))"
         )
-        if demoMode, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
+        if demo.active, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
             print("SIGNATURE \(sig.rawValue)")
             fflush(stdout)
         }
         // 티 꽂기 의식 — 모션 카탈로그 캡처 모드에선 생략 (걷기 관찰이 목적)
-        if !demoMotionShowcase, !demoCardPreview {
+        if !demo.motionShowcase, !demo.cardPreview {
             startRitual(.teePlace)
         } else {
             enterAim()
@@ -518,7 +492,7 @@ final class GameScene: SKScene {
             g.swingTo += shift
             return g
         }
-        if demoMode {
+        if demo.active {
             print(String(format: "REPLAN ahead to %.1f (남은 %.1fm)", to, abs(to - stickX)))
             fflush(stdout)
         }
@@ -527,7 +501,7 @@ final class GameScene: SKScene {
 
     /// --demo-replan: 걷기 1.5s 지점에서 공을 옮긴다 — 1차 12m 앞(연속 재계획), 2차 25m 뒤(도착 후 재출발·제자리 돌기)
     private func demoReplanTick(_ w: inout WalkAnim) {
-        guard demoReplanForce, !w.replanFired, demoReplanCount < 2, w.t - w.relax - w.pausedTime > 1.5 else { return }
+        guard demo.replanForce, !w.replanFired, demoReplanCount < 2, w.t - w.relax - w.pausedTime > 1.5 else { return }
         w.replanFired = true
         let sgn: Double = w.toX >= w.fromX ? 1 : -1
         let ahead = demoReplanCount == 0
@@ -647,7 +621,7 @@ final class GameScene: SKScene {
     private func enterAim() {
         mode = .aim
         aimTime = 0
-        if demoMode, let p = demoPower {
+        if demo.active, let p = demo.power {
             heightPct = p // 관찰: 조준 프리뷰(백스윙 높이)도 고정 파워로
         }
         reactionKind = .none
@@ -655,7 +629,7 @@ final class GameScene: SKScene {
         napNode?.removeFromParent()
         napNode = nil
         lastInputAim = 0
-        napIdle = demoSurpriseKind == .nap || demoSurpriseForce ? 0.8 : Double
+        napIdle = demo.surpriseKind == .nap || demo.surpriseForce ? 0.8 : Double
             .random(in: 12 ... 20) // 롤은 발동 시점에 (tickNap)
         idleKind = 0
         idleNextAt = Double.random(in: 5 ... 9)
@@ -665,13 +639,13 @@ final class GameScene: SKScene {
         renderRig.shiftX(dir * Double(px(stickX) - px(ball.x)))
         stickX = ball.x
         // 그린에 올라오면 퍼터로 자동 전환 (관례 — 이후 ←→로 자유 변경 가능)
-        if strokes > 0 || demoPickupForce, hole.surface(at: ball.x) == .green, !club.isPutter { // 관찰 모드는 첫 샷도 퍼터
+        if strokes > 0 || demo.pickupForce, hole.surface(at: ball.x) == .green, !club.isPutter { // 관찰 모드는 첫 샷도 퍼터
             clubIdx = ClubTable.all.firstIndex { $0.isPutter } ?? clubIdx
         }
         renderBallFwd = profile.ballFwd // 걷기 도착 자리가 이 클럽의 스탠스로 계획됐으므로 스무딩 없이 맞춘다
         presetPutterHeight()
         updateHUD()
-        if demoMode { // 프레임 캡처와 대조할 스탠스 계측 (관찰용): 경사·라이·근처 장애물
+        if demo.active { // 프레임 캡처와 대조할 스탠스 계측 (관찰용): 경사·라이·근처 장애물
             let s = hole.slope(at: ball.x)
             print(String(
                 format: "AIM x %.1f lie %@ slope %+.3f tilt %+.1f° obs %d",
@@ -981,7 +955,7 @@ final class GameScene: SKScene {
         )
         let blend = smoothstep(min(1, max(0, (ft - 0.1) / 0.35)))
         let spin = 2 * Double.pi * smoothstep(min(1, max(0, (ft - 0.45) / 0.45)))
-        if demoMode, ft >= 0.45, !twirlLogged { // 스윙당 한 번
+        if demo.active, ft >= 0.45, !twirlLogged { // 스윙당 한 번
             twirlLogged = true
             print(String(format: "TRADEMARK twirl ft %.2f", ft))
             fflush(stdout)
@@ -1007,7 +981,7 @@ final class GameScene: SKScene {
         rig.foot2.y += lift
         rig.knee1.y += lift
         rig.knee2.y += lift
-        if demoMode, u >= 0.5, !jumpLogged { // 스윙당 한 번 (프레임 간격 0.064가 좁은 창을 건너뛴다)
+        if demo.active, u >= 0.5, !jumpLogged { // 스윙당 한 번 (프레임 간격 0.064가 좁은 창을 건너뛴다)
             jumpLogged = true
             print(String(format: "TRADEMARK jump lift %.1f", lift))
             fflush(stdout)
@@ -1047,7 +1021,7 @@ final class GameScene: SKScene {
             rig.hip.y -= 2 * punch // 무릎을 굽히며
             rig.headDx += 3 * punch
             rig.headDy -= 1.5 * punch
-            if demoTrademarkForce { // 계측: 어퍼컷 위상 (30Hz 덤프와 대조)
+            if demo.trademarkForce { // 계측: 어퍼컷 위상 (30Hz 덤프와 대조)
                 print(String(format: "UPPER t %.2f u %.2f c %.2f cock %.2f punch %.2f n %.0f", t, u, c, cock, punch, n))
                 fflush(stdout)
             }
@@ -1153,7 +1127,7 @@ final class GameScene: SKScene {
     /// (도착 클럽은 enterAim의 자동 퍼터 전환과 같은 조건으로 미리 안다 — 도착 자리를 그 스탠스로)
     private func walkTarget() -> (to: Double, dir: Double) {
         let arrivalDir: Double = hole.holeX >= ball.x ? 1 : -1
-        let willPutt = (strokes > 0 || demoPickupForce) && hole.surface(at: ball.x) == .green
+        let willPutt = (strokes > 0 || demo.pickupForce) && hole.surface(at: ball.x) == .green
         let arrivalFwd = willPutt ? SwingProfile.profile(for: .putter, style: swingStyle).ballFwd : profile
             .ballFwd // 스타일별 퍼터 스탠스
         return (ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM), arrivalDir)
@@ -1185,7 +1159,7 @@ final class GameScene: SKScene {
             hardness /= Double(n + 1)
         }
         // 무드 워크: 들뜬 걸음은 조금 빠르고, 처진 걸음은 터덜터덜 (거리 무관 배율)
-        let mood = demoMood ?? (walkMoodLeft > 0 ? walkMood : .neutral)
+        let mood = demo.mood ?? (walkMoodLeft > 0 ? walkMood : .neutral)
         if walkMoodLeft > 0 {
             walkMoodLeft -= 1
         }
@@ -1210,23 +1184,23 @@ final class GameScene: SKScene {
             anim.relaxShift = renderBallFwd + 5 // 여운(직립) 포즈를 몸 원점에 (공 원점 포즈는 −(ballFwd+5)에 선다)
         }
         anim.mood = mood
-        if demoMode, mood != .neutral {
+        if demo.active, mood != .neutral {
             print("MOOD \(mood.rawValue) dur \(String(format: "%.1f", dur))")
             fflush(stdout)
         }
         // 아주 가끔 넘어진다 (재미): 기본 1%, 험한 길 2% — 라운드에 한 번 볼까 말까
         // (초기 3~6%는 실플레이에서 "너무 자주"로 판정 — 2026-08-15)
         if anim.dur > 5.0,
-           demoTripForce || Double.random(in: 0 ..< 1) < 0.01 + 0.01 * min(1, hardness * 2) {
+           demo.tripForce || Double.random(in: 0 ..< 1) < 0.01 + 0.01 * min(1, hardness * 2) {
             anim.tripAt = anim.relax + Double.random(in: 1.0 ... (anim.dur - 3.5))
         }
         // 쇼피스 밈 모션 (2026-08-20): 걷기가 넉넉할 때 8% — 트립과 겹치지 않게 (개그 과밀 방지)
         if anim.tripAt == nil, anim.dur > 6.0,
-           demoShowpieceForce || Double.random(in: 0 ..< 1) < 0.08 {
-            let kind = demoShowpieceForce
+           demo.showpieceForce || Double.random(in: 0 ..< 1) < 0.08 {
+            let kind = demo.showpieceForce
                 ? ShowpieceKind.allCases[showpieceCursor % ShowpieceKind.allCases.count]
                 : ShowpieceKind.allCases.randomElement()!
-            if demoShowpieceForce {
+            if demo.showpieceForce {
                 showpieceCursor += 1
             }
             let latest = anim.relax + anim.dur - kind.duration - 1.2
@@ -1236,11 +1210,11 @@ final class GameScene: SKScene {
             }
         }
         // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 37종 모션을 겹치지 않게 흩뿌린다 (무드 관찰 --demo-mood에서는 끈다 — 계측 오염)
-        if demoMood == nil, anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
+        if demo.mood == nil, anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
         var t = anim.relax + 0.7
-        while demoMood == nil, t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 5 {
+        while demo.mood == nil, t < anim.relax + anim.dur - 1.2, anim.flavorEvents.count < 5 {
             guard Double.random(in: 0 ..< 1) < 0.5 else {
                 t += 1.1
                 continue
@@ -1266,7 +1240,7 @@ final class GameScene: SKScene {
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
             t += dur + Double.random(in: 0.8 ... 2.2)
         }
-        if demoMotionShowcase { // 카탈로그 캡처: 랜덤 대신 37종을 커서 순서로, 트립·어깨 캐리 없이
+        if demo.motionShowcase { // 카탈로그 캡처: 랜덤 대신 37종을 커서 순서로, 트립·어깨 캐리 없이
             anim.flavorEvents = []
             anim.shoulderRange = nil
             anim.tripAt = nil
@@ -1284,7 +1258,7 @@ final class GameScene: SKScene {
                 fflush(stdout)
             }
         }
-        if demoMode, !anim.flavorEvents.isEmpty || anim.tripAt != nil { // 캡처 대조용 계측 (관찰용)
+        if demo.active, !anim.flavorEvents.isEmpty || anim.tripAt != nil { // 캡처 대조용 계측 (관찰용)
             let list = anim.flavorEvents
                 .map { "\($0.kind)@\(String(format: "%.1f", $0.t0))" }
                 .joined(separator: " ")
@@ -1322,7 +1296,7 @@ final class GameScene: SKScene {
         let mishit = club.isPutter ? 0 : risk * gauss
         // 굿샷 판정 (타이거 트월): 실제처럼 공이 뜨자마자 스트라이크 품질로 — 미스힛 작고 반 이상 파워. 퍼터 제외
         // 파워 문턱 0.45 → 0.3: 트월이 세컨샷·어프로치에서도 나오게 (2026-09-23 플레이 판정 "차이가 많이 나 보이지 않음")
-        lastShotGood = !club.isPutter && (demoTrademarkForce || (heightPct >= 0.3 && abs(mishit) < 0.12))
+        lastShotGood = !club.isPutter && (demo.trademarkForce || (heightPct >= 0.3 && abs(mishit) < 0.12))
         // 벽·나무 근접 = 펀치샷: 파워는 그대로, 낮은 탄도·적은 스핀으로 (컴팩트 폼의 물리적 귀결)
         // 경사 라이는 스탠스 기울기와 같은 비율(0.7)만 로프트로 전달 — 물리·애니메이션 정합
         let slope = club.isPutter ? 0 : hole.slope(at: ball.x) * slopeTiltRatio
@@ -1362,7 +1336,7 @@ final class GameScene: SKScene {
             ballNode.run(.group([.scaleX(to: ks, duration: 0.12), .scaleY(to: ks, duration: 0.12)]))
             FX.contactTick(on: self, at: CGPoint(x: px(ball.x), y: py(ball.y) + 5.5))
             puttKick = (lastTime, 4 + 3 * heightPct)
-            if demoMode { // 임팩트 순간 헤드 팁(로컬, 공 = 원점) — 접촉 타이밍 계측
+            if demo.active { // 임팩트 순간 헤드 팁(로컬, 공 = 원점) — 접촉 타이밍 계측
                 let tipX = Double(renderRig.grip.x) + sin(renderRig.clubPhi) * renderRig.clubLen
                 print(String(format: "PUTT impact tip %.1f phi %.2f v0 %.2f", tipX, renderRig.clubPhi, ball.vx))
                 fflush(stdout)
@@ -1387,12 +1361,12 @@ final class GameScene: SKScene {
             t.alpha = 1
         }
         mode = .motion
-        if demoTurnForce, strokes == 1 { // 제자리 돌기 관찰: 공이 뒤로 떨어졌다
+        if demo.turnForce, strokes == 1 { // 제자리 돌기 관찰: 공이 뒤로 떨어졌다
             let x = min(max(stickX - dir * 22, 2), hole.worldW - 2)
             ball = BallState(x: x, y: hole.ground(at: x))
             ball.phase = .roll
         }
-        if demoSettleForce, strokes == 1, let x = demoSteepRimSpot() { // 정착 굴림 관찰: 마찰로 설 수 있는 급경사에 '떨어진' 공
+        if demo.settleForce, strokes == 1, let x = demoSteepRimSpot() { // 정착 굴림 관찰: 마찰로 설 수 있는 급경사에 '떨어진' 공
             ball = BallState(x: x, y: hole.ground(at: x))
             ball.phase = .roll // 다음 스텝에 정지 판정 → settleOffSteepSlope → SETTLE 로그·굴림
         }
@@ -1451,10 +1425,10 @@ final class GameScene: SKScene {
         if diff <= -2 { // 이글·홀인원: 홀인음 뒤에 상승 차임이 얹힌다
             run(.sequence([.wait(forDuration: 0.35), .run { SoundKit.shared.chime() }]))
         }
-        if demoMode {
+        if demo.active {
             print("HOLED diff \(diff)")
             fflush(stdout)
-            if let t = demoRestartAfterHoled, !demoRestartedAfterHoled { // 홀 전환 타이머 위에 R을 얹는다 (관찰)
+            if let t = demo.restartAfterHoled, !demoRestartedAfterHoled { // 홀 전환 타이머 위에 R을 얹는다 (관찰)
                 demoRestartedAfterHoled = true
                 let n = SKNode()
                 addChild(n)
@@ -1475,7 +1449,7 @@ final class GameScene: SKScene {
         recordHoleOut(diff: diff)
         // 컵 근처(퍼팅·짧은 어프로치 홀인)면 스코어 리액션 후 공 줍기 의식 — 멀면 기존 흐름
         // 미터 기준 (픽셀은 홀 전장에 따라 스케일이 달라 긴 홀에서 오판 — 2026-08-29 실측)
-        let nearCup = abs(stickX - hole.holeX) < 9 || demoPickupForce
+        let nearCup = abs(stickX - hole.holeX) < 9 || demo.pickupForce
         if nearCup {
             afterHoleFlow(1.3) { [weak self] in self?.startRitual(.ballPickup) }
         } else {
@@ -1504,7 +1478,7 @@ final class GameScene: SKScene {
     }
 
     private func recordHoleOut(diff: Int) {
-        guard !demoMode else { return } // 기록은 실플레이 전용
+        guard !demo.active else { return } // 기록은 실플레이 전용
         var r = Records.shared
         var earned: [Badge] = []
         r.holesPlayed += 1
@@ -1543,7 +1517,7 @@ final class GameScene: SKScene {
     }
 
     private func recordRoundEnd(total: Int) {
-        guard !demoMode else { return } // 기록은 실플레이 전용
+        guard !demo.active else { return } // 기록은 실플레이 전용
         var r = Records.shared
         var earned: [Badge] = []
         r.roundsCompleted += 1
@@ -1615,7 +1589,7 @@ final class GameScene: SKScene {
         walkMood = .sad // 드롭까지 터덜터덜
         walkMoodLeft = 1
         roundHadWater = true
-        if !demoMode {
+        if !demo.active {
             Records.shared.waterBalls += 1
             Records.shared.save()
         }
@@ -1651,7 +1625,7 @@ final class GameScene: SKScene {
     /// 파4 원온·파5 투온만 — 원래 어려운 것이라 값이 있다 (파3 원온은 당연해서 제외, 2026-09-17 사용자 결정)
     func greenChanceLabel() -> String? {
         guard hole.surface(at: ball.x) == .green, hole.par >= 4 else { return nil }
-        if demoGIRForce {
+        if demo.girForce {
             return hole.par == 4 ? "원온!" : "투온!"
         }
         if hole.par == 4, strokes == 1 {
@@ -1693,7 +1667,7 @@ final class GameScene: SKScene {
             }
         }
         afterSurprise(1.8) { [weak self] in self?.finishSurprise() }
-        if demoMode {
+        if demo.active {
             print("GIR \(label) par \(hole.par) strokes \(strokes)")
             fflush(stdout)
         }
@@ -1710,7 +1684,7 @@ final class GameScene: SKScene {
             toast("휴…", sub: reason)
         }
         afterSurprise(1.6) { [weak self] in self?.finishSurprise() }
-        if demoMode {
+        if demo.active {
             print("FRUSTRATION \(reason ?? "water")")
             fflush(stdout)
         }
@@ -1778,10 +1752,10 @@ final class GameScene: SKScene {
         } else if let t = pausedAt { // 포커스 복귀 인사: 오래 비웠다 돌아오면 손을 흔든다 (QA P1 재미 3). 조준 중에만 — 반응이 그려지는 모드
             pausedAt = nil
             let away = Date().timeIntervalSince(t)
-            if mode == .aim, away >= (demoGreetForce ? 0 : 300) {
+            if mode == .aim, away >= (demo.greetForce ? 0 : 300) {
                 react(.shoo)
                 toast("어서 와", sub: nil)
-                if demoMode {
+                if demo.active {
                     print(String(format: "GREET away %.0fs", away))
                     fflush(stdout)
                 }
@@ -2104,21 +2078,21 @@ final class GameScene: SKScene {
         lastTime = currentTime
         guard !isGamePaused else { return }
 
-        if demoMode { // 자동 플레이: 조준 1.2s 후 스윙, 라운드 끝나면 새 라운드
+        if demo.active { // 자동 플레이: 조준 1.2s 후 스윙, 라운드 끝나면 새 라운드
             if mode == .aim {
-                if demoWallForce {
+                if demo.wallForce {
                     heightPct = 0.95 // 벽 관찰: 조준 내내 풀 백스윙 프리뷰 유지 (최악 케이스 상시 노출)
                 }
                 demoWait += dt
                 // 아이들 관찰 모드는 조준을 길게 유지 · 캐디 건네기는 기다린다 (Surprises3)
-                if !napping, !caddieHoldsAim, demoWait > (demoIdleForce ? 25 : 1.2) {
+                if !napping, !caddieHoldsAim, demoWait > (demo.idleForce ? 25 : 1.2) {
                     demoWait = 0
                     // 벽 관찰 모드는 최악 케이스(풀 백스윙)로
-                    if let p = demoPower {
+                    if let p = demo.power {
                         heightPct = p // 관찰용 파워 고정
-                    } else if demoWallForce {
+                    } else if demo.wallForce {
                         heightPct = Double.random(in: 0.9 ... 1.0)
-                    } else if !(demoPickupForce && club.isPutter) { // 줍기 관찰: 거리 프리셋 퍼팅 그대로 (탭인)
+                    } else if !(demo.pickupForce && club.isPutter) { // 줍기 관찰: 거리 프리셋 퍼팅 그대로 (탭인)
                         heightPct = Double.random(in: 0.5 ... 0.85)
                     }
                     startSwing()
@@ -2169,7 +2143,7 @@ final class GameScene: SKScene {
             if var tp = w.turn, w.t >= tp.start {
                 if !tp.started {
                     tp.started = true
-                    if demoMode {
+                    if demo.active {
                         print(String(format: "TURN start x %.0f dir %d", Double(px(stickX)), Int(dir)))
                         fflush(stdout)
                     }
@@ -2177,7 +2151,7 @@ final class GameScene: SKScene {
                 if !tp.flipped, w.t >= tp.start + tp.dur * 0.5 { // 가장 좁은 실루엣·무릎 거의 폄 — 여기서 미러·발 교환
                     tp.flipped = true
                     setFacing(tp.newDir)
-                    if demoMode {
+                    if demo.active {
                         print("TURN flip")
                         fflush(stdout)
                     }
@@ -2246,7 +2220,7 @@ final class GameScene: SKScene {
                 // 유효 속도 = 프로파일의 해석 도함수 × (1 - freeze) — 위치와 게이트가 같은 비율로 감속·재가속
                 let vInst = (1 - freeze) * w.profile.velocity(at: tw)
                 w.vPx = vInst * Double(pxPerM)
-                if demoMode, Int(tw * 10) != Int((tw - dt) * 10) { // 속도 프로파일 계측 (0.1초 간격)
+                if demo.active, Int(tw * 10) != Int((tw - dt) * 10) { // 속도 프로파일 계측 (0.1초 간격)
                     print(String(format: "WALKV %.1f %.1f %.1f", tw, abs(stickX - w.fromX) * Double(pxPerM), w.vPx))
                 }
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
@@ -2318,13 +2292,13 @@ final class GameScene: SKScene {
                     let tgt = walkTarget() // 저장값 대신 지금 값 — 핀 이동·공 이동(서프라이즈) 뒤에도 맞는 방향·자리로
                     if abs(tgt.to - stickX) > 0.5 { // 도착해 보니 공이 없다 — 이 자리에서 다시 걷는다
                         rewalk = true
-                        if demoMode {
+                        if demo.active {
                             print(String(format: "REWALK from %.1f to %.1f", stickX, tgt.to))
                             fflush(stdout)
                         }
                     } else if tgt.dir != dir { // 도착 턴: 조준 방향으로 제자리 돌기 뒤 조준
                         w.arrivalTurn = WalkAnim.TurnPlan(start: w.t, dur: 0.65, newDir: tgt.dir, atBody: true)
-                        if demoMode {
+                        if demo.active {
                             print(String(format: "TURN arrival x %.0f dir %d", Double(px(stickX)), Int(dir)))
                             fflush(stdout)
                         }
@@ -2337,7 +2311,7 @@ final class GameScene: SKScene {
                     if !tp.flipped, w.t >= tp.start + tp.dur * 0.5 {
                         tp.flipped = true
                         setFacing(tp.newDir)
-                        if demoMode {
+                        if demo.active {
                             print("TURN arrival flip")
                             fflush(stdout)
                         }
@@ -2389,7 +2363,7 @@ final class GameScene: SKScene {
                     let d = abs(ball.x - prevX)
                     settledFrom = prevX
                     settleRoll = (prevX, ball.x, 0, min(0.8, 0.2 + 0.035 * d))
-                    if demoMode {
+                    if demo.active {
                         print(String(format: "SETTLE %.1f→%.1f %.1fm", prevX, ball.x, d))
                         fflush(stdout)
                     }
@@ -2445,7 +2419,7 @@ final class GameScene: SKScene {
                         ball.y = hole.ground(at: ball.x)
                     }
                     let inBunker = hole.surface(at: ball.x) == .bunker
-                    let frustrated = noteSetback(demoSetbackForce || inBunker || shotLipped)
+                    let frustrated = noteSetback(demo.setbackForce || inBunker || shotLipped)
                     PlayLog.note(String(
                         format: "REST strokes %d x %.1f lie %@ label %@", strokes, ball.x,
                         "\(hole.surface(at: ball.x))",
@@ -2503,7 +2477,7 @@ final class GameScene: SKScene {
             tickNap() // 낮잠 (조준 방치 훅)
         }
         updateSurprises(dt: dt, currentTime: currentTime)
-        if demoGreetForce, !demoGreeted, mode == .aim, aimTime > 3 { // 관찰: 일시정지 1s 뒤 재개 → 인사
+        if demo.greetForce, !demoGreeted, mode == .aim, aimTime > 3 { // 관찰: 일시정지 1s 뒤 재개 → 인사
             demoGreeted = true
             setGamePaused(true)
             afterSurprise(1.0) { [weak self] in self?.setGamePaused(false) }
@@ -2556,7 +2530,7 @@ final class GameScene: SKScene {
             for e in w.flavorEvents {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
-                if demoMotionShowcase, w.t - dt < e.t0 { // 시작 프레임 — 캡처 워처에 위치 통지
+                if demo.motionShowcase, w.t - dt < e.t0 { // 시작 프레임 — 캡처 워처에 위치 통지
                     let info = "\(e.kind) \(Int(px(stickX))) \(Int(groundY(stickX))) \(String(format: "%.1f", e.dur))"
                     try? info.write(toFile: "/tmp/minigolf-motion.txt", atomically: true, encoding: .utf8)
                     print(String(format: "MOTION[%.2f] ", Date().timeIntervalSince1970) + info)
@@ -2570,14 +2544,14 @@ final class GameScene: SKScene {
                 let su = (w.t - sa) / sk.duration
                 if su > 0, su < 1 {
                     if w.t - dt < sa { // 시작 프레임
-                        if !demoMode { // 기록은 실플레이 전용
+                        if !demo.active { // 기록은 실플레이 전용
                             Records.shared.showpiecesSeen += 1
                             if Records.shared.showpiecesSeen >= 10 {
                                 Records.shared.award(.memeWitness) // 연출은 기록 카드에서
                             }
                             Records.shared.save()
                         }
-                        if demoMode { // 캡처 워처에 위치 통지
+                        if demo.active { // 캡처 워처에 위치 통지
                             let info =
                                 "\(sk.rawValue) \(Int(px(stickX))) \(Int(groundY(stickX))) \(String(format: "%.1f", sk.duration))" // 캡처
                             // 길이용 duration
@@ -2736,10 +2710,10 @@ final class GameScene: SKScene {
         // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
         var drawRig = renderRig
-        if !demoNoClamp {
+        if !demo.noWallClamp {
             clampRigToWalls(&drawRig)
         }
-        if demoMode {
+        if demo.active {
             logRigBounds(drawRig, currentTime: currentTime)
         }
         // 뼈대 후처리: 뼈 길이 고정 + 무릎·팔꿈치 IK (발은 불변, 손은 사거리 안으로) — Skeleton.swift
@@ -2748,13 +2722,13 @@ final class GameScene: SKScene {
         var joints = Skeleton.solve(
             &drawRig, curvedArms: projected, straightArms: swingStyle.straightArms, projected: projected
         )
-        if !demoNoClamp {
+        if !demo.noWallClamp {
             clampJointsToWalls(&joints)
         }
-        if demoMode {
+        if demo.active {
             logBones(joints, currentTime: currentTime)
             logJumps(drawRig, currentTime: currentTime)
-            if demoTrademarkForce {
+            if demo.trademarkForce {
                 logRigDump(drawRig, joints: joints, currentTime: currentTime)
             }
         }
@@ -2841,7 +2815,7 @@ private extension GameScene {
         }
         ritualAnim = anim
         mode = .ritual
-        if demoMode {
+        if demo.active {
             print("RITUAL \(kind)")
             fflush(stdout)
         }
@@ -2885,7 +2859,7 @@ private extension GameScene {
                 ballHeld = true
                 pickupVariant = Int.random(in: 0 ... 9) < 6 ? 0 : 1
                 pickupCatchPlayed = false
-                if demoMode {
+                if demo.active {
                     print("PICKUP hold variant \(pickupVariant)")
                     fflush(stdout)
                 }

@@ -15,7 +15,6 @@ struct Surprise3State {
     var clockNode: SKNode? // 뻐꾸기 시계·반딧불 — 진행 중이면 다시 굴리지 않는다
     var dogCarrying = false // 강아지가 공을 물고 있다 — 공 노드 숨김
     var lastClockPoll: TimeInterval = 0
-    var demoHour: Int? // --demo-hour H: 뻐꾸기 시각 고정 (밤 대체 연출 관찰용) — 정리에서 지우지 않는다
 }
 
 /// 스프링클러 — 물줄기 구간(머리 ±halfW m, 지면 위 sprayH m)을 지나는 비행 공은 속도가 깎이고, 젖은 구간을 구르는 공은 더 빨리 선다
@@ -66,7 +65,7 @@ extension GameScene {
         surprise3.clockNode = nil
         surprise3.dogCarrying = false
         ballNode.isHidden = false
-        if demoMode, !active.isEmpty {
+        if demo.active, !active.isEmpty {
             print("SURPRISE3 cancel \(active.joined(separator: ","))")
             fflush(stdout)
         }
@@ -78,7 +77,7 @@ extension GameScene {
     }
 
     private func log3(_ s: String) {
-        guard demoMode else { return }
+        guard demo.active else { return }
         print(s)
         fflush(stdout)
     }
@@ -518,7 +517,7 @@ extension GameScene {
         guard mode == .aim, aimTime > 0.6, currentTime - surprise3.lastClockPoll >= 1 else { return }
         surprise3.lastClockPoll = currentTime
         guard surprise3.clockNode == nil, surpriseCounts[.cuckoo, default: 0] == 0 else { return }
-        let forced = demoSurpriseKind == .cuckoo || demoSurpriseForce
+        let forced = demo.surpriseKind == .cuckoo || demo.surpriseForce
         guard forced || Self.nearHour(Date()) != nil else { return }
         if rollSurprise(hook: .clock) == .cuckoo {
             playSurprise(.cuckoo)
@@ -528,7 +527,7 @@ extension GameScene {
     /// 예고 = 화면 위에서 뻐꾸기 시계가 똑딱이며 내려온다 · 사건 = 문이 열리고 뻐꾸기가 시각만큼(12시간제) 운다 ·
     /// 반응 = 첫 울음에 화들짝, 끝나면 낄낄. 밤(20~05시)엔 시계 대신 반딧불 여섯 마리와 부엉 두 번 — 반응 = 끄덕
     func playCuckoo() {
-        let hour = surprise3.demoHour ?? Self.nearHour(Date()) ?? Calendar.current.component(.hour, from: Date())
+        let hour = demo.hour ?? Self.nearHour(Date()) ?? Calendar.current.component(.hour, from: Date())
         let h12 = hour % 12 == 0 ? 12 : hour % 12
         let night = hour >= 20 || hour < 5
         if night {

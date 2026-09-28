@@ -159,7 +159,11 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 **상태 요약**: 계획(PLAN.md M0~M4)과 백로그 4종(클럽 리밸런스·무드 워크·걷기 중 재계획·서프라이즈 3차)까지 모두 main에 있고 v0.8.2로
 릴리스됐다. 그 뒤 사용자 판정 5건을 반영했는데 아직 릴리스하지 않았다(v0.8.3 미배포). 2026-09-28 객관 평가 세션에서 **창 범퍼·창 터널을
 제거**(사용자 판정 "잘 작동되지도 않고 플레이에 방해만", `feature/remove-window-bumpers`)하고 README 드리프트(테스트 수·코드량·로드맵)를 정정했다 —
-둘 다 v0.8.3에 포함. `dist/MiniGolf.app`은 fa5db53 빌드(범퍼 제거 전), brew는 0.8.2. 사용자는 **공개를 염두**에 두고 있다(결정은 아님).
+둘 다 v0.8.3에 포함. 이어서 사용자 "하자"로 **관찰 플래그 27개를 `DemoOptions`로 분리**(`Sources/MiniGolf/DemoOptions.swift`, 게임 로직은
+`demo.xxx`로 읽고 main.swift는 파싱 한 줄, 런타임 관찰 상태 demoWait·motionCursor 등은 씬에 남김)하고 **GitHub Actions CI**를 추가했다
+(`.github/workflows/ci.yml`: macos-26 · build · swiftformat 0.62.1 고정 · test, 모든 브랜치 push·PR에서 실행, `feature/demo-options-ci`,
+Code Reviewer 리뷰 블로커 0·minor 2·nit 4 반영, 첫 실행 64초 통과). `dist/MiniGolf.app`은 범퍼 제거 후
+재빌드본(1930815), brew는 0.8.2. 사용자는 **공개를 염두**에 두고 있다(결정은 아님).
 
 **다음 세션 첫 일**
 1. 사용자 판정 수집(fa5db53 빌드로): 퍼팅 — 페이스가 공을 치고 공이 떨어져 나가는 게 보이는가 · 긴 홀 티샷이 벽에 안 걸리는가 ·
@@ -254,6 +258,7 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 ## 실행·관찰
 
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
+플래그 파싱·목록은 `Sources/MiniGolf/DemoOptions.swift` 한 곳(테스트 `DemoOptionsTests`). CI 상태는 `gh run list --limit 5`.
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-pickup` `--demo-trip`
 `--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-turn` `--demo-mood M` `--demo-replan` `--demo-hour H` `--screen N` `--seed N` `--hat` `--demo-records`
 

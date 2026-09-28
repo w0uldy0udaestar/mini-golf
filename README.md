@@ -7,6 +7,7 @@
 <img src="https://img.shields.io/badge/Swift-5.9%2B-F05138?style=for-the-badge&logo=swift&logoColor=white" alt="Swift 5.9+">
 <img src="https://img.shields.io/badge/dependencies-0-2EA043?style=for-the-badge" alt="의존성 0">
 <img src="https://img.shields.io/badge/license-MIT-4C6EF5?style=for-the-badge" alt="MIT">
+<img src="https://img.shields.io/github/actions/workflow/status/w0uldy0udaestar/mini-golf/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI">
 </p>
 
 ### 화면 맨 아래 띠에서, 9홀이 조용히 돌아갑니다.
@@ -244,6 +245,9 @@ swift build          # 디버그 빌드
 swift test           # XCTest 64종 (탄도 불변식 · 립아웃 경계 · 코스 통계 · 밸런스 봇 · 포즈 불변식)
 swiftformat --lint . # 스타일 검사
 ```
+
+push·PR마다 GitHub Actions(`.github/workflows/ci.yml`, macOS 러너)가 같은 세 단계를 돌립니다.
+관찰·디버그 플래그는 `Sources/MiniGolf/DemoOptions.swift` 한 곳에서 파싱합니다.
 
 ```
 Sources/GolfCore/    물리 · 코스 생성 — UI 의존 0, 결정론적 (테스트 대상)

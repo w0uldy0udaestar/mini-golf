@@ -46,11 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_: Notification) {
-        let launchArgs = ProcessInfo.processInfo.arguments
+        let demo = DemoOptions(arguments: ProcessInfo.processInfo.arguments) // 관찰·디버그 플래그 — 실플레이는 전부 기본값
         // --screen N: 실행 시 모니터 지정 (0부터, 검증·프리셋용 — 저장하지 않음)
         var flagScreen: NSScreen?
-        if let i = launchArgs.firstIndex(of: "--screen"), i + 1 < launchArgs.count,
-           let n = Int(launchArgs[i + 1]), NSScreen.screens.indices.contains(n) {
+        if let n = demo.screenIndex, NSScreen.screens.indices.contains(n) {
             flagScreen = NSScreen.screens[n]
         }
         guard let screen = flagScreen ?? preferredScreen else { NSApp.terminate(nil); return }
@@ -71,78 +70,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         skView.allowsTransparency = true // ⚠️ skView.backgroundColor는 설정 금지
         scene = GameScene(size: screen.frame.size)
         scene.scaleMode = .resizeFill
-        // --demo: 자동 스윙 반복 · --demo-wall: 벽 스탠스 시나리오 강제 (모션 관찰·디버그 전용, 사운드 끔)
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains(where: { $0.hasPrefix("--demo") }) { // 하위 플래그(--demo-pickup 등)만 줘도 관찰 모드
-            scene.demoMode = true
-            scene.demoWallForce = args.contains("--demo-wall")
+        scene.demo = demo // presentScene(didMove) 전에 — 시드·배경·시작 홀을 씬 구성이 읽는다
+        scene.motionCursor = demo.motionCursorStart
+        if demo.active {
             SoundKit.shared.muted = true // 세션 한정 — 사용자 사운드 설정 보존
         }
-        scene.demoCardPreview = args.contains("--demo-card")
-        scene.demoNoClamp = args.contains("--no-wall-clamp") // 침범 재현·검증 전용
-        if let i = args.firstIndex(of: "--seed"), i + 1 < args.count { // 코스 시드 고정 (시각 검증 전용)
-            scene.demoSeed = UInt32(args[i + 1])
-        }
-        scene.demoTripForce = args.contains("--demo-trip") // 넘어지기 강제 (모션 관찰용)
-        scene.demoIdleForce = args.contains("--demo-idle") // 조준 유지 (아이들 관찰용)
-        scene.demoSetbackForce = args.contains("--demo-setback") // 모든 샷을 좌절 계열로 (좌절 반응 관찰용)
-        scene.demoGreetForce = args.contains("--demo-greet") // 조준 3s 뒤 일시정지→재개 (포커스 복귀 인사 관찰용, --demo-idle과 함께)
-        scene.demoMotionShowcase = args.contains("--demo-motions") // 모션 37종 순서 시연 (카탈로그)
-        if let i = args.firstIndex(of: "--motion-cursor"), i + 1 < args.count, let n = Int(args[i + 1]) {
-            scene.motionCursor = max(0, n) // 시연을 N번째 모션부터 (부분 재캡처용, 음수 방어)
-        }
-        scene.demoShowpieceForce = args.contains("--demo-memes") // 쇼피스 밈 12종 순환 (카탈로그)
-        scene.demoSurpriseForce = args.contains("--demo-surprise") // 서프라이즈 이벤트 순환 (관찰용)
-        if let i = args.firstIndex(of: "--surprise"), i + 1 < args.count, let k = SurpriseKind(rawValue: args[i + 1]) {
-            scene.demoSurpriseKind = k // 특정 서프라이즈를 해당 훅마다 강제 (관찰용)
-        }
-        scene.demoPickupForce = args.contains("--demo-pickup") // 공 줍기 의식 관찰 (컵 앞 시작)
-        scene.demoSettleForce = args.contains("--demo-settle") // 급경사 정착 굴림 관찰 (첫 샷을 홀 쪽 라이저 상단에 떨어뜨림 — 협곡 시드)
-        scene.demoTurnForce = args.contains("--demo-turn") // 걷기 방향 반전(제자리 돌기) 관찰 (첫 샷을 뒤로 22m)
-        scene.demoReplanForce = args.contains("--demo-replan") // 걷는 도중 공 이동 → 재계획·재출발 관찰
-        if let i = args.firstIndex(of: "--demo-mood"), i + 1 < args.count,
-           let m = GameScene.WalkMood(rawValue: args[i + 1]) {
-            scene.demoMood = m // 모든 걷기에 무드 강제 (elated|sad — 관찰용)
-        }
-        if let i = args.firstIndex(of: "--demo-power"), i + 1 < args.count, let p = Double(args[i + 1]) {
-            scene.demoPower = min(1, max(0.05, p)) // 봇 파워 고정 (풀파워 피니시 관찰 등)
-        }
-        scene.demoGIRForce = args.contains("--demo-gir") // 파4·5 그린 정지면 원온/투온 연출 강제 (관찰용)
-        scene.demoTrademarkForce = args.contains("--demo-trademark") // 풀샷마다 굿샷 판정 + 리그 덤프 (트레이드마크 관찰)
-        scene.demoBackdrop = args.contains("--demo-bg") // 불투명 배경 — 캡처 판독용 (데스크탑 위 겹침 제거)
-        PlayLog.toStdout = scene.demoMode
-        if let i = args.firstIndex(of: "--demo-ball"), i + 1 < args.count, let x = Double(args[i + 1]) {
-            scene.demoBallX = x // 홀 시작 공 위치(m) — 조준 자세 관찰
-        }
-        if let i = args.firstIndex(of: "--demo-hole"), i + 1 < args.count, let n = Int(args[i + 1]) {
-            scene.demoStartHole = n // N번 홀부터 (관찰용)
-        }
-        if let i = args.firstIndex(of: "--demo-restart-after-holed"), i + 1 < args.count, let t = Double(args[i + 1]) {
-            scene.demoRestartAfterHoled = t // 첫 홀아웃 T초 뒤 R — 홀 전환 타이머 인터럽트 관찰 (IDEAS 2026-09-23)
-        }
-        if let i = args.firstIndex(of: "--demo-hour"), i + 1 < args.count, let h = Int(args[i + 1]) {
-            scene.surprise3.demoHour = (h % 24 + 24) % 24 // 뻐꾸기 시각 고정 — 밤(20~05시) 반딧불 대체 관찰용
-        }
-        if let i = args.firstIndex(of: "--demo-restart-in"), i + 1 < args.count, let t = Double(args[i + 1]) {
-            scene.demoRestartIn = t // 서프라이즈 시작 T초 뒤 새 라운드 — 인터럽트 정리 관찰용
-        }
-        if let i = args.firstIndex(of: "--club"), i + 1 < args.count {
-            scene.demoClubId = args[i + 1] // 홀 시작 클럽 지정 (클럽별 어드레스 관찰용)
-        }
-        if let i = args.firstIndex(of: "--style"), i + 1 < args.count, let st = SwingStyle(rawValue: args[i + 1]) {
+        PlayLog.toStdout = demo.active
+        if let st = demo.swingStyle {
             scene.swingStyle = st // 스윙 스타일 지정 (관찰·캡처용, 저장 안 함)
         }
-        if let i = args.firstIndex(of: "--hat"), i + 1 < args.count, let h = Hat(rawValue: args[i + 1]) {
+        if let h = demo.hat {
             scene.applyHat(h) // 모자 시각 검증용 (저장 안 함)
         }
-        if args.contains("--demo-records") { // 기록 카드 레이아웃 검증용
+        if demo.recordsCard { // 기록 카드 레이아웃 검증용
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak scene] in scene?.showRecordsCard() }
         }
         panel.contentView = skView
         skView.presentScene(scene)
 
         // --demo-switch T: T초 후 다음 모니터로 이동 — 런타임 전환 관찰용 (메뉴 선택과 동일 경로)
-        if let i = args.firstIndex(of: "--demo-switch"), i + 1 < args.count, let t = Double(args[i + 1]) {
+        if let t = demo.switchAfter {
             DispatchQueue.main.asyncAfter(deadline: .now() + t) { [weak self] in
                 guard let self, let cur = panel.screen,
                       let idx = NSScreen.screens.firstIndex(of: cur) else { return }

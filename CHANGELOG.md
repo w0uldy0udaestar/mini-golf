@@ -21,6 +21,9 @@
   `hum`·`warp`를 걷어냈다. 서프라이즈 17 → 16종, 배지 12 → 11종(왕관은 배지 11개 = 전부). 기존 기록에 남은 `bumperBank`·`bumperHits`는
   복원 때 건너뛴다(기록 유실 없음 — 이전엔 모르는 배지 이름 하나에 기록 전체가 초기화됐다)
 - README 정정: 테스트 수 32 → 64, 코드 분량 4,000 → 12,000줄, 로드맵의 멀티 모니터를 완료로, 크로스플랫폼을 "미정"으로
+- **개발**: 관찰·디버그 플래그 27개를 `DemoOptions`로 분리(GameScene 저장 프로퍼티 + main.swift 파싱 60줄 → 한 파일, 게임 로직은 `demo.xxx`로
+  읽는다, 파싱 테스트 4개) · **GitHub Actions CI** 추가(`.github/workflows/ci.yml` — macOS 러너에서 push·PR마다 build · swiftformat lint ·
+  test, SwiftFormat 0.62.1 고정). 플래그 이름·동작은 그대로
 
 ## v0.8.2 (2026-09-24)
 
