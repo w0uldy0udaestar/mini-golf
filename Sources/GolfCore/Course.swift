@@ -332,11 +332,19 @@ public enum CourseGenerator {
     static func signatureElevation(
         kind: SignatureKind, par: Int, worldW: Double, teeEnd: Double, apronStart: Double,
         plannedRise: Double, rand: inout SeededRandom
-    ) -> (elev: [Double], water: ClosedRange<Double>?, risers: [ClosedRange<Double>]) {
+    ) -> (elev: [Double], water: ClosedRange<Double>?, risers: [ClosedRange<Double>], ramps: [ClosedRange<Double>]) {
         let riserRatio = 1.65 // 라이저 폭 = 낙차 × 1.65 → cos 보간 중앙 최대 경사 ≈ 0.95
         var nodes: [(x: Double, e: Double)] = []
         var risers: [ClosedRange<Double>] = []
         var water: ClosedRange<Double>? = nil
+        // 비탈 라이 구간 (2026-09-28 사용자 판정 "경사에 공이 서지를 않아서 그런 샷이 안 나온다"): 라이저(절벽, 공이 못 섬)와 평탄 트레드
+        // 사이에 공이 설 수 있는 비탈을 둔다 — 트레드를 기울이거나 절벽 아래·림 위에 램프를 붙인다. cos 보간은 구간 중앙 경사가 평균의
+        // π/2배라 평균 0.08~0.13(정점 0.13~0.2)로 잡는다 — 정점이 0.3을 넘으면 정착 규칙에 걸린다. 낙차 예산은
+        // 그대로(라이저가 그만큼 낮아진다). 굴곡은 이 구간을 피한다(겹치면 0.3을 넘어 정착 규칙에 걸린다). 난수는 부속 열(홀 기하 파생)
+        var ramps: [ClosedRange<Double>] = []
+        var tiltRand =
+            SeededRandom(seed: UInt32(truncatingIfNeeded: (Int(worldW * 100) ^ (Int(teeEnd * 100) << 8) ^
+                    (Int(apronStart * 100) << 16)) &+ 0x5A5A))
 
         /// 현재 끝에서 rise만큼 오르거나(+) 내리는(−) 라이저를 붙이고 새 x를 반환
         func addRiser(from x: Double, rise: Double) -> Double {
@@ -368,15 +376,24 @@ public enum CourseGenerator {
             let teeH = max(10, min(-plannedRise, room / 1.9)) // 계획 낙차 12~32m (구 예산 82~98% = 100m대)
             nodes = [(0, teeH), (cliffTop, teeH)]
             var x = cliffTop
+            // 절벽 아래 착지 지대의 60%는 내리막 비탈(3~6m, 정점 경사 0.13~0.2)로 이어진다 — 낙차는 절벽에서 뺀다 (비탈 라이)
+            let landingRamp = tiltRand.next() < 0.6 ? min(6, teeH * 0.25) : 0
+            let cliffH = teeH - landingRamp
             if teeH > 24, room > teeH * 2.2 { // 2단 절벽 — 중간 벤치가 레이업 지점이 된다
-                let d1 = teeH * rand.next(0.55, 0.68)
+                let d1 = cliffH * rand.next(0.55, 0.68)
                 x = addRiser(from: x, rise: -d1)
                 let bench = rand.next(18, 26)
                 nodes.append((x + bench, nodes.last!.e))
                 x += bench
-                x = addRiser(from: x, rise: -(teeH - d1 - rand.next(0, 2)))
+                x = addRiser(from: x, rise: -(cliffH - d1 - rand.next(0, 2)))
             } else {
-                x = addRiser(from: x, rise: -(teeH - rand.next(0, 3)))
+                x = addRiser(from: x, rise: -(cliffH - rand.next(0, 3)))
+            }
+            if landingRamp > 0 {
+                let w = min(45, landingRamp / tiltRand.next(0.08, 0.13))
+                ramps.append(x ... (x + w))
+                nodes.append((x + w, nodes.last!.e - landingRamp))
+                x += w
             }
             rolls(from: x, to: worldW, around: max(0, nodes.last!.e), amp: 2.2)
 
@@ -413,8 +430,19 @@ public enum CourseGenerator {
             nodes = [(0, 0), (teeEnd + 8, 0)]
             rolls(from: teeEnd + 8, to: x, around: 0, amp: 2.2)
             for i in 0 ..< n {
-                x = addRiser(from: x, rise: step)
                 let tw = treadW
+                // 중간 트레드의 60%는 접시 대신 오르막 비탈(정점 경사 0.13~0.2, 평균 0.08~0.13) — 등반 예산은 그대로, 라이저가 그만큼 낮아진다 (비탈 라이)
+                let sl = tiltRand.next(0.08, 0.13)
+                let tilt = i < n - 1 && tiltRand.next() < 0.6 ? min(tw * sl, 0.35 * step) : 0
+                x = addRiser(from: x, rise: step - tilt)
+                if tilt > 0 {
+                    let w = tilt / sl // 목표 경사만큼의 폭, 나머지 트레드는 평탄
+                    ramps.append(x ... (x + w))
+                    nodes.append((x + w, nodes.last!.e + tilt))
+                    x += tw
+                    nodes.append((x, nodes.last!.e))
+                    continue
+                }
                 if i < n - 1 { // 중간 트레드: 접시 모양 — 공이 중앙으로 모인다 (착지 관대)
                     let e = nodes.last!.e
                     nodes.append((x + 3, e + 0.6))
@@ -445,9 +473,14 @@ public enum CourseGenerator {
             // 깊이 12~20m (2026-09-17 재예산): 구 36m는 SW 풀샷 정점(42m@37m)이 라이저 끝(59m 폭)에서 이미 하강해 벽을
             // 맞았다 — 봇 실측 12타 탈출 불가 15%. 20m 라이저(폭 33m)는 SW·PW·9I 모두 정점 전에 넘는다.
             // 협곡 폭 = 바닥 24~40 + 2×1.65×깊이 ≈ 64~106m — 7I 캐리(153m) 안이라 림에서 끊어 가면 넘긴다
+            // 반대편 림 위 오르막 어프로치(비탈 라이, 60%)는 림을 3~5m 높인다 — 깊이 예산이 그만큼 줄어야 PW 한 방 탈출이 유지된다
+            // 높이는 폭 예산으로 깎는다: 림 x ≤ midHi = apronStart−45라 apronStart−20까지 최소 25m — 램프가 항상 붙어 깊이 예산이 헛되지 않다 (리뷰 #3).
+            // 림이 u만큼 오르면 그린도 u 오른다(순낙차 +u ≤ 5m, 유효거리 보정에 미반영 — 의도된 소량 누수)
+            let approachSl = tiltRand.next(0.08, 0.12)
+            let approachU = tiltRand.next() < 0.6 ? min(tiltRand.next(3, 5), 25 * approachSl) : 0
             let depth = max(8, min(
                 rand.next(12, maxCanyonDepth),
-                canyonDepthLimit(floorW: floorW, rim: rim), // PW 한 방으로 나온다
+                canyonDepthLimit(floorW: floorW, rim: rim + approachU), // PW 한 방으로 나온다 (램프 포함 림 높이)
                 (midHi - midLo - floorW) / (2 * riserRatio)
             ))
             let gorgeW = floorW + depth * 2 * riserRatio
@@ -464,7 +497,16 @@ public enum CourseGenerator {
             }
             x += floorW
             x = addRiser(from: x, rise: depth + rim)
-            rolls(from: x, to: worldW, around: rim, amp: 2.2)
+            // 반대편 림에서 그린 쪽으로 60%는 오르막 비탈(≤ 3~5m, 정점 경사 0.13~0.19) — 어프로치가 오르막 라이가 된다 (비탈 라이)
+            var approachBase = rim
+            if approachU > 0 {
+                let w = approachU / approachSl
+                ramps.append(x ... (x + w))
+                nodes.append((x + w, rim + approachU))
+                x += w
+                approachBase = rim + approachU
+            }
+            rolls(from: x, to: worldW, around: approachBase, amp: 2.2)
 
         case .terraces:
             let n = rand.next() < 0.5 ? 3 : 4
@@ -479,8 +521,17 @@ public enum CourseGenerator {
             nodes = [(0, teeH), (spanFrom, teeH)]
             var x = spanFrom
             for _ in 0 ..< n {
-                x = addRiser(from: x, rise: -step)
-                x += treadW * rand.next(0.85, 1.15)
+                // 트레드의 60%는 내리막 비탈(정점 경사 0.13~0.2, 평균 0.08~0.13) — 낙차 예산은 그대로, 라이저가 그만큼 낮아진다 (비탈 라이)
+                let tw = treadW * rand.next(0.85, 1.15)
+                let sl = tiltRand.next(0.08, 0.13)
+                let tilt = tiltRand.next() < 0.6 ? min(tw * sl, 0.35 * step) : 0
+                x = addRiser(from: x, rise: -(step - tilt))
+                if tilt > 0 {
+                    let w = tilt / sl
+                    ramps.append(x ... (x + w))
+                    nodes.append((x + w, nodes.last!.e - tilt))
+                }
+                x += tw
                 nodes.append((x, nodes.last!.e))
             }
             nodes.append((worldW, max(0, nodes.last!.e)))
@@ -490,7 +541,7 @@ public enum CourseGenerator {
         for i in 0 ..< elev.count { // 절대 클램프 (+2는 그린 브레이크 여유)
             elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
         }
-        return (elev, water, risers)
+        return (elev, water, risers, ramps)
     }
 
     /// 세그먼트 배열에서 [from, to) 구간을 지정 타입으로 대체 (겹치는 밴드는 쪼갬)
@@ -581,12 +632,13 @@ public enum CourseGenerator {
         // ── 시그니처 홀: 표준 지형·클램프를 통째로 대체하는 계단 프로파일 (아키타입은 위에서 결정) ──
         var sigWater: ClosedRange<Double>? = nil
         var sigRisers: [ClosedRange<Double>] = []
+        var sigRamps: [ClosedRange<Double>] = [] // 비탈 라이 구간 — 굴곡 제외
 
         // ── 지형 고저: 홀마다 성격(완만 링크스 ~ 험준 산악)을 뽑고 형상을 얹는다 ──
         // (2026-08-15 사용자 요청: 더 다이나믹하게 — 기복 폭·제어점 간격·지형 형상 다양화)
         var elev: [Double]
         if let sig = signature {
-            (elev, sigWater, sigRisers) = signatureElevation(
+            (elev, sigWater, sigRisers, sigRamps) = signatureElevation(
                 kind: sig, par: par, worldW: worldW, teeEnd: teeEnd, apronStart: apronStart,
                 plannedRise: plannedRise, rand: &rand
             )
@@ -794,7 +846,8 @@ public enum CourseGenerator {
         if signature != nil {
             let bunkers = segments.filter { $0.type == .bunker }.map { $0.from ... $0.to }
             addUndulation(
-                &elev, teeEnd: teeEnd, apronStart: apronStart, risers: sigRisers, water: waterRange, bunkers: bunkers,
+                &elev, teeEnd: teeEnd, apronStart: apronStart, risers: sigRisers + sigRamps, water: waterRange,
+                bunkers: bunkers,
                 worldW: worldW
             )
             for i in 0 ..< elev.count { // 절대 클램프 재적용 (+2는 그린 브레이크 여유)

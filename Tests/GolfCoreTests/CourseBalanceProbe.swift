@@ -54,6 +54,7 @@ final class CourseBalanceProbe: XCTestCase {
     struct HoleResult {
         let kind: String; let par: Int; let strokes: Int; let water: Int; let netRise: Double; var trace: [String] = []
         var gir = false // 파4 원온·파5 투온 (그린 위 정지) — GameScene.greenChanceLabel과 같은 조건
+        var shotSpots: [(x: Double, club: String, lie: Surface)] = [] // 샷마다 공이 놓인 자리 — SlopeLieProbe가 경사 분포를 낸다
     }
 
     /// 나무 캐노피가 샷 방향에 드리우는 정도 0~1 — GameScene.treePunchT와 같은 식
@@ -75,6 +76,7 @@ final class CourseBalanceProbe: XCTestCase {
         var gir = false
         var trace: [String] = []
         var lastMoved = 999.0 // 직전 샷 이동 거리 — 벽에 막혀 제자리면 웨지로 탈출 (사람의 반응)
+        var shotSpots: [(x: Double, club: String, lie: Surface)] = []
         let minR = Phys.minPowerRatio
         while strokes < maxStrokes {
             let dir = hole.holeX >= b.x ? 1.0 : -1.0
@@ -112,6 +114,7 @@ final class CourseBalanceProbe: XCTestCase {
             }
             // 게임과 동일한 자동 규칙: 경사 라이(stanceSlopeRatio×경사)와 캐노피 근접 펀치(GameScene.treePunchT×0.85) — 봇이 평지 가정으로
             // 치면 굴곡 지형에서 실제 플레이와 다른 고착이 난다 (2026-09-28 seed 12: 나무 밑 PW가 매 샷 캐노피에 삼켜짐)
+            shotSpots.append((b.x, club.id, lie))
             let slope = club.isPutter ? 0 : hole.slope(at: b.x) * Phys.stanceSlopeRatio
             let punch = club.isPutter ? 0 : treeT(hole, x: b.x, dir: dir) * 0.85
             Ballistics.launch(&b, club: club, heightPct: h, lie: lie, dir: dir, punch: punch, slope: slope)
@@ -130,7 +133,7 @@ final class CourseBalanceProbe: XCTestCase {
                         water: water,
                         netRise: hole.ground(at: hole.holeX) - hole.ground(at: hole.teeX),
                         trace: trace + [String(format: "%@ h%.2f %@ %.0f→HOLED", club.id, h, "\(lie)", fromX)],
-                        gir: gir
+                        gir: gir, shotSpots: shotSpots
                     )
                 case .water:
                     water += 1
@@ -173,7 +176,7 @@ final class CourseBalanceProbe: XCTestCase {
             water: water,
             netRise: hole.ground(at: hole.holeX) - hole.ground(at: hole.teeX),
             trace: trace,
-            gir: gir
+            gir: gir, shotSpots: shotSpots
         )
     }
 

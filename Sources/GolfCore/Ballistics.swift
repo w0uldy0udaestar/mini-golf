@@ -12,6 +12,11 @@ public enum Phys {
     public static let bounceFriction = 1.0 // 잔디 μ (Biber 2023 실측 0.997~0.998)
     public static let bounceToRoll = 1.0
     public static let stopSpeed = 0.15
+    /// 저속 잔디 걸림 (2026-09-28 "비탈에서 그렇게까지 미끄러지지 않는다"): 이 속도 아래에선 굴림 저항이 선형으로 최대 2배 —
+    /// 느린 공은 잔디에 파묻혀 비탈 중턱에서도 선다. 그린·에이프런은 제외(퍼팅 거리 프리셋·컵 캡처 속도 전제)
+    public static let gripSpeed = 1.5
+    /// 정지 마찰 = 굴림 저항 × 1.3 — 멈춘 공이 버티는 경사가 구르는 공의 감속 한계보다 크다(페어웨이 0.26 → 0.34, 러프 0.54 → 0.70)
+    public static let staticHoldGain = 1.3
     public static let minPowerRatio = 0.25 // 백스윙 0%의 파워 바닥값
     public static let putterMinRatio = 0.08 // 퍼터 전용 (탭인 가능)
     public static let cupHalfWidth = 0.7
@@ -331,7 +336,10 @@ public enum Ballistics {
             }
             let s = hole.slope(at: b.x)
             b.vx -= Phys.g * s * 0.85 * dt // 경사 중력: 그린 브레이크의 원천
-            let dv = surfType.roll * kind.rollScale * dt
+            // 잔디 걸림은 라이저(> steepRest)에선 없다 — 43° 잔디에서 느린 공이 멈춰 서면(러프 9 > 중력 7.9) 정착 규칙이 꼬리에 세운다 (협곡 프로브 13/72)
+            let grip = surfType == .green || surfType == .apron || abs(s) > steepRest
+                ? 1.0 : 1 + max(0, 1 - abs(b.vx) / Phys.gripSpeed)
+            let dv = surfType.roll * kind.rollScale * grip * dt
             if abs(b.vx) <= dv {
                 b.vx = 0
             } else {
@@ -360,8 +368,10 @@ public enum Ballistics {
             } else {
                 b.lowSpeedTime = 0
             }
-            // 정지: 마찰이 경사 중력을 이길 때만 (러프는 경사 0.54까지 — 라이저 꼬리에 서지 않게 정착 규칙 적용)
-            if abs(b.vx) < Phys.stopSpeed, surfType.roll >= Phys.g * abs(s) * 0.85 {
+            // 정지: 정지 마찰(굴림 저항 × staticHoldGain)이 경사 중력을 이길 때만 — 페어웨이 0.34·러프 0.70까지. 라이저(> 0.3)는 정착 규칙이 바닥으로
+            let hold = abs(s) > steepRest ? 1.0 : Phys
+                .staticHoldGain // 라이저(> 0.3)는 main과 같은 정지 조건 — 정착 텔레포트 거리 불변 (리뷰 #2)
+            if abs(b.vx) < Phys.stopSpeed, surfType.roll * hold >= Phys.g * abs(s) * 0.85 {
                 b.vx = 0
                 b.phase = .rest
                 if settleOffSteepSlope(&b, hole: hole) {
