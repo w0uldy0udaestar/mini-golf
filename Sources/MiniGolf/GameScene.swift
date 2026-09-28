@@ -676,7 +676,9 @@ final class GameScene: SKScene {
     private func presetPutterHeight() {
         guard club.isPutter, mode == .aim else { return }
         let d = abs(hole.holeX - ball.x)
-        let v0 = min(13.0, (2 * 1.1 * d + 4).squareRoot()) // 도착 속도 ~2m/s 목표
+        // 2단 그린 턱은 눈에 보이는 계단이라 프리셋에도 오르막 표고를 더한다(내리막은 무시 — 브레이크 읽기는 플레이어 몫, 리뷰 m4)
+        let up = max(0, hole.ground(at: hole.holeX) - hole.ground(at: ball.x))
+        let v0 = min(13.0, (2 * 1.1 * d + 4 + 2 * Phys.g * 0.85 * up).squareRoot()) // 도착 속도 ~2m/s 목표
         heightPct = min(0.92, max(0.03, (v0 / 13.0 - Phys.putterMinRatio) / (1 - Phys.putterMinRatio)))
     }
 
@@ -1720,8 +1722,7 @@ final class GameScene: SKScene {
         endShotTrail()
         SoundKit.shared.splash()
         FX.ripple(on: self, at: CGPoint(x: px(ball.x), y: groundY(ball.x)))
-        let wr = hole.waterRange ?? (ball.x - 3) ... (ball.x + 3)
-        let dropX = dir > 0 ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+        let dropX = hole.waterDropX() // 앞 물가(티 쪽 둑) — 샷 방향이 아니라 홀 방향 기준: 그린 위에서 되돌아 치다 빠져도 앞 둑 (리뷰 m5)
         ball = BallState(x: dropX, y: hole.ground(at: dropX))
         toast("워터 해저드", sub: "+1 벌타 · 드롭")
         if strokes >= Phys.maxStrokes {

@@ -852,7 +852,8 @@ final class GolfCoreTests: XCTestCase {
                 if maxOnGreen >= 0.12 {
                     tiered += 1
                 }
-                if h.ground(at: gFront) - h.ground(at: gFront - d * 22) >= 1.5 {
+                if h.signature == .skyTee || h.signature == .terraces,
+                   h.ground(at: gFront) - h.ground(at: gFront - d * 22) >= 1.8 { // 포대는 이 둘만 (리뷰 m7)
                     podium += 1
                 }
                 if h.par == 3, h.surface(at: gFront - d * 12) == .water,
@@ -865,8 +866,33 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(Double(front) / Double(holes), 0.15, "앞핀이 적음 (\(front))")
         XCTAssertGreaterThan(Double(back) / Double(holes), 0.15, "뒷핀이 적음 (\(back))")
         XCTAssertGreaterThan(tiered, 20, "2단 그린이 적음 (\(tiered))")
-        XCTAssertGreaterThan(podium, 30, "포대 그린이 적음 (\(podium))")
+        XCTAssertGreaterThan(podium, 20, "포대 그린이 적음 (\(podium))")
         XCTAssertGreaterThan(island, 3, "아일랜드 그린이 적음 (\(island))")
+    }
+
+    /// 아일랜드 그린의 병합 waterRange(앞뒤 연못 한 구간)가 서프라이즈의 '물 밖으로'를 오작동시키지 않는다 (리뷰 M1 회귀)
+    func testIslandGreenOutOfWaterUsesSegments() {
+        var checked = 0
+        for seed: UInt32 in 1 ... 60 {
+            for h in CourseGenerator.makeCourse(seed: seed)
+                where h.par == 3 && h.signature == .skyTee && h.waterRange != nil {
+                let d = h.holeX >= h.teeX ? 1.0 : -1.0
+                XCTAssertEqual(h.outOfWater(h.holeX), h.holeX, "그린 위 공이 옮겨짐 seed \(seed)")
+                let gFront = d > 0 ? h.greenStart : h.greenEnd
+                let inFront = gFront - d * 12
+                XCTAssertEqual(h.surface(at: inFront), .water, "앞 연못 위치 seed \(seed)")
+                let out = h.outOfWater(inFront)
+                XCTAssertNotEqual(h.surface(at: out), .water, "물 밖으로 못 나감 seed \(seed)")
+                XCTAssertLessThan(abs(out - inFront), 20, "연못 너머로 순간이동 seed \(seed) (\(out - inFront)m)")
+                XCTAssertEqual(
+                    h.surface(at: h.waterDropX()),
+                    h.surface(at: h.waterDropX()) == .water ? .fairway : h.surface(at: h.waterDropX()),
+                    "드롭 존이 물"
+                )
+                checked += 1
+            }
+        }
+        XCTAssertGreaterThan(checked, 3)
     }
 
     // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──

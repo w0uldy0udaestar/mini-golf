@@ -119,6 +119,19 @@ public struct Hole: Sendable {
         ground(at: x + 0.5) - ground(at: x - 0.5)
     }
 
+    /// x가 물이면 가장 가까운 물 세그먼트 경계 밖 2.5m, 아니면 x 그대로 — 서프라이즈가 공을 옮길 때 쓴다.
+    /// `waterRange`는 아일랜드 그린에서 앞뒤 연못을 한 구간으로 묶은 드롭용 경계라 여기 못 쓴다(그린 위 공을 연못 너머로 보냈다 — 리뷰 M1)
+    public func outOfWater(_ x: Double) -> Double {
+        guard let seg = segments.first(where: { $0.type == .water && x >= $0.from && x < $0.to }) else { return x }
+        return x - seg.from < seg.to - x ? seg.from - 2.5 : seg.to + 2.5
+    }
+
+    /// 워터 드롭 존 — 홀 방향 기준 앞 물가(티 쪽 둑). 샷 방향 `dir`로 고르면 그린 위에서 되돌아 치다 빠질 때 반대편 연못 너머로 간다 (리뷰 m5)
+    public func waterDropX() -> Double {
+        let wr = waterRange ?? (holeX - 3) ... (holeX + 3)
+        return holeX >= teeX ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+    }
+
     /// 핀 이동 서프라이즈 — 컵만 그린 안 다른 자리로 옮긴 사본. 지형·세그먼트·파·거리는 그대로
     /// (par는 홀 전장 기준이라 안 바뀐다). 그린 밖으로는 못 옮긴다 (클램프)
     public func movingPin(to x: Double) -> Hole {
@@ -478,9 +491,10 @@ public enum CourseGenerator {
             let backstop = min(6, elevClamp - 1 - top)
             // 그린(≈apronStart+21~33)·gTo(+6)·뒤 5m 블렌드를 지나 시작 = apronStart+44 = climbEnd+52 — 겹치면 그린 평탄화 뒤
             // 블렌드가 램프 첫 샘플을 그린 레벨로 당긴다 (구 +48은 최대 4m 겹침, 리뷰 2026-09-23)
-            if worldW > climbEnd + 68, backstop > 1.5 {
-                nodes.append((climbEnd + 52, top))
-                nodes.append((climbEnd + 66, top + backstop)) // 14m 램프 — cos 중앙 경사 0.67
+            if worldW > climbEnd + 70,
+               backstop > 1.5 { // 그린 뒤 블렌드(greenEnd+6 → 최대 apronStart+46 = climbEnd+54)와 안 겹치게 +54부터 (리뷰 m6)
+                nodes.append((climbEnd + 54, top))
+                nodes.append((climbEnd + 68, top + backstop)) // 14m 램프 — cos 중앙 경사 0.67
                 nodes.append((worldW, top + backstop))
             } else {
                 nodes.append((worldW, top)) // 그린은 정상 트레드 위
@@ -835,21 +849,30 @@ public enum CourseGenerator {
                 }
             }
         }
-        // 포대 그린 (M5-②): 시그니처 홀(산정 제외) 30% — 그린이 2~2.6m 솟고 앞 14m smoothstep 램프(최대 경사 ≤ 0.28 < 정착 0.3)는
-        // 짧은 어프로치를 되돌려 보낸다(에이프런 굴림 1.6 < 중력 성분 2.1). 그린 뒤는 기존 5m 블렌드로 내려간다(오버샷도 굴러 내린다)
+        // 포대 그린 (M5-②): 시그니처 홀(산정·협곡 제외) 30% — 그린이 솟고 앞 14m smoothstep 램프는 짧은 어프로치를 되돌려 보낸다(에이프런 굴림
+        // 1.6 < 중력 성분). 총 상승(지형 차 + 포대) ≤ 2.8m → 최대 경사 0.30 = 정착 규칙 경계(램프 중턱에 선 공을 발치로 텔레포트하지 않는다 — 리뷰 M2)
+        var podiumRange: ClosedRange<Double>? = nil // 포대 램프 — 굴곡 제외 (리뷰 M3)
         let island = par == 3 && signature == .skyTee && waterRange == nil && rand
             .next() < 0.25 // 아일랜드 그린 (아래) — 포대와 겹치지 않는다
         if let sig = signature, sig != .summitGreen, sig != .canyon, !waterAtRampFoot, !island, rand.next() < 0.3 {
             // 협곡은 제외(림 위 오르막 램프와 겹쳐 탈출·어프로치가 이중으로 어려워진다 — 봇 +0.38타 실측). 램프는 접근 지면(pFrom)에서 솟은 그린까지
-            // 하나의 smoothstep — 굴곡 위에 더하면 경사가 합쳐져 페어웨이 0.5를 넘는다. 총 상승(지형 차 + 포대) ≤ 3.6m → 최대 경사 0.39
+            // 하나의 smoothstep. 뒤에 오는 트레드 굴곡은 podiumRange로 제외한다(합쳐지면 페어웨이 0.5를 넘는다 — 리뷰 M3)
             let pFrom = max(0, gFrom - 14)
             let e0 = elev[pFrom]
-            let podium = min(rand.next(2.0, 2.6), 3.6 - (elev[gFrom] - e0))
+            let podium = min(rand.next(2.0, 2.6), 2.8 - (elev[gFrom] - e0))
             if podium >= 1 {
                 let e1 = elev[gFrom] + podium
                 for i in pFrom ... gTo where i < elev.count {
                     let u = min(1, Double(i - pFrom) / Double(max(1, gFrom - pFrom)))
                     elev[i] = i <= gFrom ? e0 + (e1 - e0) * (u * u * (3 - 2 * u)) : elev[i] + podium
+                }
+                podiumRange = Double(pFrom) ... Double(gFrom)
+                // 램프가 덮어쓴 가드 벙커 셀의 모래 딥 재적용 — gFrom 안쪽은 딥+podium이 남아 벙커 안에 단차가 생긴다 (리뷰 m1)
+                for seg in segments where seg.type == .bunker && seg.to > Double(pFrom) && seg.from < Double(gFrom) {
+                    let mid = (seg.from + seg.to) / 2, half = (seg.to - seg.from) / 2 + 0.5
+                    for i in max(pFrom, Int(seg.from)) ... min(gFrom, Int(ceil(seg.to))) where i < elev.count {
+                        elev[i] -= max(0, 1 - abs(Double(i) - mid) / half) * 0.9
+                    }
                 }
             }
         }
@@ -899,7 +922,9 @@ public enum CourseGenerator {
             let fa = Int(front.lowerBound), fb = Int(ceil(front.upperBound)), ba = Int(back.lowerBound),
                 bb = Int(ceil(back.upperBound))
             func setBand(_ from: Int, _ to: Int, _ v: Double) {
-                for i in max(0, from) ... min(to, elev.count - 1) where from <= to {
+                let lo = max(0, from), hi = min(to, elev.count - 1)
+                guard lo <= hi else { return } // ClosedRange는 where 평가 전에 만들어져 하한 > 상한이면 트랩 (리뷰 m3)
+                for i in lo ... hi {
                     elev[i] = v
                 }
             }
@@ -915,10 +940,15 @@ public enum CourseGenerator {
                     elev[j] = lv - 1.2 * (1 - ss)
                 }
             }
-            for k in 1 ... 8 { // 분지 바깥 → 원래 지형
-                let u = Double(k) / 9
-                for (j, lv) in [(fa - 8 - k, level), (bb + 8 + k, backLevel)] where j >= 0 && j < elev.count {
-                    elev[j] = lv + (elev[j] - lv) * u
+            // 분지 바깥 → 원래 지형: 길이는 낙차 비례(경사 ≤ 0.28, 최소 8m) — rolls(±2.2)와 4m 차이면 8m 고정은 0.5를 넘긴다 (리뷰 m2)
+            for (edge, lv, sign) in [(fa - 8, level, -1), (bb + 8, backLevel, 1)] {
+                let probe = min(max(0, edge + sign * 8), elev.count - 1)
+                let n = min(24, max(8, Int(abs(elev[probe] - lv) / 0.28) + 1))
+                for k in 1 ... n {
+                    let j = edge + sign * k
+                    if j >= 0, j < elev.count {
+                        elev[j] = lv + (elev[j] - lv) * Double(k) / Double(n + 1)
+                    }
                 }
             }
             for w in [front, back] {
@@ -967,7 +997,8 @@ public enum CourseGenerator {
         if signature != nil {
             let bunkers = segments.filter { $0.type == .bunker }.map { $0.from ... $0.to }
             addUndulation(
-                &elev, teeEnd: teeEnd, apronStart: apronStart, risers: sigRisers + sigRamps, water: waterRange,
+                &elev, teeEnd: teeEnd, apronStart: apronStart,
+                risers: sigRisers + sigRamps + (podiumRange.map { [$0] } ?? []), water: waterRange,
                 bunkers: bunkers,
                 worldW: worldW
             )

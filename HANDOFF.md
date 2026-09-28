@@ -210,6 +210,11 @@ Code Reviewer(블로커 0·major 1 — 새 물리 테스트가 빈 검증·minor
 0~1%·입수 불변, summitGreen GIR 7%(순진 봇의 오르막 어프로치 — 표고 인지 봇은 다름). 교훈: 그린 주변 지형 수정은 반드시 (a) 컵 ±2m 평탄
 (b) 페어웨이 |경사| ≤ 0.5 (c) 정지 가능 경사 ≤ 0.35 (d) 뒤 블렌드 경사 — `testSignatureHoles`·`testSignatureHoleRisersAreRough`·프로브 `steepRests`가
 잡는다; 새 요소는 서로 배타로(아일랜드↔포대, 협곡↔포대).
+리뷰(Code Reviewer, 블로커 0·major 3·minor 7) 반영(`feature/pin-green-followup`): **M1** 병합 `waterRange`를 서프라이즈 `outOfWater`가 옛 의미로 써
+아일랜드 그린 위 공을 연못 너머로 보내던 것 → `Hole.outOfWater`(세그먼트 기준)+회귀 테스트 · M2 포대 총 상승 ≤ 2.8(경사 0.30, 정착 규칙 경계) ·
+M3 포대 램프를 굴곡 제외에 · m1 램프가 덮은 가드 벙커 딥 재적용 · m2 아일랜드 바깥 블렌드 낙차 비례 · m3 setBand 가드 · m5 드롭 존을 샷 방향이
+아니라 홀 방향(`Hole.waterDropX`, 개구리 포함) · m4 퍼터 프리셋에 오르막 표고 · m6 산정 백스톱 +54 · m7 테스트 포대 지표(skyTee·terraces, ≥1.8).
+교훈: `waterRange`처럼 의미가 바뀌는 필드는 모든 소비자(grep)를 먼저 본다.
 
 **다음 세션 첫 일**
 1. 사용자 판정 수집(**v0.8.5 후보** — `dist/MiniGolf.app`, brew는 0.8.4): 핀 위치가 홀마다 다른가 · 2단·포대·아일랜드 그린이 보이고 어프로치가 달라지는가 · 비탈에 공이 서는가·비탈 라이 샷이 달라지는가(M5-①) · 경사 라이가 체감되는가(오르막 높고 짧게, 스탠스

@@ -407,8 +407,7 @@ extension GameScene {
         SoundKit.shared.splash()
         let splashPt = CGPoint(x: px(ball.x), y: groundY(ball.x))
         FX.ripple(on: self, at: splashPt)
-        let wr = hole.waterRange ?? (ball.x - 3) ... (ball.x + 3)
-        let bankX = dir > 0 ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+        let bankX = hole.waterDropX() // 앞 물가(티 쪽 둑) — 홀 방향 기준 (리뷰 m5)
         let bankPt = CGPoint(x: px(bankX), y: groundY(bankX))
         let frog = makeFrog()
         frog.name = Self.surpriseNodeName
@@ -786,8 +785,7 @@ extension GameScene {
 
     /// 두더지·고양이가 공을 물속으로 밀지 않게 — 워터 범위 안이면 가까운 물가 밖으로 (리뷰 m3)
     func outOfWater(_ x: Double) -> Double {
-        guard let wr = hole.waterRange, wr.contains(x) else { return x }
-        return x - wr.lowerBound < wr.upperBound - x ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+        hole.outOfWater(x) // 세그먼트 기준 — 아일랜드 그린의 병합 waterRange로는 그린 위 공을 연못 너머로 보냈다 (리뷰 M1)
     }
 
     /// 실제 마우스 커서를 씬 좌표로 — 이 화면 밖이면 nil
