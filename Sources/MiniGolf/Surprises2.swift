@@ -2,19 +2,10 @@ import AppKit
 import GolfCore
 import SpriteKit
 
-// 서프라이즈 2차 (2026-09-16, 사용자 선택 "계열별 1종") — 1차 프레임워크(Surprises.swift) 위에 다섯 종류를 더한다.
-// 데스크탑 `windowTunnel` · 규칙 `pinMove` · 물리 `ballSwap` · 스틱맨 `gallery` · 생물 `geese`.
-// 셋(핀·택배·거위)은 씬을 점유하고, 둘(터널·갤러리)은 비행·다음 샷 위에 얹힌다.
+// 서프라이즈 2차 (2026-09-16, 사용자 선택 "계열별 1종") — 1차 프레임워크(Surprises.swift) 위에 네 종류를 더한다.
+// 규칙 `pinMove` · 물리 `ballSwap` · 스틱맨 `gallery` · 생물 `geese`. (데스크탑 `windowTunnel`은 2026-09-28 창 범퍼와 함께 제거)
+// 셋(핀·택배·거위)은 씬을 점유하고, 갤러리는 다음 샷 위에 얹힌다.
 // 3박자는 각 함수 주석에: 예고 → 사건 → 반응.
-
-/// 창 터널 통과 상태 — 진입 순간의 속도를 들고 출구에서 다시 난다 (통과 중엔 비행 물리 정지)
-struct TunnelTransit {
-    let until: TimeInterval
-    let exit: (x: Double, y: Double)
-    let vx: Double
-    let vy: Double
-    var portalShown = false
-}
 
 /// 갤러리 상태 — 도착 → 관전 → (샷 종료) 반응 → 퇴장
 struct GalleryState {
@@ -39,39 +30,21 @@ extension BallKind {
 }
 
 extension GameScene {
-    static let tunnelGhostName = "tunnelGhost"
-    static let demoBumperName = "demoBumper"
-
     // ── 공통 ──
 
-    /// 샷이 끝나는 순간(홀인·입수·정지) 한 번 — 공 바꿔치기 복귀, 터널 잔상 정리, 갤러리 판정
+    /// 샷이 끝나는 순간(홀인·입수·정지) 한 번 — 공 바꿔치기 복귀, 갤러리 판정
     func onShotEnded(terminal: StepEvent) {
         if ballKind != .standard {
             revertBallKind()
-        }
-        if tunnelArmed { // 창을 한 번도 안 지나 무산된 터널 — epic 카운트(라운드 1회)를 돌려준다 (리뷰 n2)
-            surpriseCounts[.windowTunnel] = max(0, surpriseCounts[.windowTunnel, default: 1] - 1)
-        }
-        tunnelArmed = false
-        enumerateChildNodes(withName: Self.tunnelGhostName) { node, _ in
-            node.run(.sequence([.fadeOut(withDuration: 1.1), .removeFromParent()]))
         }
         if let g = galleryState, g.phase == .arriving || g.phase == .watching {
             galleryJudge(terminal: terminal)
         }
     }
 
-    /// 매 프레임 (updateSurprises에서) — 창 터널 출구
-    func updateSurprises2(currentTime: TimeInterval) {
-        updateTunnel(currentTime: currentTime)
-    }
-
     /// 홀 시작·새 라운드 정리 (cancelSurprises에서)
     func cancelSurprises2() {
-        tunnelArmed = false
-        tunnelTransit = nil
         ballNode.isHidden = false
-        enumerateChildNodes(withName: Self.tunnelGhostName) { node, _ in node.removeFromParent() }
         galleryState?.node.removeFromParent()
         galleryState = nil
         flagNode.removeAllActions() // 걷던 깃발 — startHole의 rebuildTerrain이 제자리에 다시 그린다
@@ -118,170 +91,6 @@ extension GameScene {
         let down = SKAction.move(to: b, duration: dur * 0.5)
         down.timingMode = .easeIn
         return .sequence([up, down])
-    }
-
-    // ── 데스크탑: 창 터널 (비행 훅, epic) ──
-
-    /// 예고 = 발사 직후 창들의 윤곽이 세 번 술렁이고 낮은 웅웅 · 사건 = 첫 창 진입 순간 공이 창 속으로 사라졌다가
-    /// 홀 쪽으로 더 나아간 다른 창(없으면 같은 창)의 반대편에서 같은 속도로 튀어나온다 · 반응 = 화들짝 → 낄낄
-    func playWindowTunnel() {
-        guard !shotBumpers.isEmpty else { return } // 지날 창이 없으면 조용히 (강제 관찰 모드에서만 올 수 있는 경로)
-        tunnelArmed = true
-        SoundKit.shared.hum()
-        for r in shotBumpers {
-            let outline = SKShapeNode(rect: bumperRect(r))
-            outline.name = Self.surpriseNodeName
-            outline.strokeColor = NSColor(white: 1, alpha: 0.75)
-            outline.fillColor = .clear
-            outline.lineWidth = 1.2
-            outline.alpha = 0
-            outline.zPosition = 3
-            addChild(outline)
-            outline.run(.sequence([
-                .repeat(
-                    .sequence([.fadeAlpha(to: 0.9, duration: 0.22), .fadeAlpha(to: 0.15, duration: 0.22)]),
-                    count: 3
-                ),
-                .fadeOut(withDuration: 0.3),
-                .removeFromParent(),
-            ]))
-        }
-        toast("창이 술렁인다…", sub: nil)
-        if demoMode {
-            print("TUNNEL armed bumpers \(shotBumpers.count)")
-            fflush(stdout)
-        }
-    }
-
-    /// 범퍼(미터·표고) → 씬 사각형(pt)
-    func bumperRect(_ r: Bumper) -> CGRect {
-        CGRect(x: px(r.x), y: py(r.y), width: px(r.w), height: CGFloat(r.h) * pxPerM)
-    }
-
-    /// 비행 스텝마다 — 무장 상태에서 공이 창 안으로 들어가면 반사 대신 삼킨다 (GameScene 비행 루프에서 호출).
-    /// 출구는 진행 방향으로 가장 멀리 있는 다른 창, 없으면 같은 창의 반대편 면. 속도는 진입 그대로
-    func enterTunnelIfInside(prevX: Double, prevY: Double) -> Bool {
-        guard ball.phase == .fly,
-              let entry = shotBumpers.first(where: { $0.contains(ball.x, ball.y) && !$0.contains(prevX, prevY) })
-        else { return false }
-        tunnelArmed = false
-        let forward = ball.vx >= 0 ? 1.0 : -1.0
-        func center(_ b: Bumper) -> Double {
-            b.x + b.w / 2
-        }
-        let ahead = shotBumpers.filter { $0 != entry && forward * (center($0) - center(entry)) > 0 }
-        let exitB = ahead.max { forward * center($0) < forward * center($1) } ?? entry
-        let exitX = min(max(forward > 0 ? exitB.x + exitB.w + 0.1 : exitB.x - 0.1, 1), hole.worldW - 1)
-        let insideY = min(max(ball.y, exitB.y + 0.3), exitB.y + exitB.h - 0.3)
-        let exitY = max(hole.ground(at: exitX) + 0.3, insideY)
-        let entryPt = CGPoint(x: px(ball.x), y: py(ball.y) + 5.5)
-        let exitPt = CGPoint(x: px(exitX), y: py(exitY) + 5.5)
-        let dist = Double(hypot(exitPt.x - entryPt.x, exitPt.y - entryPt.y))
-        let dur = min(1.3, 0.3 + dist / 1000)
-        tunnelTransit = TunnelTransit(until: lastTime + dur, exit: (exitX, exitY), vx: ball.vx, vy: ball.vy)
-        freezeTrailAsGhost() // 궤적은 진입점에서 끊긴다 — 출구에서 새로 시작
-        ballNode.isHidden = true
-        shadowNode.isHidden = true
-        portalRing(at: entryPt)
-        SoundKit.shared.warp(up: true)
-        react(.startled)
-        toast("창 터널!", sub: "…어디로 나오지?")
-        if demoMode {
-            print(String(
-                format: "TUNNEL in (%.1f, %.1f) → out (%.1f, %.1f) v(%.1f, %.1f) %.2fs",
-                ball.x, ball.y, exitX, exitY, ball.vx, ball.vy, dur
-            ))
-            fflush(stdout)
-        }
-        return true
-    }
-
-    private func updateTunnel(currentTime: TimeInterval) {
-        guard var t = tunnelTransit else { return }
-        let exitPt = CGPoint(x: px(t.exit.x), y: py(t.exit.y) + 5.5)
-        if !t.portalShown, currentTime >= t.until - 0.35 { // 출구 예고 — 나올 자리에 고리가 먼저 퍼진다
-            t.portalShown = true
-            tunnelTransit = t
-            portalRing(at: exitPt)
-        }
-        guard currentTime >= t.until else { return }
-        tunnelTransit = nil
-        ball = BallState(
-            x: t.exit.x, y: t.exit.y, vx: t.vx, vy: t.vy,
-            spin: ball.spin, spinSign: ball.spinSign, phase: .fly
-        )
-        ballNode.isHidden = false
-        ballNode.position = exitPt
-        trailPoints = [exitPt]
-        SoundKit.shared.warp(up: false)
-        react(.laugh)
-        toast("저기서 나왔다!", sub: nil)
-        if demoMode {
-            print(String(format: "TUNNEL out (%.1f, %.1f)", ball.x, ball.y))
-            fflush(stdout)
-        }
-    }
-
-    /// 고리 두 개가 퍼진다 — 입구·출구 표식 (물결은 파란 물색이라 따로)
-    private func portalRing(at p: CGPoint) {
-        for i in 0 ..< 2 {
-            let ring = SKShapeNode(circleOfRadius: 9)
-            ring.strokeColor = NSColor(white: 1, alpha: 0.85)
-            ring.lineWidth = 1.4
-            ring.fillColor = .clear
-            ring.position = p
-            ring.setScale(0.3)
-            ring.zPosition = 7
-            addChild(ring)
-            ring.run(.sequence([
-                .wait(forDuration: Double(i) * 0.12),
-                .group([.scale(to: 1.9, duration: 0.5), .fadeOut(withDuration: 0.5)]),
-                .removeFromParent(),
-            ]))
-        }
-    }
-
-    /// 지금까지의 궤적을 잔상 노드로 굳히고 새 궤적을 비운다 — 창 속 구간은 선이 없다
-    private func freezeTrailAsGhost() {
-        guard let path = trailNode.path else {
-            trailPoints = []
-            return
-        }
-        for src in [trailUnderNode, trailNode] where !src.isHidden { // 언더스트로크는 고대비 모드에서만 보인다 (리뷰 m5)
-            let ghost = SKShapeNode(path: path)
-            ghost.name = Self.tunnelGhostName
-            ghost.strokeColor = src.strokeColor
-            ghost.lineWidth = src.lineWidth
-            ghost.lineCap = src.lineCap
-            ghost.zPosition = -0.5 // 라이브 궤적처럼 스틱맨·깃발 아래
-            addChild(ghost)
-        }
-        trailPoints = []
-    }
-
-    /// --demo-bumpers "fx,fy,fw,fh;…" — 창이 없는 관찰 환경에서 화면 비율로 합성 범퍼를 만든다 (실플레이 경로 아님)
-    func syntheticBumpers() -> [Bumper] {
-        let gb = Double(py(0))
-        let m = Double(pxPerM)
-        return demoBumperFracs.compactMap { f in
-            guard f.count == 4 else { return nil }
-            let x = f[0] * Double(size.width), y = f[1] * Double(size.height)
-            let w = f[2] * Double(size.width), h = f[3] * Double(size.height)
-            return Bumper(x: x / m, y: (y - gb) / m, w: w / m, h: h / m)
-        }
-    }
-
-    func drawSyntheticBumpers() {
-        enumerateChildNodes(withName: Self.demoBumperName) { node, _ in node.removeFromParent() }
-        for r in shotBumpers {
-            let box = SKShapeNode(rect: bumperRect(r))
-            box.name = Self.demoBumperName
-            box.strokeColor = NSColor(white: 0.6, alpha: 0.6)
-            box.fillColor = NSColor(white: 0.5, alpha: 0.12)
-            box.lineWidth = 1
-            box.zPosition = 2
-            addChild(box)
-        }
     }
 
     // ── 규칙: 핀 이동 (공 정지, rare) ──

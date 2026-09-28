@@ -7,7 +7,7 @@
 2. **예고 → 사건 → 반응** 3박자 — 1초 전 그림자·소리, 사건, 스틱맨이 몸으로 반응
 3. **등급** — 자주 작게, 드물게 크게. 라운드에 한 번 나오는 대형 사건
 
-구현: `Sources/MiniGolf/Surprises.swift` (프레임워크·7종·셰이프), `Surprises2.swift`(2차 5종), `Surprises3.swift`(3차 5종),
+구현: `Sources/MiniGolf/Surprises.swift` (프레임워크·7종·셰이프), `Surprises2.swift`(2차 4종 — 창 터널은 2026-09-28 창 범퍼와 함께 제거), `Surprises3.swift`(3차 5종),
 훅은 `GameScene.swift`(발사·비행·워터·공 정지·조준·키 입력).
 
 ## 종류
@@ -21,7 +21,6 @@
 | `mulligan` 멀리건 | 규칙 | rare | 공 정지 (나쁜 샷: 3m도 못 나갔거나 벙커) | 카드가 팔랑 내려온다 (2.5s) | 직전 샷 무료 — 공은 원래 자리로, 타수 하나 반환 | 낄낄 |
 | `nap` 낮잠 | 스틱맨 | common | 조준 중 **마지막 키 입력 뒤** 12~20s 방치 | (없음 — 방치 자체가 예고) | 꾸벅, z z z, 코골이. **아무 키나 누르면** 화들짝 깨고 그 키는 소비. 조준당 한 번 | 화들짝 |
 | `cursorCat` 커서 고양이 | 데스크탑 | epic | 공 정지 (커서가 이 화면에 있을 때) | 야옹 + 토스트 | 화면 끝에서 들어와 **진짜 마우스 커서**를 5초 쫓는다. 커서가 공 옆이거나 5초가 지나면 공으로 가서 앞발로 툭 (1.5~3m), 반대편으로 퇴장 | 훠이훠이 |
-| `windowTunnel` 창 터널 (2차) | 데스크탑 | epic | 비행 중 (범퍼 모드 켜짐 + 샷 순간 창 스냅샷이 있을 때) | 창 윤곽이 세 번 술렁이고 낮은 웅웅 (1.4s) | 첫 창 진입 순간 공이 창 속으로 사라진다(궤적은 진입점에서 끊김) → 진행 방향으로 가장 멀리 있는 다른 창(없으면 같은 창)의 반대편에서 **같은 속도로** 튀어나온다. 통과 시간 0.3~1.3s, 출구엔 고리가 먼저 퍼진다 | 화들짝 → 낄낄 |
 | `pinMove` 핀 이동 (2차) | 규칙 | rare | 공 정지 (그린 폭 ≥ 12m, 남은 거리 > 25m) | 깃발이 두 번 부르르 + 퉁 (1.2s) | 깃대가 쑥 뽑혀 다리를 내고 그린 위를 걸어가(그린이 허용하는 만큼 — 보통 먼 끝, 30%는 가까운 끝, 좁은 그린은 ≈4~5m) 새 자리에 꽂힌다 — **컵이 옮겨진다**(`Hole.movingPin` 사본, 지형 재빌드). 토스트에 멀어진/가까워진 거리 | 멀어지면 처짐, 가까워지면 주먹 |
 | `ballSwap` 공 바꿔치기 (2차) | 물리 | rare | 공 정지 (다음 샷이 있고 남은 거리 > 30m) | 낙하산 달린 택배 상자가 팔랑 내려온다 (2.3s) | 상자가 열리고 헌 공과 새 공이 교차 점프 — **다음 한 샷만** 고무공(반발 ×2.6, 계속 튄다) 또는 볼링공(발사 ×0.5·양력 ×0.55·반발 ×0.35·굴림 감속 ×1.6, 둔탁하게 떨어져 짧게 구른다 — 퍼터는 발사 배율 면제). 샷이 끝나면 표준으로 (`BallKind`) | 고무공 낄낄 · 볼링공 화들짝 |
 | `gallery` 갤러리 (2차) | 스틱맨 | common | 공 정지 (다음 샷이 있을 때) — **다음 샷 위에 얹힌다** | 웅성거림과 함께 관중 넷이 스탠스 뒤로 걸어 들어온다 (2.8s) | 다음 샷을 지켜보고 결과에 반응(판정 순서): 홀인 = 환호 · 물 = 야유 · 그린에 올리면 환호 · 벙커 또는 남은 거리 15% 미만 단축 = 야유(고개 푹) · 절반 이상 단축 = 환호(양팔 번쩍·폴짝) · 나머지 = 박수. 2.6s 뒤 퇴장(가장 먼 관중이 화면 밖으로 나갈 때까지 유지) | 환호엔 손 흔들기(훠이훠이 재활용), 박수엔 끄덕, 야유엔 처짐 — 공이 멈춘 샷이면 씬을 1.7s 점유해 보여준다 |
@@ -35,7 +34,7 @@
 스틱맨 반응 3종 추가(`ReactionKind`): `startled`(뒤로 움찔·양팔 번쩍·고개 뒤로), `shoo`(트레일 팔 흔들기), `laugh`(어깨 들썩).
 
 2차(2026-09-16, `Sources/MiniGolf/Surprises2.swift`)는 새 반응 없이 기존 반응을 재활용한다. 공통 훅 `onShotEnded(terminal:)`(GameScene 비행 루프,
-샷 종료 한 번)이 공 바꿔치기 복귀·터널 잔상 정리·갤러리 판정을 맡고, 지연 실행은 `afterSurprise(delay)`(서프라이즈 노드에 매단 타이머 —
+샷 종료 한 번)이 공 바꿔치기 복귀·갤러리 판정을 맡고, 지연 실행은 `afterSurprise(delay)`(서프라이즈 노드에 매단 타이머 —
 새 홀의 `cancelSurprises()`가 노드와 함께 지운다)로만 예약한다.
 반응은 홀아웃·서프라이즈·비행(피니시 홀드)·조준(낮잠 기상)에서 적용된다.
 
@@ -55,10 +54,10 @@
   조준 시작 7%(3차 캐디 — 티샷·그린 제외) · 시계 100%(3차 뻐꾸기 — 드묾은 시계가 만든다: 정각 ±30초에 조준 중이어야 하고 epic 상한 1).
   그린 위 공 정지는 제외(부당함 방지).
 - 홀 시작(`startHole`, R 새 라운드 포함)에서 `cancelSurprises()`가 진행 중인 노드·고양이 상태·돌풍·낮잠을 걷어낸다 — 대기 중인 액션 클로저가 새 홀을 오염시키지 않도록.
-- 라운드 상한: 종류별 common 3 · rare 1 · epic 1, 전체 5. `newRound`에서 리셋. 2차로 12개, 3차로 17개가 됐지만 상한은 그대로 —
-  빈도는 안 늘고 라운드마다 나오는 조합만 달라진다. 비행 훅은 돌풍·창 터널·스프링클러·바람 역전이 나눠 가지므로 종류별 빈도는 줄었다.
+- 라운드 상한: 종류별 common 3 · rare 1 · epic 1, 전체 5. `newRound`에서 리셋. 2차로 12개, 3차로 17개(창 터널 제거 뒤 16개)가 됐지만 상한은 그대로 —
+  빈도는 안 늘고 라운드마다 나오는 조합만 달라진다. 비행 훅은 돌풍·스프링클러·바람 역전이 나눠 가지므로 종류별 빈도는 줄었다.
 - 후보 중 등급 가중 추첨(common 3 · rare 2 · epic 1).
-- 돌풍·낮잠·창 터널·갤러리·스프링클러·바람 역전·캐디·뻐꾸기는 씬을 점유하지 않는다(비행·조준·다음 샷 위에 얹힘). 나머지는
+- 돌풍·낮잠·갤러리·스프링클러·바람 역전·캐디·뻐꾸기는 씬을 점유하지 않는다(비행·조준·다음 샷 위에 얹힘). 나머지는
   `mode = .surprise` → 끝나면 `startWalk()`.
 - 지연 실행은 서프라이즈 노드의 액션이나 `afterSurprise`로만. `afterSurprise`는 같은 프레임에 정리된 타이머를 건너뛴다 — 씬 액션
   (`--demo-restart-in`)이 노드를 지운 그 프레임에도 SpriteKit은 액션 패스의 나머지 노드 액션을 평가해, 새 라운드에 뻐꾸기 울음이 한 번
@@ -67,13 +66,12 @@
 ## 관찰
 
 - `--surprise KIND` — 해당 훅마다 그 종류 강제 (예: `--demo --surprise cursorCat`). `--demo-surprise`는 훅별 순환.
-- `--demo-bumpers "fx,fy,fw,fh;…"` — 창이 없는 관찰 환경용 합성 범퍼(화면 비율, 좌하단 원점). 창 터널 관찰: `--demo --demo-bg --surprise windowTunnel
-  --demo-bumpers "0.3,0.28,0.1,0.3;0.6,0.33,0.08,0.28"`. 로그: `TUNNEL armed/in/out`, `PIN old → new`, `BALLKIND kind`, `GALLERY verdict gain`, `GEESE scatter`.
+- 2차 로그: `PIN old → new`, `BALLKIND kind`, `GALLERY verdict gain`, `GEESE scatter`.
 - 3차 로그: `SPRINKLER up/spray/in/out/wet roll/done` · `WINDREV warn` → `WINDREV old → new phase` · `CADDIE arrive` → `CADDIE club A → B remain …` 또는
   `CADDIE advice "…"` → `CADDIE leave [(aborted …)]` · `CUCKOO day hour H count N` → `CUCKOO call i/N` → `CUCKOO done`(밤: `CUCKOO night … fireflies 6`·`hoot 1/2`) ·
   `DOG enter` → `grab` → `drop a → b (closer|farther)` → `leave` · 인터럽트 `SURPRISE3 cancel kinds`. `--surprise cuckoo`는 시각 무관 강제(라운드 1회),
   `--demo-hour H`로 시각 고정(밤 대체 관찰: `--demo-hour 23`). 캐디는 데모 봇이 건네기를 기다린다(실플레이는 언제든 칠 수 있다).
-- 검증(2026-09-23, 3차): 5종 각각 `--demo --demo-bg --surprise KIND --seed 19 --screen 1 --demo-bumpers "0.995,0.995,0.003,0.003"` 로그로
+- 검증(2026-09-23, 3차): 5종 각각 `--demo --demo-bg --surprise KIND --seed 19 --screen 1` 로그로(당시엔 `--demo-bumpers` 티끌 범퍼로 실제 창 간섭을 막았다 — 창 범퍼는 2026-09-28 제거)
   예고→사건→반응→정리 확인, `--demo-restart-in`(스프링클러 0.8 · 바람 역전 0.5/0.9 · 캐디 1.0 · 뻐꾸기 2.0 · 강아지 1.6/2.2/2.4 — 공을 문 상태)로
   R 재시작 잔존 없음 확인, 종류별 1회 캡처(보조 화면 `screencapture -D 2`).
 - `--demo-bg` — 불투명 배경 (캡처 판독용). `--demo-restart-in T` — 서프라이즈 시작 T초 뒤 새 라운드(인터럽트 정리 관찰). `--demo-idle --surprise nap` — 조준 유지 중 낮잠→자동 기상→재수면 없음 확인. 로그: `SURPRISE kind @x tier`, `CAT phase x target mouse ball`(0.5s), `SURPRISE nap start/wake`, `SURPRISE cat paw`.
@@ -83,7 +81,7 @@
 ## 효과음 (합성, `SoundKit`)
 
 `chirp`(지저귐) · `thump`(땅 울림) · `gust(dur:)`(노이즈 스웰) · `meow` · `snore` · `ribbit` · `flutter`(카드).
-2차: `hum`(터널 예고 맥놀이) · `warp(up:)`(진입·출구 스윕) · `pluck`(깃대) · `pop`(상자) · `murmur`(웅성) · `cheer` · `clap` · `groan` · `honk`.
+2차: `pluck`(깃대) · `pop`(상자) · `murmur`(웅성) · `cheer` · `clap` · `groan` · `honk`.
 3차: `tick`(스프링클러 예고·시계 똑딱) · `sprinkler(dur:)`(쉬익 + 틱틱 박자, 한 버퍼) · `hmm`(캐디 흠흠) · `cuckoo`(G5→E♭5 두 음) · `hoot`(부엉) ·
 `woof`(멍). 바람 역전은 `gust`를 재활용.
 

@@ -22,7 +22,7 @@ final class SurprisesTests: XCTestCase {
 
     func testThirdBatchKindsFollowTierHookRules() {
         let third: [SurpriseKind] = [.sprinkler, .windReverse, .caddie, .cuckoo, .dog]
-        XCTAssertEqual(SurpriseKind.allCases.count, 17)
+        XCTAssertEqual(SurpriseKind.allCases.count, 16)
         XCTAssertEqual(third.map(\.tier), [.common, .rare, .common, .epic, .common])
         XCTAssertEqual(third.map(\.hook), [.inFlight, .inFlight, .aimStart, .clock, .ballRest])
         // 강아지만 씬을 점유 — 나머지는 비행·조준 위에 얹힌다

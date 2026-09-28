@@ -46,7 +46,6 @@ enum SurpriseKind: String, CaseIterable {
     case nap // 어드레스에서 꾸벅 잠들고, 키를 눌러야 깬다 (스틱맨)
     case cursorCat // 진짜 마우스 커서를 쫓는 고양이 — 공 옆이면 앞발로 툭 (데스크탑)
     // 2차 (2026-09-16, Surprises2.swift — 계열별 1종)
-    case windowTunnel // 공이 앱 창 속으로 들어가 다른 창에서 나온다 (데스크탑)
     case pinMove // 깃발이 다리를 내고 그린 위를 걸어가 컵이 옮겨진다 (규칙)
     case ballSwap // 택배 상자에서 고무공·볼링공 — 다음 한 샷만 물리가 다르다 (물리)
     case gallery // 관중이 몰려와 다음 샷을 보고 환호·박수·야유 (스틱맨)
@@ -62,14 +61,14 @@ enum SurpriseKind: String, CaseIterable {
         switch self {
         case .birdSteal, .moleNudge, .nap, .gallery, .geese, .sprinkler, .caddie, .dog: .common
         case .frogRescue, .gust, .mulligan, .pinMove, .ballSwap, .windReverse: .rare
-        case .cursorCat, .windowTunnel, .cuckoo: .epic
+        case .cursorCat, .cuckoo: .epic
         }
     }
 
     var hook: SurpriseHook {
         switch self {
         case .birdSteal, .moleNudge, .mulligan, .cursorCat, .pinMove, .ballSwap, .gallery, .geese, .dog: .ballRest
-        case .gust, .windowTunnel, .sprinkler, .windReverse: .inFlight
+        case .gust, .sprinkler, .windReverse: .inFlight
         case .nap: .aimIdle
         case .frogRescue: .water
         case .caddie: .aimStart
@@ -77,11 +76,11 @@ enum SurpriseKind: String, CaseIterable {
         }
     }
 
-    /// 씬을 점유하는가 (mode = .surprise, 끝나면 걷기). 돌풍·낮잠·창 터널·갤러리는 비행·조준·다음 샷 위에 얹힌다
+    /// 씬을 점유하는가 (mode = .surprise, 끝나면 걷기). 돌풍·낮잠·갤러리는 비행·조준·다음 샷 위에 얹힌다
     /// (3차: 스프링클러·바람 역전은 비행, 캐디·뻐꾸기는 조준 위에 — 강아지만 점유)
     var ownsScene: Bool {
         switch self {
-        case .gust, .nap, .windowTunnel, .gallery, .sprinkler, .windReverse, .caddie, .cuckoo: false
+        case .gust, .nap, .gallery, .sprinkler, .windReverse, .caddie, .cuckoo: false
         default: true
         }
     }
@@ -152,8 +151,6 @@ extension GameScene {
             return mouseInScene() != nil
         case .frogRescue: // 마지막 타에 빠진 공까지 구해 주진 않는다 (onWater는 즉시 기권)
             return strokes + 1 < Phys.maxStrokes
-        case .windowTunnel: // 지날 창이 있어야 한다 (범퍼 모드 켜짐 + 샷 순간 스냅샷)
-            return Theme.windowBumpers && !shotBumpers.isEmpty
         case .pinMove: // 옮길 만한 그린 폭 + 아직 먼 거리 (옮겨도 티가 나야 한다)
             return hole.greenEnd - hole.greenStart >= 12 && abs(hole.holeX - ball.x) > 25
         case .ballSwap: // 다음 샷이 있고, 그 샷이 의미 있을 만큼 멀 때
@@ -194,7 +191,6 @@ extension GameScene {
         case .mulligan: playMulligan()
         case .nap: startNap()
         case .cursorCat: playCursorCat()
-        case .windowTunnel: playWindowTunnel()
         case .pinMove: playPinMove()
         case .ballSwap: playBallSwap()
         case .gallery: playGallery()
@@ -250,7 +246,6 @@ extension GameScene {
         if napping, demoMode, aimTime - napStart >= 2.5 {
             wakeUp() // 관찰 모드는 키가 없으니 스스로 깬다
         }
-        updateSurprises2(currentTime: currentTime)
         updateSurprises3(dt: dt, currentTime: currentTime)
     }
 

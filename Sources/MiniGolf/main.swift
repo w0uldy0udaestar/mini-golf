@@ -23,7 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: NSMenu!
     private var soundMenuItem: NSMenuItem!
     private var contrastMenuItem: NSMenuItem!
-    private var bumperMenuItem: NSMenuItem!
     private var monitorMenu: NSMenu!
     private var hatMenu: NSMenu!
     private var lastResignKey = Date.distantPast
@@ -109,10 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scene.demoPower = min(1, max(0.05, p)) // 봇 파워 고정 (풀파워 피니시 관찰 등)
         }
         scene.demoGIRForce = args.contains("--demo-gir") // 파4·5 그린 정지면 원온/투온 연출 강제 (관찰용)
-        if let i = args.firstIndex(of: "--demo-bumpers"), i + 1 < args.count { // "fx,fy,fw,fh;…" 화면 비율 — 창 터널 관찰용 합성 범퍼
-            scene.demoBumperFracs = args[i + 1].split(separator: ";")
-                .map { $0.split(separator: ",").compactMap { Double($0) } }
-        }
         scene.demoTrademarkForce = args.contains("--demo-trademark") // 풀샷마다 굿샷 판정 + 리그 덤프 (트레이드마크 관찰)
         scene.demoBackdrop = args.contains("--demo-bg") // 불투명 배경 — 캡처 판독용 (데스크탑 위 겹침 제거)
         PlayLog.toStdout = scene.demoMode
@@ -231,13 +226,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         contrastMenuItem.target = self
         contrastMenuItem.state = Theme.highContrast ? .on : .off
-        bumperMenuItem = statusMenu.addItem(
-            withTitle: "창 범퍼 (공이 앱 창에 튕김)",
-            action: #selector(toggleBumpers),
-            keyEquivalent: ""
-        )
-        bumperMenuItem.target = self
-        bumperMenuItem.state = Theme.windowBumpers ? .on : .off
         let hatItem = statusMenu.addItem(withTitle: "모자", action: nil, keyEquivalent: "")
         hatMenu = NSMenu()
         hatItem.submenu = hatMenu // 항목은 열 때마다 재구성 (해금 반영)
@@ -313,11 +301,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showRecords() {
         scene.showRecordsCard()
-    }
-
-    @objc private func toggleBumpers() {
-        Theme.windowBumpers.toggle()
-        bumperMenuItem.state = Theme.windowBumpers ? .on : .off
     }
 
     @objc private func toggleContrast() {

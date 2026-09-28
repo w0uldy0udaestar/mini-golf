@@ -68,8 +68,6 @@ final class GameScene: SKScene {
     var surpriseCursor = 0
     // ── 서프라이즈 2차 (Surprises2.swift) ──
     var ballKind = BallKind.standard // 공 바꿔치기: 다음 한 샷만 (샷이 끝나면 표준으로)
-    var tunnelArmed = false // 창 터널: 이 샷의 첫 범퍼 진입을 반사 대신 터널로
-    var tunnelTransit: TunnelTransit? // 창 속을 지나는 중 — 비행 물리 정지
     /// 급경사 정착(`Ballistics.settleOffSteepSlope`)의 스냅을 렌더에서 굴림으로 — 물리 위치는 즉시 확정, 그림만 from→to
     /// (프로브 실측 2026-09-23: 샷의 1.2%, 최대 18.5m·평균 5.4m — 한 프레임 점프는 순간이동으로 보인다)
     var settleRoll: (from: Double, to: Double, t: Double, dur: Double)?
@@ -78,7 +76,6 @@ final class GameScene: SKScene {
     var puttKick: (t0: TimeInterval, amp: Double)?
     var galleryState: GalleryState?
     var surprise3 = Surprise3State() // 서프라이즈 3차 (Surprises3.swift) — 스프링클러·캐디·뻐꾸기·강아지 상태
-    var demoBumperFracs: [[Double]] = [] // --demo-bumpers: 창이 없는 관찰 환경용 합성 범퍼 (화면 비율 x,y,w,h)
     var motionCursor = 0 // --demo-motions 시연 커서 (--motion-cursor N으로 중간부터)
     private var showpieceCursor = 0
     private var demoWait = 0.0
@@ -212,10 +209,8 @@ final class GameScene: SKScene {
     private var idleKind = 0
     private var idleStart = 0.0
     var stickX = CourseGenerator.teeX
-    var trailPoints: [CGPoint] = [] // Surprises2(창 터널)가 진입점에서 끊는다
+    var trailPoints: [CGPoint] = []
     private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
-    var shotBumpers: [Bumper] = [] // 창 범퍼 — 샷 순간 스냅샷, 비행 동안 고정 (Surprises2 창 터널이 읽는다)
-    private var shotHitBumper = false // 이 샷에서 범퍼를 맞았나 — 뱅크샷 홀인 배지 판정
     var roundHadWater = false // 무입수 라운드 배지 판정
     // QA P1 재미 3 (2026-09-16): 좌절 반응·버디 스트릭·포커스 복귀 인사
     var setbackStreak = 0 // 워터·벙커·립아웃 연속 횟수 — 2회째에 좌절 반응
@@ -1349,27 +1344,7 @@ final class GameScene: SKScene {
                 .run { [weak self] in self?.teeNode.isHidden = true },
             ]))
         }
-        shotHitBumper = false
         shotLipped = false
-        // 창 범퍼 모드: 샷 순간의 창 배치를 스냅샷 — 이 샷의 비행 동안 고정 범퍼
-        if Theme.windowBumpers, let screen = view?.window?.screen {
-            shotBumpers = WindowBumpers.snapshot(
-                screen: screen, pxPerM: Double(pxPerM), groundBase: Double(groundBase)
-            )
-            if demoMode, !shotBumpers.isEmpty { // 좌표 대조용 계측 (관찰용, 미터)
-                let list = shotBumpers
-                    .map { String(format: "(%.0f,%.0f %.0fx%.0f)", $0.x, $0.y, $0.w, $0.h) }
-                    .joined(separator: " ")
-                print("BUMPERS \(shotBumpers.count) \(list)")
-                fflush(stdout)
-            }
-        } else {
-            shotBumpers = []
-        }
-        if demoMode, !demoBumperFracs.isEmpty { // --demo-bumpers: 합성 범퍼 (창 터널 관찰용, 실플레이 경로 아님)
-            shotBumpers = syntheticBumpers()
-            drawSyntheticBumpers()
-        }
         preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건·갤러리 스냅샷
         strokes += 1
         PlayLog.note(String(
@@ -1558,9 +1533,6 @@ final class GameScene: SKScene {
             if sig == .summitGreen, r.award(.summiteer) {
                 earned.append(.summiteer)
             }
-        }
-        if shotHitBumper, r.award(.bumperBank) {
-            earned.append(.bumperBank)
         }
         if r.holesPlayed >= 100, r.award(.century) {
             earned.append(.century)
@@ -2386,21 +2358,17 @@ final class GameScene: SKScene {
             }
         }
 
-        if mode == .motion, tunnelTransit == nil { // 창 터널 통과 중엔 비행 물리 정지 (Surprises2)
+        if mode == .motion {
             acc += dt * timeScale
             var terminal = StepEvent.none
             var landing: (speed: Double, surface: Surface, x: Double)?
             var wallHit: (speed: Double, x: Double)?
-            var bumperHit: (speed: Double, x: Double, y: Double)?
             var lipped = false
             var settledFrom: Double? // 정착 스냅이 일어난 프레임 — 궤적 잔상은 정지 지점까지만
             while acc >= Phys.dt {
                 acc -= Phys.dt
-                let prevX = ball.x, prevY = ball.y
-                let event = Ballistics.step(
-                    &ball, hole: hole, bumpers: tunnelArmed ? [] : shotBumpers, // 터널 무장 중엔 반사 대신 진입 판정 (아래)
-                    wind: gustWind, kind: ballKind // 돌풍 덮어쓰기 · 공 바꿔치기
-                )
+                let prevX = ball.x
+                let event = Ballistics.step(&ball, hole: hole, wind: gustWind, kind: ballKind) // 돌풍 덮어쓰기 · 공 바꿔치기
                 switch event {
                 case .holed, .water:
                     terminal = event
@@ -2411,10 +2379,6 @@ final class GameScene: SKScene {
                 case let .wall(speed):
                     if speed > (wallHit?.speed ?? 0) {
                         wallHit = (speed, ball.x)
-                    }
-                case let .bumper(speed):
-                    if speed > (bumperHit?.speed ?? 0) {
-                        bumperHit = (speed, ball.x, ball.y)
                     }
                 case .lipOut:
                     lipped = true
@@ -2433,10 +2397,6 @@ final class GameScene: SKScene {
                 if terminal != .none {
                     break
                 }
-                if tunnelArmed,
-                   enterTunnelIfInside(prevX: prevX, prevY: prevY) { // 종결(홀인·입수) 뒤에만 — 같은 스텝의 홀인을 삼키지 않게 (리뷰 M1)
-                    break
-                }
             }
             if let l = landing, l.speed > 1.4 {
                 if ballKind == .bowling { // 볼링공은 둔탁하게 (Surprises2)
@@ -2453,19 +2413,6 @@ final class GameScene: SKScene {
             }
             if let w = wallHit, w.speed > 0.8 {
                 SoundKit.shared.wall(speed: w.speed)
-            }
-            if let bh = bumperHit, bh.speed > 0.8 { // 창 범퍼 — 벽 반사음 + 임팩트 링
-                shotHitBumper = true
-                if !demoMode {
-                    Records.shared.bumperHits += 1
-                    Records.shared.save()
-                }
-                SoundKit.shared.wall(speed: bh.speed)
-                FX.ripple(on: self, at: CGPoint(x: px(bh.x), y: py(bh.y)))
-                if demoMode {
-                    print(String(format: "BUMPER-HIT %.1f @(%.0f, %.0f)", bh.speed, bh.x, bh.y))
-                    fflush(stdout)
-                }
             }
             if lipped {
                 SoundKit.shared.lipOut()
@@ -2828,7 +2775,7 @@ final class GameScene: SKScene {
             ballNode.position = CGPoint(x: hand.x + CGFloat(dir) * 2, y: hand.y + 4 + tossLift)
             shadowNode.isHidden = true
         }
-        if mode != .holed, mode != .surprise, !pickupOwns, tunnelTransit == nil { // 창 속 통과 중엔 공·그림자 숨김 유지
+        if mode != .holed, mode != .surprise, !pickupOwns {
             var bx = ball.x, by = ball.y
             if var r = settleRoll { // 정착 굴림 — smoothstep으로 from→to, 지면을 따라
                 r.t += dt
