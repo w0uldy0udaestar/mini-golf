@@ -240,6 +240,44 @@ public enum CourseGenerator {
         return interpolate(nodes: nodes, worldW: worldW)
     }
 
+    /// 트레드 굴곡 (2026-09-28 판정 "경사 위에서도 평지에서 치는 느낌"): 봇 실측 풀샷의 65%가 |경사| < 0.05였다 — 계단 지형은 트레드가
+    /// 평탄하고 라이저엔 공이 못 서서 경사 라이 자체가 드물었다. 평탄 구간에 파장 18~24m·32~44m 사인 둘을 겹쳐 페어웨이 라이에
+    /// |경사| 0.05~0.15의 기복을 준다. 정점 경사 ≤ 0.17(페어웨이 감속 2.2m/s² > 중력 성분 1.6 — 공은 골에서 멈춘다).
+    /// 티런·라이저(±4m)·물(±4m)·에이프런 이후는 제외, 경계 6m smoothstep 페이드. 난수는 홀 기하에서 파생한 부속 열이라 메인 열을
+    /// 안 건드린다 — 기존 시드의 아키타입·해저드 배치는 그대로고 표고에 굴곡만 얹힌다
+    static let undulationAmp = (short: 0.22, long: 0.45)
+    static func addUndulation(
+        _ elev: inout [Double], teeEnd: Double, apronStart: Double,
+        risers: [ClosedRange<Double>], water: ClosedRange<Double>?, worldW: Double
+    ) {
+        let mix = Int(worldW * 100) ^ (Int(teeEnd * 100) << 8) ^ (Int(apronStart * 100) << 16)
+        var r = SeededRandom(seed: UInt32(truncatingIfNeeded: mix))
+        let l1 = r.next(18, 24), l2 = r.next(32, 44)
+        let p1 = r.next() * 2 * .pi, p2 = r.next() * 2 * .pi
+        var exclude: [ClosedRange<Double>] = [(-1) ... (teeEnd + 8), (apronStart - 6) ... (worldW + 2)]
+        exclude += risers.map { ($0.lowerBound - 4) ... ($0.upperBound + 4) }
+        if let w = water {
+            exclude.append((w.lowerBound - 4) ... (w.upperBound + 4))
+        }
+        let fade = 6.0
+        for i in 0 ..< elev.count {
+            let x = Double(i)
+            var w = 1.0
+            for ex in exclude {
+                if ex.contains(x) {
+                    w = 0
+                    break
+                }
+                let d = x < ex.lowerBound ? ex.lowerBound - x : x - ex.upperBound
+                w = min(w, d / fade)
+            }
+            guard w > 0 else { continue }
+            let u = w * w * (3 - 2 * w)
+            elev[i] += u *
+                (undulationAmp.short * sin(2 * .pi * x / l1 + p1) + undulationAmp.long * sin(2 * .pi * x / l2 + p2))
+        }
+    }
+
     /// 제어점 → 1m 표고 샘플 (cos 완충 보간)
     static func interpolate(nodes: [(x: Double, e: Double)], worldW: Double) -> [Double] {
         var elev = [Double](repeating: 0, count: Int(ceil(worldW)) + 2)
@@ -446,6 +484,7 @@ public enum CourseGenerator {
         }
 
         var elev = interpolate(nodes: nodes, worldW: worldW)
+        addUndulation(&elev, teeEnd: teeEnd, apronStart: apronStart, risers: risers, water: water, worldW: worldW)
         for i in 0 ..< elev.count { // 절대 클램프 (+2는 그린 브레이크 여유)
             elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
         }

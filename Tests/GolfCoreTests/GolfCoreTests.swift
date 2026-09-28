@@ -672,6 +672,35 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertLessThan(hypot(up.vx, up.vy), hypot(flat.vx, flat.vy), "경사 라이 스피드 손실 없음")
     }
 
+    /// 트레드 굴곡 (2026-09-28): 티~에이프런의 비라이저·비수면 지면 중 |경사| ≥ 0.05가 충분히 있어야 경사 라이가 체감된다.
+    /// 티런은 평탄, 라이저 밖 굴곡은 정지 가능 경사(0.3) 안
+    func testTreadsAreUndulatedButTeeFlat() {
+        var sloped = 0, total = 0
+        for seed: UInt32 in 1 ... 40 {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                var x = h.teeX + 1
+                while x < h.teeX + 9 { // 티런은 평탄
+                    XCTAssertLessThan(abs(h.slope(at: x)), 0.02, "티런에 굴곡 @\(x)")
+                    x += 1
+                }
+                x = h.teeX + 10
+                while x < h.greenStart - 12 {
+                    let s = abs(h.slope(at: x))
+                    if h.surface(at: x) != .water, s <= 0.3 { // 라이저(급경사) 밖
+                        total += 1
+                        if s >= 0.05 {
+                            sloped += 1
+                        }
+                    }
+                    x += 1
+                }
+            }
+        }
+        let share = Double(sloped) / Double(max(1, total))
+        XCTAssertGreaterThan(share, 0.40, "경사 라이 지면 비율이 낮음 (\(share)) — 굴곡이 사라졌나")
+        XCTAssertLessThan(share, 0.80, "평지가 거의 없음 (\(share)) — 굴곡 과다")
+    }
+
     // ── V자 골짜기 정지 보장 (QA 소크 비종결 6/3206 회귀 방지) ──
 
     func testBallRestsInSteepValley() {

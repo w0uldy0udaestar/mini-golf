@@ -913,7 +913,7 @@ final class GameScene: SKScene {
 
     /// 경사 라이 스탠스 — 발·무릎이 실제 지면 높이를 정확히 딛고(zRotation 잔차 보정),
     /// 체중이 내리막 발로 흘러 오르막/내리막 라이가 실루엣으로 읽힌다 (2026-08-15 사용자 요청 3번).
-    /// zRotation(경사×0.7)은 몸 전체 기울기만 담당 — 여기서 발 접지·체중 배분을 더한다.
+    /// zRotation(경사×stanceSlopeRatio)은 몸 전체 기울기만 담당 — 여기서 발 접지·체중 배분을 더한다.
     /// 벽 스탠스와는 상충(벽 클램프가 무회전 평면 가정)이라 renderWallT만큼 약해진다
     private func applySlopeStance(_ rig: inout Rig) {
         let strength = 1 - renderWallT
