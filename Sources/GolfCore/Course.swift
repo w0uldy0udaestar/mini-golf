@@ -708,18 +708,6 @@ public enum CourseGenerator {
             addBunker(from: greenStart - 4 - rand.next(3, 8), width: rand.next(5, 8))
         }
 
-        // 트레드 굴곡 (2026-09-28) — 해저드·나무 배치 뒤, 그린 평탄화 전. 시그니처 홀만(클래식 경로는 baseElevation이 자체 기복)
-        if signature != nil {
-            let bunkers = segments.filter { $0.type == .bunker }.map { $0.from ... $0.to }
-            addUndulation(
-                &elev, teeEnd: teeEnd, apronStart: apronStart, risers: sigRisers, water: waterRange, bunkers: bunkers,
-                worldW: worldW
-            )
-            for i in 0 ..< elev.count { // 절대 클램프 재적용 (+2는 그린 브레이크 여유)
-                elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
-            }
-        }
-
         // ── 그린: 주변 지형 흐름을 따르는 미세 경사(브레이크) ──
         let gFrom = Int(apronStart - 2)
         let gTo = min(Int(ceil(greenEnd + 6)), elev.count - 1)
@@ -798,6 +786,19 @@ public enum CourseGenerator {
             let rx = teeEnd + 35 + rand.next() * (apronStart - teeEnd - 70)
             if hazardFree(rx, margin: 3), gentleGround(rx) {
                 obstacles.append(Obstacle(kind: .rock, x: rx, size: rand.next(1.2, 2.0)))
+            }
+        }
+
+        // 트레드 굴곡 (2026-09-28) — 해저드·나무·바위 배치 뒤(배치 가드가 굴곡을 보지 않아 v0.8.3 시드의 자리 보존), Hole 생성 전. 그린·에이프런은 제외 구간이라 앞선 평탄화와
+        // 무관. 시그니처 홀만(클래식 경로는 baseElevation이 자체 기복)
+        if signature != nil {
+            let bunkers = segments.filter { $0.type == .bunker }.map { $0.from ... $0.to }
+            addUndulation(
+                &elev, teeEnd: teeEnd, apronStart: apronStart, risers: sigRisers, water: waterRange, bunkers: bunkers,
+                worldW: worldW
+            )
+            for i in 0 ..< elev.count { // 절대 클램프 재적용 (+2는 그린 브레이크 여유)
+                elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
             }
         }
 

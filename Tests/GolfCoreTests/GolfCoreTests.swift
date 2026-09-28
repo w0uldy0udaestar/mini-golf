@@ -527,7 +527,11 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertGreaterThan(abs(hole.slope(at: b.x)), 0.5)
         let water = Ballistics.settleOffSteepSlope(&b, hole: hole)
         XCTAssertFalse(water)
-        XCTAssertLessThanOrEqual(abs(hole.slope(at: b.x)), Ballistics.steepRest + 0.05, "완경사까지 내려와야 함 (\(b.x))")
+        XCTAssertLessThanOrEqual(
+            abs(hole.slope(at: b.x)),
+            Ballistics.settleTail + 0.05,
+            "바닥(settleTail)까지 내려와야 함 (\(b.x))"
+        )
         XCTAssertLessThan(b.x, 112, "내리막(발치) 쪽으로 내려와야 함")
         XCTAssertEqual(b.y, hole.ground(at: b.x), accuracy: 1e-9)
         // 완경사에 있는 공은 그대로

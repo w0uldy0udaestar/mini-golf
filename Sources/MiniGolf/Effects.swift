@@ -67,7 +67,7 @@ enum FX {
         mark.fillColor = NSColor(white: 0.62, alpha: 0.9)
         mark.strokeColor = .clear
         mark.position = CGPoint(x: p.x + CGFloat(dir) * (3 + 2 * intensity), y: p.y - 0.3)
-        mark.zPosition = 1.5
+        mark.zPosition = 0 // terrainNode의 마지막 자식 — 지형 위, 씬의 공·스틱맨 아래 (전역 z가 형제 순서보다 우선, 리뷰 #8)
         return mark
     }
 

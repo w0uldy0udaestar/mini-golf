@@ -425,6 +425,9 @@ final class GameScene: SKScene {
         trailPoints = []
         swingAnim = nil
         walkAnim = nil
+        slip = nil // 넘어지기 잔존 — R 새 라운드 뒤 티 의식이 회전·미끄러지지 않게 (리뷰 #4)
+        walkAfterSlip = false
+        renderSlipRot = 0
         ballHeld = false
         settleRoll = nil
         ballNode.removeAllActions() // 홀인 드롭 연출 복구
@@ -958,7 +961,11 @@ final class GameScene: SKScene {
         let p = 0.3 + 0.5 * min(1, max(0, (abs(s) - 0.15) / 0.15))
         let forced = demo.slipForce && abs(s) > 0.03
         guard forced || (steep && heightPct >= 0.8 && Double.random(in: 0 ..< 1) < p) else { return }
-        slip = SlipAnim(t0: lastTime, downDir: s > 0 ? -1 : 1)
+        let down: Double = s > 0 ? -1 : 1
+        if down == -dir, wallBehindPx < 100 { // 뒤로 누우면 머리가 원점 뒤 ≈90px — 벽 클램프는 무회전 가정이라 화면 밖으로 나간다 (리뷰 #7)
+            return
+        }
+        slip = SlipAnim(t0: lastTime, downDir: down)
         lastShotGood = false // 트월·어퍼컷 억제 — 미끄러지는 사람은 클럽을 못 돌린다
         if demo.active {
             print(String(format: "SLIP slope %+.2f down %d p %.2f", s, Int(s > 0 ? -1 : 1), p))
@@ -966,9 +973,9 @@ final class GameScene: SKScene {
         }
     }
 
-    private func updateSlip(currentTime: TimeInterval) {
+    private func updateSlip(currentTime: TimeInterval, dt: Double) {
         guard var sl = slip else {
-            renderSlipRot = 0
+            renderSlipRot *= exp(-8 * dt) // 취소로 남은 회전은 감쇠로 풀린다 — 한 프레임 직립 스냅 방지 (리뷰 #5)
             return
         }
         let te = currentTime - sl.t0
@@ -993,12 +1000,18 @@ final class GameScene: SKScene {
                 intensity: 0.8
             )
         }
-        if te >= 2.4 || mode == .holed || mode == .surprise || mode == .walking { // 끝났거나 씬을 다른 연출이 가져갔다
+        if te >= 2.4 || mode != .motion { // 자연 종료, 또는 홀아웃·서프라이즈·의식·조준이 씬을 가져갔다
+            let natural = te >= 2.4 && mode == .motion
             slip = nil
-            renderSlipRot = 0
-            if walkAfterSlip {
-                walkAfterSlip = false
-                startWalk()
+            if natural {
+                renderSlipRot = 0
+                lastFinishPose = Poses.upright // 일어선 자세 유지 — 피니시 포즈로 되돌아가지 않게 (리뷰 #6)
+                if walkAfterSlip {
+                    walkAfterSlip = false
+                    startWalk()
+                }
+            } else {
+                walkAfterSlip = false // 새 소유자(서프라이즈·홀 플로)가 자기 걷기 연결을 가진다 (리뷰 #3)
             }
             return
         }
@@ -2240,7 +2253,7 @@ final class GameScene: SKScene {
             }
         }
 
-        updateSlip(currentTime: currentTime)
+        updateSlip(currentTime: currentTime, dt: dt)
 
         if mode == .ritual {
             stepRitual(dt: dt)
@@ -2440,7 +2453,7 @@ final class GameScene: SKScene {
             }
         }
 
-        if mode == .motion {
+        if mode == .motion, !walkAfterSlip { // 넘어져 있는 동안 공이 멈추면 정지 분기가 매 프레임 재실행되지 않게 (리뷰 #2)
             acc += dt * timeScale
             var terminal = StepEvent.none
             var landing: (speed: Double, surface: Surface, x: Double)?
@@ -2820,6 +2833,12 @@ final class GameScene: SKScene {
         stickman.zRotation = CGFloat(renderSlopeTilt + renderSlipRot)
         // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
         stickman.position = CGPoint(x: px(stickX), y: groundY(stickX))
+        if abs(renderSlipRot) > 1e-4 { // 넘어지기 회전축을 발 중심으로 — 노드 원점은 공 자리라 발(−ballFwd−2.5px)이 회전으로 뜨거나 박힌다 (리뷰 #1)
+            let p = dir * -(renderBallFwd + 2.5) // 발 중심의 노드 로컬 x (리그 x는 dir 미러)
+            let t = renderSlopeTilt, th = renderSlopeTilt + renderSlipRot
+            stickman.position.x += CGFloat(p * (cos(t) - cos(th)))
+            stickman.position.y += CGFloat(p * (sin(t) - sin(th)))
+        }
         var drawRig = renderRig
         if !demo.noWallClamp {
             clampRigToWalls(&drawRig)

@@ -72,8 +72,8 @@ final class SoundKit {
         var soft = Biquad.lowpass(700, q: 0.8, sr: sr)
         var rng = NoiseLCG()
         // 디봇(2026-09-28): 아이언·웨지 풀샷은 페어웨이에서도 잔디를 파내는 둔한 저음이 섞인다
-        let lieAmp = lie == .rough ? 0.4 : lie == .bunker ? 0.55 : (cat == .iron || cat == .wedge) && power >= 0.4 ?
-            0.22 : 0.0
+        let lieAmp = lie == .rough ? 0.4 : lie == .bunker ? 0.55
+            : lie == .fairway && (cat == .iron || cat == .wedge) && power >= 0.4 ? 0.22 : 0.0 // 시각 디봇과 같은 조건 (리뷰 #9)
         let dur = lieAmp > 0 ? 0.2 : cat == .putter ? 0.09 : 0.1 // 퍼터 0.05 → 0.09: 접촉 '톡'이 들리게 (2026-09-24)
         play(duration: dur) { t in
             let n = rng.white()
