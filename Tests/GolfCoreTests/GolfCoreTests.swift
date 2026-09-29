@@ -957,8 +957,13 @@ final class GolfCoreTests: XCTestCase {
         XCTAssertEqual(deg(punch), c.loft - 10, accuracy: 0.01, "펀치 로프트 -10°")
         XCTAssertEqual(deg(run), c.loft - 16, accuracy: 0.01, "런닝 로프트 -16°")
         XCTAssertEqual(deg(lob), c.loft + 18, accuracy: 0.01, "로브 로프트 +18°")
-        XCTAssertEqual(v(punch) / v(base), 0.90, accuracy: 0.001, "펀치 스피드 -10%")
-        XCTAssertEqual(v(run) / v(base), 0.85, accuracy: 0.001, "런닝 스피드 -15%")
+        XCTAssertEqual(v(punch) / v(base), ShotShape.punch.speedScale(for: .iron), accuracy: 0.001, "펀치 스피드 (아이언)")
+        XCTAssertEqual(v(run) / v(base), ShotShape.running.speedScale(for: .iron), accuracy: 0.001, "런닝 스피드 (아이언)")
+        XCTAssertLessThan(
+            ShotShape.running.speedScale(for: .wedge),
+            ShotShape.running.speedScale(for: .iron),
+            "웨지 런닝은 더 큰 손실"
+        )
         XCTAssertEqual(v(lob) / v(base), 0.92, accuracy: 0.001, "로브 스피드 -8%")
         XCTAssertEqual(punch.spin / base.spin, 0.5, accuracy: 0.001, "펀치 스핀 -50%")
         XCTAssertEqual(run.spin / base.spin, 0.3, accuracy: 0.001, "런닝 스핀 -70%")
@@ -970,11 +975,15 @@ final class GolfCoreTests: XCTestCase {
         var both = BallState(x: 0, y: 0)
         Ballistics.launch(&both, club: club("3I"), heightPct: 1, lie: .fairway, dir: 1, punch: 1, shape: .punch)
         XCTAssertEqual(deg(both), max(ShotShape.minLoftDeg, 21 - 8 - 10), accuracy: 0.01, "자동+수동 펀치 로프트 바닥")
-        // 퍼터는 종류 무관
-        var pt = BallState(x: 0, y: 0), pt2 = BallState(x: 0, y: 0)
+        // 퍼터는 종류 무관 — 전 종류 (리뷰 F3: 낮은 샷의 로프트 바닥 8°가 퍼터에 새어 vx −1%였다)
+        var pt = BallState(x: 0, y: 0)
         Ballistics.launch(&pt, club: club("PT"), heightPct: 0.5, lie: .green, dir: 1)
-        Ballistics.launch(&pt2, club: club("PT"), heightPct: 0.5, lie: .green, dir: 1, shape: .lob)
-        XCTAssertEqual(pt.vx, pt2.vx, accuracy: 1e-9, "퍼터에 샷 종류가 적용됨")
+        for shape in ShotShape.allCases {
+            var pt2 = BallState(x: 0, y: 0)
+            Ballistics.launch(&pt2, club: club("PT"), heightPct: 0.5, lie: .green, dir: 1, shape: shape)
+            XCTAssertEqual(pt.vx, pt2.vx, accuracy: 1e-9, "퍼터에 샷 종류 \(shape)가 적용됨")
+            XCTAssertEqual(pt.vy, pt2.vy, accuracy: 1e-9)
+        }
         // Tab 순환은 4종을 한 바퀴 돈다
         var sh = ShotShape.standard
         var seen: [ShotShape] = []

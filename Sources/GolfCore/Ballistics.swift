@@ -120,7 +120,7 @@ public enum StepEvent: Sendable, Equatable {
 }
 
 /// 샷 종류 — 플레이어가 Tab으로 고른다 (M5-③, 2026-09-29 사용자 선택 3종). 벽·나무 자동 펀치(`launch(punch:)`)와는 별개로 겹쳐 적용된다.
-/// 수치는 평지 계측(ShotShapeProbe)으로 정했다 — 7I 풀샷 정점 57m 기준: 펀치 33m·굴림 26m(기본 12m), 런닝 17m·굴림 42m,
+/// 수치는 평지 계측(ShotShapeProbe)으로 정했다 — 7I 풀샷 정점 57m 기준: 펀치 32m·굴림 26m(기본 12m), 런닝 16m·굴림 42m,
 /// 로브 66m·총거리 −40%. 차이는 화면에서 읽히도록 과장한다 (1.3배 구분 불가 교훈)
 public enum ShotShape: String, CaseIterable, Sendable {
     case standard, punch, running, lob
@@ -135,13 +135,27 @@ public enum ShotShape: String, CaseIterable, Sendable {
         }
     }
 
-    /// 볼스피드 배율 — 짧은 백스윙(펀치·런닝)·열린 페이스(로브)의 손실
-    public var speedScale: Double {
+    /// 볼스피드 배율 — 짧은 백스윙(펀치·런닝)·열린 페이스(로브)의 손실. 낮은 샷은 클럽군별: 로프트가 클수록 로프트를 깎는 이득이
+    /// 커서(웨지는 풍선 탄도라 −16°가 총거리 +36%) 같은 배율이면 "런닝 = 공짜 거리"가 된다 — 평지 풀샷 총거리를 모든 클럽에서
+    /// 기본의 +12% 안에 두는 값 (ShotShapeProbe 가드, 리뷰 F2)
+    public func speedScale(for cat: ClubCategory) -> Double {
         switch self {
         case .standard: 1
-        case .punch: 0.90
-        case .running: 0.85
         case .lob: 0.92
+        case .punch:
+            switch cat {
+            case .wood: 0.90
+            case .iron: 0.89
+            case .wedge: 0.82
+            case .putter: 1
+            }
+        case .running:
+            switch cat {
+            case .wood: 0.85
+            case .iron: 0.83
+            case .wedge: 0.74
+            case .putter: 1
+            }
         }
     }
 
@@ -215,9 +229,10 @@ public enum Ballistics {
         v0 *= club.isPutter ? 1 : kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다 — 퍼터는 면제 (0.16x '죽은 샷' 방지, 리뷰 m4)
         let slopeDeg = abs(atan(slope)) * 180 / .pi
         v0 *= 1 - min(0.12, 0.006 * slopeDeg) // 경사 라이 스피드 손실 (~0.6%/도, 실측 — 3eccc4f 복원)
-        v0 *= club.isPutter ? 1 : shape.speedScale // 샷 종류 (퍼터는 무관)
+        let shape = club.isPutter ? ShotShape.standard : shape // 퍼터는 종류 무관 — 호출측 가드와 무관하게 여기서 정규화 (리뷰 F3)
+        v0 *= shape.speedScale(for: club.cat)
         // 클럽 로프트 + 자동 펀치 + 샷 종류 → 종류별 바닥·상한 클램프 → 경사·미스힛은 그 뒤 (내리막 라이는 물리대로 더 낮아진다)
-        var loftDeg = club.loft - punch * 8 + (club.isPutter ? 0 : shape.loftDelta)
+        var loftDeg = club.loft - punch * 8 + shape.loftDelta
         if shape.isLow {
             loftDeg = max(ShotShape.minLoftDeg, loftDeg)
         }

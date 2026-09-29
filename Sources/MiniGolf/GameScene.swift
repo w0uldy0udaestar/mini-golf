@@ -2195,8 +2195,8 @@ final class GameScene: SKScene {
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
         // → = 드라이버(긴 클럽) 쪽, ← = 퍼터 쪽 (2026-08-15 사용자 요청 — 오른쪽 = 멀리)
-        case 123: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // ←
-        case 124: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // →
+        case 123: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); onClubChanged() // ←
+        case 124: clubIdx = max(0, clubIdx - 1); onClubChanged() // →
         case 49: startSwing() // Space
         case 48: // Tab — 샷 종류 순환 (퍼터는 무관). 폼은 profile.shaped, 물리는 launch(shape:)
             if !club.isPutter {
@@ -2204,6 +2204,15 @@ final class GameScene: SKScene {
             }
         default: break
         }
+    }
+
+    /// ←→ 클럽 변경 뒤: 퍼터로 넘어가면 샷 종류를 기본으로 (숨었다가 되돌아오면 "리셋됐나?"가 불명확 — 리뷰 F4)
+    private func onClubChanged() {
+        if club.isPutter {
+            shotShape = .standard
+        }
+        presetPutterHeight()
+        updateHUD()
     }
 
     override func keyUp(with event: NSEvent) {

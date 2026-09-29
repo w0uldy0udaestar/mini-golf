@@ -74,9 +74,21 @@ final class ShotShapeProbe: XCTestCase {
         XCTAssertGreaterThan(lob.apex, base.apex * 1.08, "로브 정점이 기본보다 높지 않음 (\(lob.apex) vs \(base.apex))")
         XCTAssertLessThan(lob.total, base.total * 0.7, "로브 총거리가 기본의 70% 아래가 아님 (짧고 서야 한다)")
         XCTAssertLessThan(lob.roll, base.roll * 0.6, "로브 굴림이 기본보다 확실히 짧지 않음")
-        // 밸런스 가드: 펀치·런닝이 평지에서 기본보다 12% 넘게 멀리 가면 늘 낮게 치는 게 정답이 된다
-        XCTAssertLessThan(punch.total, base.total * 1.12, "펀치가 기본보다 12% 넘게 멀리 감 (\(punch.total) vs \(base.total))")
-        XCTAssertLessThan(run.total, base.total * 1.12, "런닝이 기본보다 12% 넘게 멀리 감")
+        // 밸런스 가드 (전 클럽 풀샷): 펀치·런닝이 평지에서 기본보다 12% 넘게 멀리 가면 늘 낮게 치는 게 정답이 된다 —
+        // 웨지는 풍선 탄도라 같은 배율이면 +36%였다(리뷰 F2) → speedScale(for:)을 클럽군별로 (부분 스윙은 파워 오차 안이라 표만)
+        for (key, row) in rows where key.hasSuffix("h1.0") {
+            let std = try XCTUnwrap(row[.standard])
+            XCTAssertLessThan(
+                try XCTUnwrap(row[.punch]?.total),
+                std.total * 1.12,
+                "\(key) 펀치가 기본보다 12% 넘게 멀리 감 (\(row[.punch]!.total) vs \(std.total))"
+            )
+            XCTAssertLessThan(
+                try XCTUnwrap(row[.running]?.total),
+                std.total * 1.12,
+                "\(key) 런닝이 기본보다 12% 넘게 멀리 감 (\(row[.running]!.total) vs \(std.total))"
+            )
+        }
         // 맞바람 6m/s에서 낮은 샷의 이점은 있어야 한다 (선택의 이유)
         let baseW = fly("7I", h: 1, shape: .standard, wind: -6), punchW = fly("7I", h: 1, shape: .punch, wind: -6)
         XCTAssertGreaterThan(punchW.total, baseW.total * 1.08, "맞바람에서 펀치 이점이 8% 미만")

@@ -338,15 +338,17 @@ struct SwingProfile {
     let keys: SwingKeyframes // 스타일 × 클럽군 키프레임·템포
     let putt: PutterKeyframes // 스타일별 퍼터 (표준 펜듈럼 / 암록)
 
-    /// 샷 종류별 폼 (M5-③): 펀치·런닝은 공을 뒤에 두고 짧은 백스윙·짧은 피니시(손이 가슴 앞, research-spin-bounce §펀치),
-    /// 로브는 공을 앞에 두고 풀 피니시. 파워(heightPct)와 무관한 '폼'이라 물리는 ShotShape가 따로 맡는다. 퍼터는 그대로
+    /// 샷 종류별 폼 (M5-③): 펀치·런닝은 짧은 백스윙·짧은 피니시(손이 가슴 앞, research-spin-bounce §펀치), 로브는 공을 살짝 앞에 두고
+    /// 풀 피니시. 파워(heightPct)와 무관한 '폼'이라 물리는 ShotShape가 따로 맡는다. 퍼터는 그대로.
+    /// 공 위치(ballFwd)는 손·클럽 각 보정 없이 옮기면 몸 전체가 따라가 페이스가 공을 지나친다(리뷰 F1: 펀치 −5·런닝 −7이 84행 중 35행 위반) —
+    /// 낮은 샷은 공을 옮기지 않고 백스윙 폭으로만 읽힌다(캡처로 확인). 로브 +3은 PosesTests 접촉 대역 안
     func shaped(_ shape: ShotShape) -> SwingProfile {
         guard !isPutter, shape != .standard else { return self }
         let (top, fwd, fin): (Double, Double, Double) = switch shape {
         case .standard: (1, 0, 1)
-        case .punch: (0.72, -5, 0.55)
-        case .running: (0.55, -7, 0.4)
-        case .lob: (1.0, 4, 1.0)
+        case .punch: (0.72, 0, 0.55)
+        case .running: (0.55, 0, 0.4)
+        case .lob: (1.0, 3, 1.0) // +4는 tiger 5W 임팩트 페이스가 대역(−7)을 0.01px 넘겼다
         }
         return SwingProfile(
             topScale: topScale * top, ballFwd: ballFwd + fwd, finishScale: finishScale * fin,

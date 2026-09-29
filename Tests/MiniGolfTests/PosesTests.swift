@@ -51,19 +51,22 @@ final class PosesTests: XCTestCase {
     func testFullSwingAddressAndImpactFaceTouchesBall() {
         for style in SwingStyle.allCases {
             for club in ClubTable.all where !club.isPutter {
-                let prof = SwingProfile.profile(for: club.cat, style: style)
-                let reach = faceReach(club)
-                let p1 = tip(prof.keys.p1, ballFwd: prof.ballFwd, clubLen: club.renderLength)
-                let face1 = Double(p1.x) + reach
-                XCTAssertGreaterThan(face1, -7, "\(style) \(club.id) 어드레스: 페이스가 공 뒤로 떨어짐 (팁 \(p1), 페이스 x \(face1))")
-                XCTAssertLessThan(face1, 7, "\(style) \(club.id) 어드레스: 페이스가 공을 지나침 (팁 \(p1), 페이스 x \(face1))")
-                let p7 = tip(prof.keys.p7, ballFwd: prof.ballFwd, clubLen: club.renderLength)
-                let face7 = Double(p7.x) + reach
-                XCTAssertGreaterThan(face7, -7, "\(style) \(club.id) 임팩트: 페이스가 공에 못 미침 (팁 \(p7), 페이스 x \(face7))")
-                XCTAssertLessThan(face7, 11, "\(style) \(club.id) 임팩트: 페이스가 공을 한참 지나침 (팁 \(p7), 페이스 x \(face7))")
-                for (name, t) in [("어드레스", p1), ("임팩트", p7)] {
-                    XCTAssertGreaterThan(t.y, -1.5, "\(style) \(club.id) \(name): 헤드가 지면 아래 \(t)")
-                    XCTAssertLessThan(t.y, 6.5, "\(style) \(club.id) \(name): 헤드가 공 위로 떠 있음 \(t)")
+                for shape in ShotShape.allCases { // 샷 종류 폼(shaped)도 같은 접촉 대역 (리뷰 F1: 공 위치 이동이 페이스를 지나치게 했다)
+                    let prof = SwingProfile.profile(for: club.cat, style: style).shaped(shape)
+                    let reach = faceReach(club)
+                    let tag = "\(style) \(club.id) \(shape)"
+                    let p1 = tip(prof.keys.p1, ballFwd: prof.ballFwd, clubLen: club.renderLength)
+                    let face1 = Double(p1.x) + reach
+                    XCTAssertGreaterThan(face1, -7, "\(tag) 어드레스: 페이스가 공 뒤로 떨어짐 (팁 \(p1), 페이스 x \(face1))")
+                    XCTAssertLessThan(face1, 7, "\(tag) 어드레스: 페이스가 공을 지나침 (팁 \(p1), 페이스 x \(face1))")
+                    let p7 = tip(prof.keys.p7, ballFwd: prof.ballFwd, clubLen: club.renderLength)
+                    let face7 = Double(p7.x) + reach
+                    XCTAssertGreaterThan(face7, -7, "\(tag) 임팩트: 페이스가 공에 못 미침 (팁 \(p7), 페이스 x \(face7))")
+                    XCTAssertLessThan(face7, 11, "\(tag) 임팩트: 페이스가 공을 한참 지나침 (팁 \(p7), 페이스 x \(face7))")
+                    for (name, t) in [("어드레스", p1), ("임팩트", p7)] {
+                        XCTAssertGreaterThan(t.y, -1.5, "\(tag) \(name): 헤드가 지면 아래 \(t)")
+                        XCTAssertLessThan(t.y, 6.5, "\(tag) \(name): 헤드가 공 위로 떠 있음 \(t)")
+                    }
                 }
             }
         }
@@ -73,16 +76,18 @@ final class PosesTests: XCTestCase {
     func testBackswingAndFinishPosesAreSane() {
         for style in SwingStyle.allCases {
             for cat in [ClubCategory.wood, .iron, .wedge, .putter] {
-                let prof = SwingProfile.profile(for: cat, style: style)
-                for h in stride(from: 0.0, through: 1.0, by: 0.25) {
-                    let p = backswingPose(heightPct: h, profile: prof)
-                    XCTAssertTrue(
-                        p.handA.isFinite && p.clubA.isFinite && abs(p.tilt) < 45,
-                        "\(style) \(cat) 백스윙 h=\(h) \(p)"
-                    )
+                for shape in ShotShape.allCases {
+                    let prof = SwingProfile.profile(for: cat, style: style).shaped(shape)
+                    for h in stride(from: 0.0, through: 1.0, by: 0.25) {
+                        let p = backswingPose(heightPct: h, profile: prof)
+                        XCTAssertTrue(
+                            p.handA.isFinite && p.clubA.isFinite && abs(p.tilt) < 45,
+                            "\(style) \(cat) 백스윙 h=\(h) \(p)"
+                        )
+                    }
+                    let fin = finishPose(profile: prof, heightPct: 0.6)
+                    XCTAssertTrue(fin.handA.isFinite && fin.clubA.isFinite, "\(style) \(cat) \(shape) 피니시 \(fin)")
                 }
-                let fin = finishPose(profile: prof, heightPct: 0.6)
-                XCTAssertTrue(fin.handA.isFinite && fin.clubA.isFinite, "\(style) \(cat) 피니시 \(fin)")
             }
         }
     }
