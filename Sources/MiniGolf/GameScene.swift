@@ -1302,7 +1302,7 @@ final class GameScene: SKScene {
         // 처진 걸음 1.45 + 험한 길 1.4가 겹치면 2배까지 느려져 "어떨 땐 너무 느리다"(2026-09-24 판정) → 처짐 1.15·험한 길 최대 1.2·합계 상한 1.3
         let moodSpeed = mood == .elated ? 0.85 : mood == .sad ? 1.15 : 1.0
         let slow = min(1.3, (1 + 0.2 * hardness) * moodSpeed)
-        // 상한 14 → 9s (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답" — 드라이브 뒤 매번 14초). 긴 걷기는 속도가 오르고 보폭이 32px까지 늘어나 잰걸음이 된다
+        // 상한 14 → 9s (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답" — 드라이브 뒤 매번 14초). 긴 걷기는 보폭은 그대로(22px) 걸음 빈도가 올라 잰걸음이 된다
         let dur = min(9.0, max(1.2, dist / 10 * slow))
         var anim = WalkAnim(
             fromX: from, toX: to, dur: dur,
@@ -2405,8 +2405,8 @@ final class GameScene: SKScene {
                     print(String(format: "WALKV %.1f %.1f %.1f", tw, abs(stickX - w.fromX) * Double(pxPerM), w.vPx))
                 }
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
-                // 보폭 상한 1.45(32px): 상한 없이 속도만 올리면 잰걸음이 초당 4.5보를 넘어 종종걸음이 된다 — 사람은 빠를수록 보폭이 먼저 는다 (√v)
-                w.stepL = 22 * min(1.45, max(0.5, (w.vPx / 30).squareRoot())) * strideScale
+                // 보폭 상한 22px 유지 — 긴 걷기의 속도(상한 9s)는 보폭이 아니라 걸음 빈도로 낸다 (2026-09-29 판정 "보폭을 늘릴 게 아니라 걸음 속도를 증가시키라는 말")
+                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot())) * strideScale
                 // 지형 적응 (2026-08-15 요청): 경사에선 보폭을 줄이고, 러프·벙커는 무거운 걸음
                 let walkSurf = hole.surface(at: stickX)
                 w.stepL *= 1 - 0.3 * min(1, abs(atan(hole.slope(at: stickX))) / 0.35)
