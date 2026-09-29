@@ -91,7 +91,6 @@ final class GameScene: SKScene {
         var arrivalTurn: TurnPlan? // 도착 턴 — 걸어온 방향과 조준 방향이 반대일 때 (공이 뒤에 있던 경우)
         var mood = WalkMood.neutral // 무드 워크 채널 오버레이 (속도·보폭·자세)
         var replanFired = false // --demo-replan: 이 걷기에서 공을 이미 옮겼나
-        var hurried = false // 서두르기 컷을 이미 했나 (한 걷기에 한 번)
         var arrivalDir = 1.0
         var vPx = 0.0
         // 게이트 상태 (리서치 반영: stride warping + 접지점 래치)
@@ -264,11 +263,20 @@ final class GameScene: SKScene {
         CGFloat(m) * pxPerM
     }
 
-    /// 세로 과장 (2026-09-29 판정 "뭐가 달라진지 체감이 안 돼"): 09-17 표고 재예산(플레이 가능성) 뒤 지형이 화면 높이의 6~10%만 써 아키타입 8종이 다
-    /// 완만한 굴곡으로 보였다. 물리는 미터 그대로, **그리기만** 세로를 키운다 — 긴 홀일수록 화면 압축이 심해 최대 2배, 세로 px/m는 9를 넘지 않게
-    /// (짧은 파3는 그대로 — 최고 표고 40m + 정점 60m가 화면 안에 남아야 한다). 공·지형·장애물·스틱맨 발이 전부 py()를 지나므로 기하는 일관된다
+    /// 세로 과장 (2026-09-29 판정 "뭐가 달라진지 체감이 안 돼" → 2배는 2차 판정 "왜곡이 심해서 이상해, 나무가 늘어나 보여" → **1.4배 + 나무·바위는 둥글게**):
+    /// 09-17 표고 재예산(플레이 가능성) 뒤 지형이 화면 높이의 6~10%만 써 아키타입 8종이 다 완만한 굴곡으로 보였다. 물리는 미터 그대로, **그리기만** 세로를
+    /// 키운다 — 긴 홀일수록 화면 압축이 심해 최대 1.4배, 세로 px/m ≤ 9(짧은 파3는 그대로), 그리고 화면 높이 예산(리뷰 F1: 1440×900에서 티 35m + 로브 정점이
+    /// 넘쳤다). 공·지형·스틱맨 발은 py()를 지나 일관되고, 나무·바위는 자리만 따르고 모양은 둥글다(캐노피 위아래 끝에서 물리 원과 ≤ 0.4r 어긋남 — 허용)
+    static let vScaleMax: CGFloat = 1.4
+    static func verticalScale(pxPerM: CGFloat, screenH: CGFloat, elevSpan: Double) -> CGFloat {
+        let budget = (screenH - 96 - 40) /
+            (CGFloat(elevSpan + 66) * pxPerM) // 바닥 96 + (표고 폭 + 로브 정점 66m)·세로px/m + 여유 40 ≤ 화면
+        return min(vScaleMax, max(1.0, min(9.0 / pxPerM, budget)))
+    }
+
+    private var vScaleValue: CGFloat = 1
     var vScale: CGFloat {
-        min(2.0, max(1.0, 9.0 / pxPerM))
+        vScaleValue
     }
 
     /// 세로 스케일 (지형·공 높이 공용) — px/m × 과장
@@ -498,7 +506,7 @@ final class GameScene: SKScene {
         var prof = WalkProfile(dist: abs(to - stickX) + xIn, dur: 1)
         for _ in 0 ..< 2 {
             let dist = abs(to - stickX) + xIn
-            let dur = min(14.0, max(1.2, dist / 10 * moodSpeed))
+            let dur = min(9.0, max(1.2, dist / 10 * moodSpeed))
             prof = WalkProfile(dist: dist, dur: dur)
             xIn = prof.position(at: prof.rampIn)
         }
@@ -1256,47 +1264,6 @@ final class GameScene: SKScene {
         return (ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM), arrivalDir)
     }
 
-    /// 서두르기 (2026-09-29 판정): 긴 걷기(4.5s+)는 2.2s 걸은 뒤 도착 지점 앞 14m로 건너뛰어(먼지 + 0.3s 페이드 인) 마지막 두 걸음으로 도착한다.
-    /// 배속은 안 된다 — 보폭 상한 22px라 다리가 초당 8걸음이 된다. 걷는 도중 공이 옮겨졌을 때의 재출발(startWalk(fromBody:))을 재사용.
-    /// 걷기를 관찰하는 시연 모드(리플랜·턴·트립·쇼피스·모션·무드)에서는 끈다 — 시연이 잘린다
-    static let hurryAfter = 2.2, hurryMinDur = 4.5, hurryLead = 14.0
-    private var hurryBlocked: Bool {
-        demo.replanForce || demo.turnForce || demo.tripForce || demo.showpieceForce || demo.motionShowcase || demo
-            .mood != nil
-    }
-
-    /// 컷 시점(walk 시계): 기본 여운+2.2s. 그 전후로 잡힌 잔동작·쇼피스·넘어지기 중 8.5s 안에 끝나는 것은 보고 나서 자른다 — 긴 걷기의 매력(잔동작 37종·
-    /// 쇼피스)을 전부 잃지 않게 하나는 남긴다. 그보다 늦게 잡힌 것은 잘린다(답답함이 우선 — 판정)
-    private func hurryCutTime(_ w: WalkAnim) -> Double {
-        var t = w.relax + Self.hurryAfter
-        if let first = w.flavorEvents.min(by: { $0.t0 < $1.t0 }),
-           first.t0 + first.dur <= 7.5 { // 첫 잔동작 하나만 (둘째까지 기다리면 9.7s — 실측)
-            t = max(t, first.t0 + first.dur + 0.2)
-        }
-        if let sa = w.showAt, let sk = w.showKind, sa + sk.duration <= 8.5 {
-            t = max(t, sa + sk.duration + 0.2)
-        }
-        if let tr = w.tripAt, tr + 2.6 <= 8.5 {
-            t = max(t, tr + 2.6)
-        }
-        return t
-    }
-
-    private func hurryCut(_ w: inout WalkAnim) {
-        let sgn: Double = w.toX >= w.fromX ? 1 : -1
-        let from = stickX
-        FX.dust(on: self, at: CGPoint(x: px(from), y: groundY(from)), surface: .rough, intensity: 0.6)
-        stickX = w.toX - sgn * Self.hurryLead
-        if demo.active {
-            print(String(format: "HURRY cut t %.1f x %.1f → %.1f (walk %.1fs)", w.t, from, stickX, w.dur))
-            fflush(stdout)
-        }
-        walkAnim = w
-        startWalk(fromBody: true)
-        stickman.alpha = 0
-        stickman.run(.fadeIn(withDuration: 0.3))
-    }
-
     /// fromBody: 걷기 도착 자리(몸 원점)에서 다시 출발 — 걷는 동안 공이 옮겨져 도착해 보니 공이 없을 때 (2026-09-23 재계획)
     func startWalk(fromBody: Bool = false) {
         if slip != nil { // 넘어져 있다 — 일어난 뒤 updateSlip이 다시 부른다
@@ -1335,7 +1302,8 @@ final class GameScene: SKScene {
         // 처진 걸음 1.45 + 험한 길 1.4가 겹치면 2배까지 느려져 "어떨 땐 너무 느리다"(2026-09-24 판정) → 처짐 1.15·험한 길 최대 1.2·합계 상한 1.3
         let moodSpeed = mood == .elated ? 0.85 : mood == .sad ? 1.15 : 1.0
         let slow = min(1.3, (1 + 0.2 * hardness) * moodSpeed)
-        let dur = min(14.0, max(1.2, dist / 10 * slow))
+        // 상한 14 → 9s (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답" — 드라이브 뒤 매번 14초). 긴 걷기는 속도가 오르고 보폭이 32px까지 늘어나 잰걸음이 된다
+        let dur = min(9.0, max(1.2, dist / 10 * slow))
         var anim = WalkAnim(
             fromX: from, toX: to, dur: dur,
             // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
@@ -1958,6 +1926,8 @@ final class GameScene: SKScene {
         terrainNode.removeAllChildren()
         // 깊은 계곡·워터가 하단 HUD 스트립을 침범하지 않게 바닥선을 홀 최저 표고 기준으로 (리뷰 S-3)
         let minElev = hole.elevation.min() ?? 0
+        let maxElev = hole.elevation.max() ?? 0
+        vScaleValue = Self.verticalScale(pxPerM: pxPerM, screenH: size.height, elevSpan: maxElev - minElev)
         groundBase = max(96, 84 - CGFloat(minElev) * pyPerM) // 세로 과장 포함
         let cupHalfM = max(Phys.cupHalfWidth, 4.5 / Double(pxPerM))
         let cupL = hole.holeX - cupHalfM
@@ -2120,8 +2090,6 @@ final class GameScene: SKScene {
         for ob in hole.obstacles {
             let gx = px(ob.x)
             let gy = groundY(ob.x)
-            // 세로 과장: 충돌원(미터)이 화면에선 세로로 늘어난 타원 — 지면(gy) 기준으로 y만 vScale (공이 맞는 자리와 그림이 일치)
-            var vT = CGAffineTransform(translationX: 0, y: gy).scaledBy(x: 1, y: vScale).translatedBy(x: 0, y: -gy)
             switch ob.kind {
             case .tree:
                 // 초심플 귀여운 나무 (2026-08-15 사용자 요청): 통통한 트렁크 + 뭉게구름 캐노피.
@@ -2129,11 +2097,12 @@ final class GameScene: SKScene {
                 // 스트로크의 안쪽 교차 호는 잎 뭉치 스캘럽으로 읽힌다. 충돌은 여전히 반지름 r 원 하나
                 let r = CGFloat(ob.size) * pxPerM
                 // above: 0 = 지면 기준 오프셋만 취한다 (gy에 이미 표고 포함 — 리뷰 S-5)
-                let cy = gy + CGFloat(ob.canopyCenterY(above: 0)) * pxPerM
+                // 세로 과장: 중심 높이는 세로 축척(공이 맞는 높이), 모양은 둥글게(2배 타원은 2차 판정 "나무가 늘어나 보여") — 위아래 끝 ≤ 0.4r 어긋남 허용
+                let cy = gy + CGFloat(ob.canopyCenterY(above: 0)) * pyPerM
                 let trunkPath = CGMutablePath()
                 trunkPath.move(to: CGPoint(x: gx, y: gy + 1))
                 trunkPath.addLine(to: CGPoint(x: gx, y: cy - r * 0.3)) // 캐노피 속까지 — 틈 없음
-                let trunk = SKShapeNode(path: trunkPath.copy(using: &vT) ?? trunkPath)
+                let trunk = SKShapeNode(path: trunkPath)
                 trunk.strokeColor = Palette.hairline.withAlphaComponent(0.75)
                 trunk.lineWidth = 4.5
                 trunk.lineCap = .round
@@ -2153,14 +2122,13 @@ final class GameScene: SKScene {
                     )
                 }
                 puffs.closeSubpath()
-                let puffsV = puffs.copy(using: &vT) ?? puffs
-                let canopy = SKShapeNode(path: puffsV)
+                let canopy = SKShapeNode(path: puffs)
                 canopy.strokeColor = Palette.hairline.withAlphaComponent(0.8)
                 canopy.lineWidth = 2.0
                 canopy.lineJoin = .round
                 canopy.fillColor = NSColor(white: 1, alpha: 0.16)
                 if Theme.highContrast {
-                    let under = SKShapeNode(path: puffsV)
+                    let under = SKShapeNode(path: puffs)
                     under.strokeColor = NSColor(white: 0, alpha: 0.32)
                     under.lineWidth = 4
                     under.fillColor = .clear
@@ -2183,11 +2151,7 @@ final class GameScene: SKScene {
                     )
                     return p
                 }
-                let rock = SKShapeNode(path: pebbleDome(cxPx: gx, baseY: gy, radius: r).copy(using: &vT) ?? pebbleDome(
-                    cxPx: gx,
-                    baseY: gy,
-                    radius: r
-                ))
+                let rock = SKShapeNode(path: pebbleDome(cxPx: gx, baseY: gy, radius: r))
                 rock.strokeColor = Palette.hairline.withAlphaComponent(0.85)
                 rock.fillColor = NSColor(white: 1, alpha: 0.28)
                 rock.lineWidth = 2.0
@@ -2355,15 +2319,6 @@ final class GameScene: SKScene {
             stepRitual(dt: dt)
         }
 
-        // 서두르기 (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답"): 걷기 시간이 거리/10(상한 14s)이라 드라이브 뒤 매번 14초를 걸었다
-        if mode == .walking, var w = walkAnim, !w.hurried, w.dur > Self.hurryMinDur, !hurryBlocked,
-           w.stopPlan == nil, w.arrivalTurn == nil, w.turn.map({ w.t >= $0.start + $0.dur + 0.2 }) ?? true {
-            let tw = w.t - w.relax - w.pausedTime
-            if w.t >= hurryCutTime(w), w.dur - tw > Self.hurryLead / 10 + 1.0 {
-                w.hurried = true
-                hurryCut(&w) // walkAnim을 새 짧은 걷기로 교체 — 아래 블록이 그 걷기를 t=0부터 이어간다
-            }
-        }
         if mode == .walking, var w = walkAnim {
             w.t += dt
             if var tp = w.turn, w.t >= tp.start {
@@ -2450,7 +2405,8 @@ final class GameScene: SKScene {
                     print(String(format: "WALKV %.1f %.1f %.1f", tw, abs(stickX - w.fromX) * Double(pxPerM), w.vPx))
                 }
                 // 게이트 갱신: 보폭·듀티는 속도 함수, 접지점은 리프트오프 순간 래치 (노슬립)
-                w.stepL = 22 * min(1, max(0.5, (w.vPx / 30).squareRoot())) * strideScale
+                // 보폭 상한 1.45(32px): 상한 없이 속도만 올리면 잰걸음이 초당 4.5보를 넘어 종종걸음이 된다 — 사람은 빠를수록 보폭이 먼저 는다 (√v)
+                w.stepL = 22 * min(1.45, max(0.5, (w.vPx / 30).squareRoot())) * strideScale
                 // 지형 적응 (2026-08-15 요청): 경사에선 보폭을 줄이고, 러프·벙커는 무거운 걸음
                 let walkSurf = hole.surface(at: stickX)
                 w.stepL *= 1 - 0.3 * min(1, abs(atan(hole.slope(at: stickX))) / 0.35)
@@ -2618,8 +2574,11 @@ final class GameScene: SKScene {
                 SoundKit.shared.lipOut()
                 shotLipped = true
             }
+            // 궤적 잔상은 공 높이(ball.y)로 — 5bea2ba(09-17 정착 굴림)가 지면 높이로 바꿔 비행 궤적이 바닥선을 따라갔다(2026-09-29 판정 "바닥라인을 따라가"),
+            // 정착 스냅 프레임만 지면(정지 지점)
             let trailX = settledFrom ?? ball.x
-            trailPoints.append(CGPoint(x: px(trailX), y: py(hole.ground(at: trailX)) + 5.5))
+            let trailY = settledFrom == nil ? ball.y : hole.ground(at: trailX)
+            trailPoints.append(CGPoint(x: px(trailX), y: py(trailY) + 5.5))
             if trailPoints.count > 400 {
                 trailPoints.removeFirst()
             }
@@ -2933,7 +2892,9 @@ final class GameScene: SKScene {
 
         // 경사 라이: 걷기 외에는 스탠스가 지면 경사를 따라 기운다 (물리와 동일 비율 — 3eccc4f 복원).
         // 벽 근처에선 억제 — 벽 경성 클램프가 무회전 평면을 가정하기 때문
-        let tiltTarget = mode == .walking ? 0 : renderTiltRatio * atan(hole.slope(at: stickX)) * (1 - renderWallT)
+        // 몸 기울기는 **화면** 경사 기준(vScale 포함) — 발은 렌더 지면을 딛는데 몸만 물리 경사면 다리가 늘어난다 (리뷰 F6). 물리 로프트(slopeTiltRatio)는 무관
+        let tiltTarget = mode == .walking ? 0 : renderTiltRatio * atan(Double(vScale) * hole.slope(at: stickX)) *
+            (1 - renderWallT)
         renderSlopeTilt += (tiltTarget - renderSlopeTilt) * (1 - exp(-6 * dt))
         stickman.zRotation = CGFloat(renderSlopeTilt + renderSlipRot)
         // 렌더 반영 — 렌더 사본에 벽 경성 클램프 (스틱맨·클럽은 어떤 상태에서도 화면 밖에 그려지지 않는다)
@@ -3068,7 +3029,9 @@ private extension GameScene {
                 let onTee = hole.surface(at: ball.x) == .tee // 관찰 모드(그린·지정 위치 시작)엔 티 없음
                 ball = BallState(
                     x: ball.x,
-                    y: hole.ground(at: ball.x) + (onTee ? Self.teeHeightPx / Double(pxPerM) : 0)
+                    y: hole
+                        .ground(at: ball.x) +
+                        (onTee ? Self.teeHeightPx / Double(pyPerM) : 0) // 세로 축척(리뷰 F5: pxPerM이면 공이 페그 위에 뜬다)
                 )
                 if onTee { // 티가 먼저 꽂히고 공이 그 위에 올라앉는다 (물리도 티 높이에서 시작 — 첫 프레임 점프 없음)
                     teeNode.removeAllActions()
