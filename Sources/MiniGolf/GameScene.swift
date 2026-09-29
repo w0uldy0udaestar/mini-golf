@@ -1364,7 +1364,8 @@ final class GameScene: SKScene {
                 t += 1.1
                 continue
             }
-            let kind = WalkFlavorKind.weightedRandom() // 멈추는 모션은 드물게
+            let inCarry = anim.shoulderRange.map { $0.contains(t) && $0.contains(t + 1.5) } ?? false
+            let kind = WalkFlavorKind.weightedRandom(carry: inCarry) // 멈추는 모션은 드물게 · 어깨 캐리 중엔 캐리 전용 40%
             let dur = kind.duration
             // 어깨에 클럽을 걸친 동안엔 클럽 손짓 불가 (클럽이 손에 없다)
             if kind.needsClub, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
@@ -1671,6 +1672,16 @@ final class GameScene: SKScene {
             }
             if sig == .summitGreen, r.award(.summiteer) {
                 earned.append(.summiteer)
+            }
+            // 새 아키타입 4종 배지 (잔손질 2라운드)
+            let extra: [SignatureKind: Badge] = [
+                .valley: .valleyWalker,
+                .ridge: .ridgeRunner,
+                .cascade: .cascadeDiver,
+                .forest: .forestRanger,
+            ]
+            if let b = extra[sig], r.award(b) {
+                earned.append(b)
             }
         }
         if r.holesPlayed >= 100, r.award(.century) {
@@ -2213,8 +2224,14 @@ final class GameScene: SKScene {
         // 샷 종류 (Tab): 클럽 이름 옆 단어 + 아랫줄 결과의 말 — 수치가 아니라 이름이라 어시스트 금지 원칙 안 (퍼터는 없음)
         let shape = club.isPutter ? ShotShape.standard : shotShape
         clubTitle.setText(club.name + (shape.label.map { " · \($0)" } ?? ""))
+        // 아랫줄 한마디: 샷 종류가 있으면 그 결과, 없으면 라이의 결과(깊은 러프·플라이어·벙커) — 수치가 아니라 말 (잔손질 2라운드)
+        let lieCue: String? = lie == .bunker ? "모래 — 탈출샷만 나간다"
+            : lie == .rough ?
+            (hole.roughLie(at: ball.x) == .deep ? "풀에 감겨 짧고 높게" : hole
+                .roughLie(at: ball.x) == .flier ? "스핀이 빠져 멀리 굴러간다" : nil)
+            : nil
         let cat = (club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터")
-            + (shape.cue(for: club.cat).map { " · \($0)" } ?? "")
+            + ((shape.cue(for: club.cat) ?? (club.isPutter ? nil : lieCue)).map { " · \($0)" } ?? "")
         // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
         let w = hole.wind
         let windStr = abs(w) < 0.5 ? "" : " · 바람 \(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"

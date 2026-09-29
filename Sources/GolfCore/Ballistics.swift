@@ -217,6 +217,8 @@ public enum Ballistics {
         // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
         let rl = lie == .rough ? roughLie : .normal // 러프 라이 이원화 (2026-09-29)
+        let teeWood = lie == .tee && club
+            .cat == .wood ? 0.85 : 1.0 // 티 위 우드는 스핀 −15% (스핀 리서치 미적용분, 2026-09-29) — 드라이브가 조금 더 구른다
         var v0 = club.power * lie.powerFactor * rl.powerMul * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
         v0 *= club.isPutter ? 1 : kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다 — 퍼터는 면제 (0.16x '죽은 샷' 방지, 리뷰 m4)
         let slopeDeg = abs(atan(slope)) * 180 / .pi
@@ -238,7 +240,7 @@ public enum Ballistics {
         // 구식 (0.6+0.4h)는 살살 칠수록 상대 스핀이 최대 2.4배로 부풀었다 (리서치 §3-3). 풀스윙은 불변
         let spinPower = (Phys.minPowerRatio + (1 - Phys.minPowerRatio) * heightPct) * (0.75 + 0.25 * heightPct)
         b.spin = club.spin * lie.spinFactor * rl
-            .spinMul * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape
+            .spinMul * teeWood * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape
             .spinScale(for: club.cat)
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly

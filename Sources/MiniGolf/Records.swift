@@ -19,6 +19,10 @@ enum Badge: String, CaseIterable, Codable {
     case century // 누적 100홀
     case memeWitness // 밈 쇼피스 10회 목격
     case marathoner // 라운드 10회 완주
+    case valleyWalker // 계곡 홀 파 이하 (2026-09-29 잔손질 2라운드 — 새 아키타입 4종)
+    case ridgeRunner // 능선
+    case cascadeDiver // 폭포
+    case forestRanger // 숲
 
     var title: String {
         switch self {
@@ -33,6 +37,10 @@ enum Badge: String, CaseIterable, Codable {
         case .century: "100홀 달성"
         case .memeWitness: "밈 목격자 ×10"
         case .marathoner: "10라운드 마라톤"
+        case .valleyWalker: "계곡 정복"
+        case .ridgeRunner: "능선 정복"
+        case .cascadeDiver: "폭포 정복"
+        case .forestRanger: "숲 정복"
         }
     }
 }
@@ -45,9 +53,9 @@ enum Hat: String, CaseIterable, Codable {
         switch self {
         case .none: 0
         case .straw: 2
-        case .propeller: 5
-        case .top: 8
-        case .crown: 11
+        case .propeller: 6 // 배지 11 → 15종 (2026-09-29) — 간격 재배분, 왕관은 전부 모아야
+        case .top: 10
+        case .crown: 15
         }
     }
 

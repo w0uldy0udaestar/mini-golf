@@ -742,8 +742,8 @@ public enum CourseGenerator {
             // 폭포 (M5-④): 계단 대지의 물 버전 — 파5 3단·파4 2단, 각 단의 절벽 발치가 연못(14~22m, 둑 4.5m·수면 −1.2). 짧으면 입수,
             // 트레드는 착지 가능한 40m 이상(안 들어가면 낙차 축소). 수면 아래 절벽은 러프라 굴러 떨어진 공도 연못으로
             let n = par == 5 ? 3 : par == 4 ? 2 : 1 // 파3(2026-09-29)은 한 단 + 연못 — 넘겨야 하는 낙차
-            let minTread = par == 3 ? 28.0 : 40.0
-            let spanFrom = teeEnd + rand.next(10, 18)
+            let minTread = par == 3 ? 20.0 : 40.0
+            var spanFrom = teeEnd + rand.next(10, 18)
             let spanTo = apronStart - 24
             var teeH = -plannedRise
             let pools = (0 ..< n).map { _ in par == 3 ? rand.next(10, 14) : rand.next(
@@ -760,6 +760,9 @@ public enum CourseGenerator {
             while !fits, teeH > teeHFloor {
                 teeH *= 0.87
                 fits = treadFit(teeH) >= minTread
+            }
+            if par == 3 { // 연못을 그린 앞 24m에 붙인다 — 티에서 25~45m면 티샷에 절대 안 걸렸다(리뷰 n3). 짧은 티샷(캐리 −25m)이 빠진다
+                spanFrom = max(teeEnd + 12, spanTo - (teeH * riserRatio + poolsW + minTread))
             }
             let treadW = max(minTread, treadFit(teeH))
             let step = teeH / Double(n)
@@ -1225,6 +1228,14 @@ public enum CourseGenerator {
             let want = par == 3 ? 2 : rand.next() < 0.5 ? 3 : 4 // 파3는 2그루 (2026-09-29)
             let gap = par == 3 ? 20.0 : 40.0
             var placed: [Double] = []
+            if par == 3 { // 첫 그루는 티런 앞 20~26m(티에서 30~36m) — 7I(34°)는 캐노피 위로 넘고 5I 이하·펀치는 걸린다: 티샷을 실제로 바꾸는 나무 (리뷰 m3)
+                let size = rand.next(5.0, 6.0)
+                let t = teeEnd + rand.next(20, 26)
+                if hazardFree(t, margin: size + 1), gentleGround(t) {
+                    obstacles.append(Obstacle(kind: .tree, x: t, size: size))
+                    placed.append(t)
+                }
+            }
             for _ in 0 ..< 18 where placed.count < want {
                 let size = rand.next(4.2, 6.0)
                 let t = rand
