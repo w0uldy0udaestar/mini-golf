@@ -912,7 +912,8 @@ final class GolfCoreTests: XCTestCase {
         var checked = 0
         for seed: UInt32 in 1 ... 60 {
             for h in CourseGenerator.makeCourse(seed: seed)
-                where h.par == 3 && h.waterRange != nil && h.signature != .cascade { // 아일랜드는 파3 절벽 티·숲·능선 (리뷰 M2) — 폭포 파3의 연못은 아일랜드가 아니다
+                where h.par == 3 && h.waterRange != nil && h
+                .signature != .cascade { // 아일랜드는 파3 절벽 티·숲·능선 (리뷰 M2) — 폭포 파3의 연못은 아일랜드가 아니다
                 let d = h.holeX >= h.teeX ? 1.0 : -1.0
                 XCTAssertEqual(h.outOfWater(h.holeX), h.holeX, "그린 위 공이 옮겨짐 seed \(seed)")
                 let gFront = d > 0 ? h.greenStart : h.greenEnd, gBack = d > 0 ? h.greenEnd : h.greenStart
