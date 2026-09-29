@@ -27,7 +27,7 @@ struct DemoOptions: Equatable {
     var replanForce = false // --demo-replan: 걷는 도중 공을 옮긴다 (1차 12m 앞 → 재계획, 2차 25m 뒤 → 재출발+턴)
     var girForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출
     var trademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그
-    var motionShowcase = false // --demo-motions: 모션 37종 순서 시연 (카탈로그 캡처)
+    var motionShowcase = false // --demo-motions: 모션 42종 순서 시연 (카탈로그 캡처)
     var motionCursorStart = 0 // --motion-cursor N: 시연을 N번째 모션부터 (부분 재캡처)
     var showpieceForce = false // --demo-memes: 걷기마다 쇼피스 1개, 12종 순환
     var surpriseForce = false // --demo-surprise: 샷마다 서프라이즈 (훅별 순환)

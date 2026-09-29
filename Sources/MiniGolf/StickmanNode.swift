@@ -18,7 +18,7 @@ extension Club {
 }
 
 /// 걷기 중 랜덤 잉여 동작 — 스틱맨의 생명감.
-/// 37종의 모션(WalkFlavors.swift)은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로
+/// 42종의 모션(WalkFlavors.swift)은 전부 이 모듈레이션 채널들의 시간 엔벨로프 조합으로
 /// 표현된다 (겹쳐도 안전). 발 접지 게이트는 채널이 아니다 — 노슬립 불변식 보호
 struct WalkFlavor {
     var twirlAngle = 0.0 // 클럽 트월 누적 회전(rad) — 완료 후에도 유지 (되감기 없음)
@@ -39,7 +39,7 @@ struct WalkFlavor {
     var gripLift = 0.0 // 클럽 살짝 들기 (0~1)
     var clubPointBlend = 0.0 // 클럽 전방 수평 지목 블렌드
     var clubUpBlend = 0.0 // 클럽 수직 세워 균형 블렌드
-    // ── 2026-09-15 재설계 채널: 관절 뼈대 위의 실루엣 제어 (37종 모션이 주로 쓴다) ──
+    // ── 2026-09-15 재설계 채널: 관절 뼈대 위의 실루엣 제어 (42종 모션이 주로 쓴다) ──
     var freeHandPolar = (angle: 0.0, reach: 0.0, w: 0.0) // 자유 손 목표: 어깨 기준 극좌표 (0=아래, +앞, π=위 · 뻗음 1 = 35px)
     var clubHandPolar = (angle: 0.0, reach: 0.0, w: 0.0) // 클럽 손(그립) 목표
     var clubPhiTarget = (phi: 0.0, w: 0.0) // 샤프트 절대각 목표 (최단 경로 블렌드)
