@@ -23,3 +23,4 @@
 - ~~걷기 방향 반전의 한 프레임 미러~~ **해결** (2026-09-23 제자리 돌기 2걸음 — 출발·도착, docs/research-turn-in-place.md, `--demo-turn`). 원 기록 (2026-09-14 리서치 중 발견): 공이 뒤에 있을 때 `dir`이 걷기 시작 순간 즉시 뒤집힌다. 리그 개편 후 "제자리 돌기 2걸음" 전환으로 대체 검토. 스틱맨 리그 리서치: docs/research-stickman-rig.md
 - ~~홀아웃·기권 직후 R 재시작 시 씬 직접 run 타이머 잔존~~ **해결** (2026-09-23 재현·수정: `afterHoleFlow` 노드 + `startHole`의
   `cancelHoleFlow`, 관찰 `--demo-pickup --demo-restart-after-holed 0.5`). 원 기록 — (Code Reviewer 범위 밖 관찰, 2026-09-23): `onHoled`(GameScene ≈1201-1207)·`giveUp`(≈1447)의 지연 실행이 씬에 직접 `run`돼 `startHole`의 `cancelSurprises`로 안 지워진다. 홀아웃 뒤 1.3s 안에 R을 누르면 새 라운드 티 의식 중 `startRitual(.ballPickup)`이 끼어들어 종료 시 `advanceHole()`로 1번 홀을 스코어 없이 건너뛸 가능성(논리 확인, 미재현). 수정은 `afterSurprise`류 취소 가능 타이머 노드로 교체 — 서프라이즈 1차 리뷰 M2와 같은 계열
+- 포대 램프 × 가드 벙커 접점 1셀 단차 1.2~1.85m (M5-② 모래 딥 재적용, 리뷰 2026-09-29 m6 — 600시드 62건, 정수 x 경사 검사가 평균돼 못 잡음). 벙커 셀은 램프 보간 뒤 딥만 더하도록 정리

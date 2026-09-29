@@ -332,7 +332,8 @@ public enum CourseGenerator {
         return elev
     }
 
-    /// 파·거리에 맞는 시그니처 아키타입 선택 (짧은 파3에 협곡·테라스는 물리적으로 안 들어간다)
+    /// 파·거리에 맞는 시그니처 아키타입 선택 (짧은 파3에 협곡·테라스는 물리적으로 안 들어간다).
+    /// 실제로는 파3 전용 — 파4·5는 makeCourse의 덱(allCases)이 뽑는다. 아래 파4·5 분기는 원조 4종만 알고 M5-④ 4종을 모른다 (preferredKind 없는 호출용 폴백)
     static func pickSignatureKind(par: Int, dist: Double, rand: inout SeededRandom) -> SignatureKind {
         if par == 3 {
             return dist >= 150 && rand.next() < 0.6 ? .skyTee : .summitGreen
@@ -592,7 +593,8 @@ public enum CourseGenerator {
             // 첫 캡처(깊이 10~14 대칭)는 얕은 접시로 읽혀 과장했다 — 1.3배 구분 불가 교훈
             var depth = rand.next(16, 22)
             let downStart = teeEnd + rand.next(12, 24) // 티 트레드는 짧게 — 드라이브가 골에 떨어진다
-            // 그린 림 선반 20~30m: 절벽 바로 위가 그린이면 사면에 선 공(오르막 라이 +13°)의 짧은 웨지가 절벽 면에 맞고 되굴러 왕복한다 (봇 고착 실측)
+            // 그린 림 선반 ≥ 17m(뽑기 20~30, 램프 경사 0.22~0.28 편차로 −3m까지 — 리뷰 m3): 절벽 바로 위가 그린이면 사면에 선 공(오르막 라이 +13°)의
+            // 짧은 웨지가 절벽 면에 맞고 되굴러 왕복한다 (봇 고착 실측). 포대 램프(14m)와는 안 겹치지만 계곡은 포대 제외
             let climbEnd = apronStart - rand.next(20, 30)
             func climbOf(_ d: Double) -> Double {
                 max(8, d + plannedRise) // 등반 = 낙하 − 4~8
@@ -600,11 +602,11 @@ public enum CourseGenerator {
             func climbW(_ d: Double) -> Double {
                 let c = climbOf(d)
                 let up = min(8, 0.5 * c)
-                return up / 0.24 + (c - up) * riserRatio
+                return up / 0.22 + (c - up) * riserRatio // 0.22 = addRamp 최완경사(최악 폭) — 추정이 실제보다 좁으면 바닥·선반이 깎인다 (리뷰 m3)
             }
             func descentW(_ d: Double) -> Double {
                 let dn = min(8, 0.4 * d)
-                return dn / 0.25 + (d - dn) * riserRatio
+                return dn / 0.22 + (d - dn) * riserRatio
             }
             while climbEnd - climbW(depth) - (downStart + descentW(depth)) < 60, depth > 10 {
                 depth *= 0.9 // 바닥 60m 확보까지 얕게 (짧은 파4)
@@ -618,15 +620,16 @@ public enum CourseGenerator {
             let floorEnd = climbEnd - climbW(depth)
             let base = nodes.last!.e
             let floorLen = floorEnd - x
-            if floorLen >= 90, tiltRand.next() < 0.35 { // 개울 — 2온·레이업의 선택 (둑 6m, 수면 −1.2)
+            if floorLen >= 90, tiltRand.next() < 0.35 { // 개울 — 2온·레이업의 선택 (둑 6m, 수면 −1.6, 둑 최대 경사 0.42)
+                // 바닥 굴곡은 0.6으로 낮춘다 — 2.2면 골(−2.2)이 수면보다 낮아 물이 땅 위에 떠 보였다 (리뷰 m4, 개울 48%). 굴곡(±0.67)을 더해도 −1.27 > −1.6
                 let cw = rand.next(8, 12)
                 let cFrom = x + floorLen * rand.next(0.35, 0.55)
-                rolls(from: x, to: cFrom - 6, around: base, amp: 2.2)
-                nodes.append((cFrom, base - 1.2))
-                nodes.append((cFrom + cw, base - 1.2))
+                rolls(from: x, to: cFrom - 6, around: base, amp: 0.6)
+                nodes.append((cFrom, base - 1.6))
+                nodes.append((cFrom + cw, base - 1.6))
                 nodes.append((cFrom + cw + 6, base))
                 waters = [(cFrom + 1) ... (cFrom + cw - 1)]
-                rolls(from: cFrom + cw + 6, to: floorEnd, around: base, amp: 2.2)
+                rolls(from: cFrom + cw + 6, to: floorEnd, around: base, amp: 0.6)
             } else {
                 rolls(from: x, to: floorEnd, around: base, amp: 2.2)
             }
@@ -637,20 +640,28 @@ public enum CourseGenerator {
         case .ridge:
             // 능선 홀 (M5-④): 평지 → 오르막 사면 + 절벽으로 마루(30~50m) → 절벽 + 내리막 러프 사면으로 더 낮은 그린 쪽. 짧으면 사면에 오르막 라이로
             // 서고, 마루에 올리거나 넘기면 내리막. 중원(트레드의 40~55%)에 둔다 — 파4 드라이브는 사면·마루·너머 어디든 갈 수 있다
-            let up = rand.next(14, 20) // 첫 캡처 10~16은 둔덕으로 읽혔다 — 사면 ≤ 8 + 절벽 ≤ 14 예산 안에서 최대로
-            let down = up - plannedRise // 반대편이 4~12m 더 깊다
+            var up = rand.next(14, 20) // 첫 캡처 10~16은 둔덕으로 읽혔다 — 사면 ≤ 8 + 절벽 ≤ 14 예산 안에서 최대로
+            var down = up - plannedRise // 반대편이 4~12m 더 깊다
             var hillUp = min(8, 0.5 * up), rampDown = min(8, 0.4 * down), crestW = rand.next(30, 50)
-            func ridgeW() -> Double {
-                hillUp / 0.24 + (up - hillUp) * riserRatio + crestW + (down - rampDown) * riserRatio + rampDown / 0.25
+            func ridgeW() -> Double { // 램프 폭은 최완경사 0.22 기준(최악 폭, 리뷰 m3)
+                hillUp / 0.22 + (up - hillUp) * riserRatio + crestW + (down - rampDown) * riserRatio + rampDown / 0.22
             }
             let ridgeLo = teeEnd + 40, ridgeHi = apronStart - 30
-            if ridgeW() > ridgeHi - ridgeLo { // 짧은 홀: 사면을 버리고 절벽만 (마루 30)
+            if ridgeW() > ridgeHi -
+                ridgeLo { // 짧은 홀: 사면을 버리고 절벽만 (마루 30) — 절벽 하나가 up 전부라 maxRiser로 깎는다 (리뷰 m5, 32,000회 실측 미발동)
                 hillUp = 0; rampDown = 0; crestW = 30
+                up = min(up, maxRiser)
+                down = up - plannedRise
             }
             let ridgeStart = min(ridgeHi - ridgeW(), ridgeLo + (ridgeHi - ridgeLo - ridgeW()) * rand.next(0.4, 0.55))
             nodes = [(0, 0), (teeEnd + 8, 0)]
-            rolls(from: teeEnd + 8, to: max(teeEnd + 24, ridgeStart), around: 0, amp: 2.2)
-            var x = max(teeEnd + 24, ridgeStart)
+            rolls(
+                from: teeEnd + 8,
+                to: ridgeStart,
+                around: 0,
+                amp: 2.2
+            ) // ridgeStart ≥ ridgeLo = teeEnd + 40 (구 max(teeEnd+24, ·)는 죽은 가드 — 리뷰 n5)
+            var x = ridgeStart
             if hillUp >= 3 {
                 x = addRamp(from: x, rise: hillUp)
             }
@@ -698,7 +709,7 @@ public enum CourseGenerator {
             // 숲 (M5-④): 완만한 오르막 한 단(9~14m = 사면 ≤ 8 + 절벽)을 중원에, 나무 회랑은 makeHole이 3~4그루 심는다 — 펀치(낮게)·로브(높게)의 무대
             let rise = plannedRise
             let hill = min(8, 0.55 * rise)
-            let riseW = hill / 0.24 + (rise - hill) * riserRatio
+            let riseW = hill / 0.22 + (rise - hill) * riserRatio // 최완경사 기준 최악 폭
             let riseStart = teeEnd + max(30, (apronStart - 30 - riseW - teeEnd) * rand.next(0.35, 0.6))
             nodes = [(0, 0), (teeEnd + 8, 0)]
             rolls(from: teeEnd + 8, to: riseStart, around: 0, amp: 2.2)
@@ -1030,7 +1041,8 @@ public enum CourseGenerator {
             }
         }
         // 2단 그린 (M5-②): 파4·5의 25%, 그린 22m 이상 — 뒤쪽 단이 0.6~1.0m 높고 턱은 6m smoothstep(최대 경사 0.15~0.25: 그린 정지 마찰 0.17 언저리라
-        // 턱 위에선 공이 굴러 내린다). 핀은 윗단 60%(턱을 넘겨 올려야 한다) / 아랫단 40%(넘기면 턱 위에서 굴러 돌아온다). 턱은 컵에서 4m 이상
+        // 턱 위에선 공이 굴러 내린다). 핀이 윗단(턱을 넘겨 올려야 한다) / 아랫단(넘기면 턱 위에서 굴러 돌아온다) — 60/40으로 뽑되 핀 자리상 안 들어가면
+        // 반대 단이라 실제는 반반(앞핀은 아랫단, 뒷핀은 윗단), 발생은 적격 홀의 ≈19%(리뷰 m1 600시드 실측 — 양쪽 다 안 들어가는 짧은 그린은 탈락). 턱은 컵에서 4m 이상
         if par >= 4, greenLen >= 22, rand.next() < 0.25 {
             let tier = rand.next(0.6, 1.0) // 0.8~1.2는 봇 퍼팅이 턱을 못 넘겨 왕복 고착(3%) — 사람도 5.7~7.2 m/s 창이 좁다
             var upperPin = rand.next() < 0.6
@@ -1039,7 +1051,7 @@ public enum CourseGenerator {
                     (holeX + 4, greenEnd - 9) // 턱은 컵에서 4m 이상 — ±2m 중앙차분 검사가 턱 첫 셀을 안 본다
             }
             if bounds(upperPin).hi <= bounds(upperPin)
-                .lo { // 핀 자리상 그쪽 단이 안 들어가면 반대 단 — 안 그러면 25%가 조용히 11%로 준다 (M5-④ 실측 9/157)
+                .lo { // 핀 자리상 그쪽 단이 안 들어가면 반대 단 — 없으면 25%가 조용히 ≈11%로 준다 (M5-④ 실측 9/157 → 폴백 뒤 ≈19%)
                 upperPin.toggle()
             }
             let (lo, hi) = bounds(upperPin)
@@ -1121,7 +1133,9 @@ public enum CourseGenerator {
         func gentleGround(_ x: Double) -> Bool {
             guard signature != nil else { return true }
             let i = max(1, min(elev.count - 2, Int(x)))
-            return abs(elev[i + 1] - elev[i - 1]) / 2 < 0.25
+            // 0.15: 언덕 사면(0.22~0.28)이 구 0.25 문턱 아래로 통과해 사면 위 트렁크가 수직으로 서서 캐노피가 떠 보였다 (리뷰 M1, 숲 34%).
+            // 저지대 굴곡(rolls ≤ 0.12)은 남긴다 — 굴곡(addUndulation)은 배치 뒤라 여기 안 보인다
+            return abs(elev[i + 1] - elev[i - 1]) / 2 < 0.15
         }
         if signature == .forest { // 숲 (M5-④): 나무 회랑 3~4그루 — 간격 ≥ 40m, 사면·라이저·해저드 위는 피한다 (자리가 안 나오면 그만큼만)
             // 첫 캡처 3그루(캐노피 3.4~5.2)는 숲으로 안 읽혔고, 4~5그루(4.5~6.5)는 순진 봇 파 대비 +0.68로 대역(0.6)을 넘겼다 → 3~4그루·4.2~6.0,

@@ -397,7 +397,8 @@ final class GolfCoreTests: XCTestCase {
             // 전 홀 다이나믹 (2026-08-20 사용자 판정 2차: "모든 홀 전부")
             XCTAssertEqual(sigs.count, 9, "모든 홀이 시그니처여야 함 (\(sigs.count))")
             let roundKinds = Set(sigs.compactMap(\.signature))
-            XCTAssertGreaterThanOrEqual(roundKinds.count, 3, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
+            // 덱 8종에서 파4·5 7홀이 중복 없이 뽑으므로 항상 ≥ 7 — 덱 회귀(중복 허용·종류 누락)를 잡는다 (리뷰 n4)
+            XCTAssertGreaterThanOrEqual(roundKinds.count, 7, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
             for h in sigs {
                 try kindsSeen.insert(XCTUnwrap(h.signature))
                 let lo = h.elevation.min() ?? 0
@@ -493,7 +494,13 @@ final class GolfCoreTests: XCTestCase {
                 if sig == .valley { // 계곡 바닥에서 그린 림까지 — 사면(≤ 8) + 절벽(≤ 8)으로 오른다 (M5-④)
                     let floor = h.elevation.min() ?? 0
                     let rim = h.ground(at: h.holeX)
-                    XCTAssertLessThanOrEqual(rim - floor, 18 + 3.5, "계곡 등반 불가 깊이 (\(rim - floor)) — 사면 ≤ 8 + 절벽 ≤ 10")
+                    // 구조 등반 ≤ 18 위에 바닥 골(rolls −2.2)·굴곡(−0.67)·그린 브레이크(+2.0)·윗단 턱(+1.0)이 얹힌다 → 이론 최대 ≈ 24, 600시드 실측
+                    // 21.1 (리뷰 m2)
+                    XCTAssertLessThanOrEqual(
+                        rim - floor,
+                        18 + 6,
+                        "계곡 등반 불가 깊이 (\(rim - floor)) — 사면 ≤ 8 + 절벽 ≤ 10 + 부속 ≤ 6"
+                    )
                 }
                 if sig != .canyon { // 오르막 라이저 한 단 ≤ maxRiser — 산정뿐 아니라 능선·계곡·숲의 오르막도 (협곡 반대편 라이저는 depth+rim ≤ 21이라 별도)
                     // '한 샷으로 넘어야 하는' 가파른 상승(경사 >0.3) 연속 구간의 낙차만 측정
@@ -888,7 +895,8 @@ final class GolfCoreTests: XCTestCase {
         )
         XCTAssertGreaterThan(Double(front) / Double(holes), 0.15, "앞핀이 적음 (\(front))")
         XCTAssertGreaterThan(Double(back) / Double(holes), 0.15, "뒷핀이 적음 (\(back))")
-        XCTAssertGreaterThan(tiered, 20, "2단 그린이 적음 (\(tiered))")
+        // 적격(파4·5, 그린 ≥ 22m) ≈150홀 × 발생 ≈19% = 기대 28, σ ≈ 5 → 15는 −2.7σ (덱·난수 재편마다 흔들리는 값이라 20은 경계선 — 리뷰 m1)
+        XCTAssertGreaterThan(tiered, 15, "2단 그린이 적음 (\(tiered))")
         XCTAssertGreaterThan(podium, 20, "포대 그린이 적음 (\(podium))")
         XCTAssertGreaterThan(island, 3, "아일랜드 그린이 적음 (\(island))")
     }
