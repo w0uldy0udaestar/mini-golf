@@ -122,7 +122,11 @@ final class CourseBalanceProbe: XCTestCase {
             shotSpots.append((b.x, club.id, lie))
             let slope = club.isPutter ? 0 : hole.slope(at: b.x) * Phys.stanceSlopeRatio
             let punch = club.isPutter ? 0 : treeT(hole, x: b.x, dir: dir) * 0.85
-            Ballistics.launch(&b, club: club, heightPct: h, lie: lie, dir: dir, punch: punch, slope: slope)
+            Ballistics.launch(
+                &b, club: club, heightPct: h, lie: lie, dir: dir, punch: punch, slope: slope,
+                roughLie: lie == .rough ? hole
+                    .roughLie(at: b.x) : .normal // 게임과 같은 러프 이원화 (봇은 라이를 모르고 친다 — 사람의 클럽 조정은 미모델)
+            )
             strokes += 1
             let fromX = b.x
             var t = 0.0

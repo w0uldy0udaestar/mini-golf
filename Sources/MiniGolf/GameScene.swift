@@ -192,6 +192,7 @@ final class GameScene: SKScene {
     private var idleStart = 0.0
     var stickX = CourseGenerator.teeX
     var trailPoints: [CGPoint] = []
+    private var landingCueShown = false // 착지 3태 연출은 샷당 한 번 (첫 본격 착지)
     private var didSetUp = false // didMove 완료 전 didChangeSize 가드 (모니터 전환)
     var roundHadWater = false // 무입수 라운드 배지 판정
     // QA P1 재미 3 (2026-09-16): 좌절 반응·버디 스트릭·포커스 복귀 인사
@@ -1450,7 +1451,8 @@ final class GameScene: SKScene {
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
             kind: ballKind, // 공 바꿔치기 (Surprises2)
-            shape: club.isPutter ? .standard : shotShape // Tab 샷 종류 (M5-③)
+            shape: club.isPutter ? .standard : shotShape, // Tab 샷 종류 (M5-③)
+            roughLie: lie == .rough ? hole.roughLie(at: ball.x) : .normal // 러프 이원화 (잔손질 2026-09-29)
         )
         if !teeNode.isHidden { // 임팩트에 티가 튕겨 날아간다 — 앞으로 살짝 뜨며 한 바퀴 반 돌고 떨어져 사라진다
             let d = CGFloat(dir)
@@ -1464,6 +1466,7 @@ final class GameScene: SKScene {
             ]))
         }
         shotLipped = false
+        landingCueShown = false
         preShot = (x: ball.x, strokes: strokes, remain: abs(hole.holeX - ball.x)) // 멀리건·갤러리 스냅샷
         strokes += 1
         // 디봇 (2026-09-28 사용자 요청): 아이언·웨지 풀샷은 페어웨이·러프를 파낸다 — 덩어리가 날고 자국이 홀 끝까지 남는다. 벙커는 모래 튀김
@@ -1487,7 +1490,9 @@ final class GameScene: SKScene {
             heightPct,
             club.isPutter || shotShape == .standard ? "" : " \(shotShape.rawValue)", // 샷 종류 (기본은 생략)
             preShot.x,
-            "\(lie)"
+            lie == .rough && hole
+                .roughLie(at: preShot.x) != .normal ? "rough-\(hole.roughLie(at: preShot.x).rawValue)" : "\(lie)" // 러프
+            // 라이
         ))
         if club.isPutter { // 퍼팅 타격감 (2026-09-24 판정): 작은 스쿼시 + 접촉 링 — 헤드보다 느리게 굴러 나가는 공을 '출발'로 읽히게
             let ks = ballKind.renderScale
@@ -2201,7 +2206,9 @@ final class GameScene: SKScene {
         // 비탈 라이 단어 (2026-09-28): 발밑이 홀 쪽으로 0.10 이상 기울면 '오르막/내리막' — 수치가 아니라 라이 이름이라 어시스트 금지 원칙 안
         let toward: Double = hole.holeX >= ball.x ? 1 : -1 // 렌더 dir은 걷는 동안 직전 샷 방향일 수 있다 (리뷰) — 홀 방향으로
         let facing = hole.slope(at: ball.x) * toward
-        let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lie.label
+        let lieName = lie == .rough ? hole.roughLie(at: ball.x).label : lie
+            .label // 러프 이원화: "플라이어 러프"/"깊은 러프" — 이름이라 어시스트 금지 원칙 안
+        let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lieName
         scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lieWord) · \(Int(remain))m" + elevStr)
         // 샷 종류 (Tab): 클럽 이름 옆 단어 + 아랫줄 결과의 말 — 수치가 아니라 이름이라 어시스트 금지 원칙 안 (퍼터는 없음)
         let shape = club.isPutter ? ShotShape.standard : shotShape
@@ -2390,10 +2397,16 @@ final class GameScene: SKScene {
             }
             // 잔동작 중 걸음을 멈추는 것(bow·airSwing 등)과 보폭 배율 — 쇼피스와 같은 동결 램프 (WalkFlavorKind.gait)
             var strideScale = 1.0
-            for e in w.flavorEvents {
-                let g = e.kind.gait(u: (w.t - e.t0) / e.dur)
+            for i in w.flavorEvents.indices {
+                let e = w.flavorEvents[i]
+                let u = (w.t - e.t0) / e.dur
+                let g = e.kind.gait(u: u)
                 strideScale *= g.stride
                 freeze = max(freeze, g.stop)
+                if e.kind == .whistle, !e.soundFired, u >= 0.2 { // 휘파람 — 손이 입가에 닿는 순간 한 번
+                    w.flavorEvents[i].soundFired = true
+                    SoundKit.shared.whistle()
+                }
             }
             strideScale *= moodStride(w.mood, e: moodEnvelope(tw: w.t - w.relax - w.pausedTime, dur: w.dur))
             if freeze > 0 {
@@ -2524,20 +2537,27 @@ final class GameScene: SKScene {
         if mode == .motion, !walkAfterSlip { // 넘어져 있는 동안 공이 멈추면 정지 분기가 매 프레임 재실행되지 않게 (리뷰 #2)
             acc += dt * timeScale
             var terminal = StepEvent.none
-            var landing: (speed: Double, surface: Surface, x: Double)?
+            var landing: (
+                speed: Double,
+                surface: Surface,
+                x: Double,
+                pre: Double,
+                post: Double
+            )? // pre/post: 착지 전후 전진 속도(m/s) — 3태 연출
             var wallHit: (speed: Double, x: Double)?
             var lipped = false
             var settledFrom: Double? // 정착 스냅이 일어난 프레임 — 궤적 잔상은 정지 지점까지만
             while acc >= Phys.dt {
                 acc -= Phys.dt
                 let prevX = ball.x
+                let vxBefore = ball.vx
                 let event = Ballistics.step(&ball, hole: hole, wind: gustWind, kind: ballKind) // 돌풍 덮어쓰기 · 공 바꿔치기
                 switch event {
                 case .holed, .water:
                     terminal = event
                 case let .bounce(speed, surface): // 프레임당 가장 강한 착지 하나만 연출
                     if speed > (landing?.speed ?? 0) {
-                        landing = (speed, surface, ball.x)
+                        landing = (speed, surface, ball.x, vxBefore * dir, ball.vx * dir)
                     }
                 case let .wall(speed):
                     if speed > (wallHit?.speed ?? 0) {
@@ -2573,6 +2593,32 @@ final class GameScene: SKScene {
                     surface: l.surface,
                     intensity: min(1, l.speed / 12)
                 )
+                // 착지 3태 (2026-09-29 잔손질, 스핀 리서치 §5-4): 첫 본격 착지(법선 4m/s+)에서 전진 속도가 어떻게 남았는지로 —
+                // 백업(뒤로 감김: 역회전 점이 뒤로 튐) · 체크(전진 35% 미만: 임팩트 링) · 릴리스(굴러감: 앞으로 낮게 먼지 줄기). 스핀이 눈에 읽히게
+                if !landingCueShown, l.speed > 4, l.surface != .water, l.surface != .bunker {
+                    landingCueShown = true
+                    let at = CGPoint(x: px(l.x), y: groundY(l.x))
+                    if demo.active { // 계측: 3태 분포 (관찰용)
+                        let cue = l.post < -0.4 ? "backup" : l.post < 0.35 * l.pre ? "check" : "release"
+                        print(String(
+                            format: "LANDCUE %@ x %.0f %@ pre %.1f post %.1f vn %.1f",
+                            cue,
+                            l.x,
+                            "\(l.surface)",
+                            l.pre,
+                            l.post,
+                            l.speed
+                        ))
+                        fflush(stdout)
+                    }
+                    if l.post < -0.4 {
+                        FX.backspin(on: self, at: at, dir: dir)
+                    } else if l.post < 0.35 * l.pre {
+                        FX.contactTick(on: self, at: CGPoint(x: at.x, y: at.y + 4))
+                    } else {
+                        FX.skid(on: self, at: at, dir: dir, surface: l.surface, intensity: min(1, l.post / 20))
+                    }
+                }
             }
             if let w = wallHit, w.speed > 0.8 {
                 SoundKit.shared.wall(speed: w.speed)
