@@ -338,6 +338,22 @@ struct SwingProfile {
     let keys: SwingKeyframes // 스타일 × 클럽군 키프레임·템포
     let putt: PutterKeyframes // 스타일별 퍼터 (표준 펜듈럼 / 암록)
 
+    /// 샷 종류별 폼 (M5-③): 펀치·런닝은 공을 뒤에 두고 짧은 백스윙·짧은 피니시(손이 가슴 앞, research-spin-bounce §펀치),
+    /// 로브는 공을 앞에 두고 풀 피니시. 파워(heightPct)와 무관한 '폼'이라 물리는 ShotShape가 따로 맡는다. 퍼터는 그대로
+    func shaped(_ shape: ShotShape) -> SwingProfile {
+        guard !isPutter, shape != .standard else { return self }
+        let (top, fwd, fin): (Double, Double, Double) = switch shape {
+        case .standard: (1, 0, 1)
+        case .punch: (0.72, -5, 0.55)
+        case .running: (0.55, -7, 0.4)
+        case .lob: (1.0, 4, 1.0)
+        }
+        return SwingProfile(
+            topScale: topScale * top, ballFwd: ballFwd + fwd, finishScale: finishScale * fin,
+            down: down, isPutter: isPutter, keys: keys, putt: putt
+        )
+    }
+
     static func profile(for cat: ClubCategory, style: SwingStyle = .rory) -> SwingProfile {
         let k = SwingKeyframes.table(style, cat)
         let pt = PutterKeyframes.table(style)
