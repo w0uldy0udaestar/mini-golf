@@ -59,6 +59,20 @@ public enum SignatureKind: String, Sendable, CaseIterable {
     case ridge // 능선 홀 — 중원의 큰 언덕(오르막 사면+절벽+마루+절벽+내리막 사면), 짧으면 사면에 서고 넘기면 반대편 내리막
     case cascade // 폭포 — 내려가는 단마다 절벽 발치에 연못 (파5 3단·파4 2단), 짧으면 입수
     case forest // 숲 — 완만한 오르막 한 단 + 나무 회랑 3~4그루 (펀치·로브의 무대)
+
+    /// HUD 홀 이름 (2026-09-29 판정 "뭐가 달라진지 체감이 안 돼" — 실제 골프장처럼 홀에 이름을 붙여 지형에 말을 단다. 수치가 아니라 이름)
+    public var displayName: String {
+        switch self {
+        case .skyTee: "절벽 티"
+        case .summitGreen: "산정 그린"
+        case .canyon: "협곡"
+        case .terraces: "계단"
+        case .valley: "계곡"
+        case .ridge: "능선"
+        case .cascade: "폭포"
+        case .forest: "숲"
+        }
+    }
 }
 
 public struct Hole: Sendable {

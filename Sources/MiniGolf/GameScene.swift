@@ -91,6 +91,7 @@ final class GameScene: SKScene {
         var arrivalTurn: TurnPlan? // 도착 턴 — 걸어온 방향과 조준 방향이 반대일 때 (공이 뒤에 있던 경우)
         var mood = WalkMood.neutral // 무드 워크 채널 오버레이 (속도·보폭·자세)
         var replanFired = false // --demo-replan: 이 걷기에서 공을 이미 옮겼나
+        var hurried = false // 서두르기 컷을 이미 했나 (한 걷기에 한 번)
         var arrivalDir = 1.0
         var vPx = 0.0
         // 게이트 상태 (리서치 반영: stride warping + 접지점 래치)
@@ -263,8 +264,20 @@ final class GameScene: SKScene {
         CGFloat(m) * pxPerM
     }
 
+    /// 세로 과장 (2026-09-29 판정 "뭐가 달라진지 체감이 안 돼"): 09-17 표고 재예산(플레이 가능성) 뒤 지형이 화면 높이의 6~10%만 써 아키타입 8종이 다
+    /// 완만한 굴곡으로 보였다. 물리는 미터 그대로, **그리기만** 세로를 키운다 — 긴 홀일수록 화면 압축이 심해 최대 2배, 세로 px/m는 9를 넘지 않게
+    /// (짧은 파3는 그대로 — 최고 표고 40m + 정점 60m가 화면 안에 남아야 한다). 공·지형·장애물·스틱맨 발이 전부 py()를 지나므로 기하는 일관된다
+    var vScale: CGFloat {
+        min(2.0, max(1.0, 9.0 / pxPerM))
+    }
+
+    /// 세로 스케일 (지형·공 높이 공용) — px/m × 과장
+    var pyPerM: CGFloat {
+        pxPerM * vScale
+    }
+
     func py(_ elev: Double) -> CGFloat {
-        groundBase + CGFloat(elev) * pxPerM
+        groundBase + CGFloat(elev) * pyPerM
     }
 
     func groundY(_ xm: Double) -> CGFloat {
@@ -1243,6 +1256,47 @@ final class GameScene: SKScene {
         return (ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM), arrivalDir)
     }
 
+    /// 서두르기 (2026-09-29 판정): 긴 걷기(4.5s+)는 2.2s 걸은 뒤 도착 지점 앞 14m로 건너뛰어(먼지 + 0.3s 페이드 인) 마지막 두 걸음으로 도착한다.
+    /// 배속은 안 된다 — 보폭 상한 22px라 다리가 초당 8걸음이 된다. 걷는 도중 공이 옮겨졌을 때의 재출발(startWalk(fromBody:))을 재사용.
+    /// 걷기를 관찰하는 시연 모드(리플랜·턴·트립·쇼피스·모션·무드)에서는 끈다 — 시연이 잘린다
+    static let hurryAfter = 2.2, hurryMinDur = 4.5, hurryLead = 14.0
+    private var hurryBlocked: Bool {
+        demo.replanForce || demo.turnForce || demo.tripForce || demo.showpieceForce || demo.motionShowcase || demo
+            .mood != nil
+    }
+
+    /// 컷 시점(walk 시계): 기본 여운+2.2s. 그 전후로 잡힌 잔동작·쇼피스·넘어지기 중 8.5s 안에 끝나는 것은 보고 나서 자른다 — 긴 걷기의 매력(잔동작 37종·
+    /// 쇼피스)을 전부 잃지 않게 하나는 남긴다. 그보다 늦게 잡힌 것은 잘린다(답답함이 우선 — 판정)
+    private func hurryCutTime(_ w: WalkAnim) -> Double {
+        var t = w.relax + Self.hurryAfter
+        if let first = w.flavorEvents.min(by: { $0.t0 < $1.t0 }),
+           first.t0 + first.dur <= 7.5 { // 첫 잔동작 하나만 (둘째까지 기다리면 9.7s — 실측)
+            t = max(t, first.t0 + first.dur + 0.2)
+        }
+        if let sa = w.showAt, let sk = w.showKind, sa + sk.duration <= 8.5 {
+            t = max(t, sa + sk.duration + 0.2)
+        }
+        if let tr = w.tripAt, tr + 2.6 <= 8.5 {
+            t = max(t, tr + 2.6)
+        }
+        return t
+    }
+
+    private func hurryCut(_ w: inout WalkAnim) {
+        let sgn: Double = w.toX >= w.fromX ? 1 : -1
+        let from = stickX
+        FX.dust(on: self, at: CGPoint(x: px(from), y: groundY(from)), surface: .rough, intensity: 0.6)
+        stickX = w.toX - sgn * Self.hurryLead
+        if demo.active {
+            print(String(format: "HURRY cut t %.1f x %.1f → %.1f (walk %.1fs)", w.t, from, stickX, w.dur))
+            fflush(stdout)
+        }
+        walkAnim = w
+        startWalk(fromBody: true)
+        stickman.alpha = 0
+        stickman.run(.fadeIn(withDuration: 0.3))
+    }
+
     /// fromBody: 걷기 도착 자리(몸 원점)에서 다시 출발 — 걷는 동안 공이 옮겨져 도착해 보니 공이 없을 때 (2026-09-23 재계획)
     func startWalk(fromBody: Bool = false) {
         if slip != nil { // 넘어져 있다 — 일어난 뒤 updateSlip이 다시 부른다
@@ -1904,7 +1958,7 @@ final class GameScene: SKScene {
         terrainNode.removeAllChildren()
         // 깊은 계곡·워터가 하단 HUD 스트립을 침범하지 않게 바닥선을 홀 최저 표고 기준으로 (리뷰 S-3)
         let minElev = hole.elevation.min() ?? 0
-        groundBase = max(96, 84 - CGFloat(minElev) * pxPerM)
+        groundBase = max(96, 84 - CGFloat(minElev) * pyPerM) // 세로 과장 포함
         let cupHalfM = max(Phys.cupHalfWidth, 4.5 / Double(pxPerM))
         let cupL = hole.holeX - cupHalfM
         let cupR = hole.holeX + cupHalfM
@@ -2066,6 +2120,8 @@ final class GameScene: SKScene {
         for ob in hole.obstacles {
             let gx = px(ob.x)
             let gy = groundY(ob.x)
+            // 세로 과장: 충돌원(미터)이 화면에선 세로로 늘어난 타원 — 지면(gy) 기준으로 y만 vScale (공이 맞는 자리와 그림이 일치)
+            var vT = CGAffineTransform(translationX: 0, y: gy).scaledBy(x: 1, y: vScale).translatedBy(x: 0, y: -gy)
             switch ob.kind {
             case .tree:
                 // 초심플 귀여운 나무 (2026-08-15 사용자 요청): 통통한 트렁크 + 뭉게구름 캐노피.
@@ -2077,7 +2133,7 @@ final class GameScene: SKScene {
                 let trunkPath = CGMutablePath()
                 trunkPath.move(to: CGPoint(x: gx, y: gy + 1))
                 trunkPath.addLine(to: CGPoint(x: gx, y: cy - r * 0.3)) // 캐노피 속까지 — 틈 없음
-                let trunk = SKShapeNode(path: trunkPath)
+                let trunk = SKShapeNode(path: trunkPath.copy(using: &vT) ?? trunkPath)
                 trunk.strokeColor = Palette.hairline.withAlphaComponent(0.75)
                 trunk.lineWidth = 4.5
                 trunk.lineCap = .round
@@ -2097,13 +2153,14 @@ final class GameScene: SKScene {
                     )
                 }
                 puffs.closeSubpath()
-                let canopy = SKShapeNode(path: puffs)
+                let puffsV = puffs.copy(using: &vT) ?? puffs
+                let canopy = SKShapeNode(path: puffsV)
                 canopy.strokeColor = Palette.hairline.withAlphaComponent(0.8)
                 canopy.lineWidth = 2.0
                 canopy.lineJoin = .round
                 canopy.fillColor = NSColor(white: 1, alpha: 0.16)
                 if Theme.highContrast {
-                    let under = SKShapeNode(path: puffs)
+                    let under = SKShapeNode(path: puffsV)
                     under.strokeColor = NSColor(white: 0, alpha: 0.32)
                     under.lineWidth = 4
                     under.fillColor = .clear
@@ -2126,7 +2183,11 @@ final class GameScene: SKScene {
                     )
                     return p
                 }
-                let rock = SKShapeNode(path: pebbleDome(cxPx: gx, baseY: gy, radius: r))
+                let rock = SKShapeNode(path: pebbleDome(cxPx: gx, baseY: gy, radius: r).copy(using: &vT) ?? pebbleDome(
+                    cxPx: gx,
+                    baseY: gy,
+                    radius: r
+                ))
                 rock.strokeColor = Palette.hairline.withAlphaComponent(0.85)
                 rock.fillColor = NSColor(white: 1, alpha: 0.28)
                 rock.lineWidth = 2.0
@@ -2163,7 +2224,9 @@ final class GameScene: SKScene {
         // 거리와 같은 급의 정보라 탄도 어시스트가 아니다. 1m 미만은 생략
         let dz = hole.ground(at: hole.holeX) - hole.ground(at: ball.x)
         let elevStr = abs(dz) < 1 ? "" : " \(dz > 0 ? "↑" : "↓")\(Int(abs(dz).rounded()))m"
-        scoreTitle.setText("\(holeIdx + 1)번 홀 · 파 \(hole.par)")
+        scoreTitle
+            .setText("\(holeIdx + 1)번 홀 · 파 \(hole.par)" +
+                (hole.signature.map { " · \($0.displayName)" } ?? "")) // 홀 이름 (M5-④ 판정)
         // 비탈 라이 단어 (2026-09-28): 발밑이 홀 쪽으로 0.10 이상 기울면 '오르막/내리막' — 수치가 아니라 라이 이름이라 어시스트 금지 원칙 안
         let toward: Double = hole.holeX >= ball.x ? 1 : -1 // 렌더 dir은 걷는 동안 직전 샷 방향일 수 있다 (리뷰) — 홀 방향으로
         let facing = hole.slope(at: ball.x) * toward
@@ -2292,6 +2355,15 @@ final class GameScene: SKScene {
             stepRitual(dt: dt)
         }
 
+        // 서두르기 (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답"): 걷기 시간이 거리/10(상한 14s)이라 드라이브 뒤 매번 14초를 걸었다
+        if mode == .walking, var w = walkAnim, !w.hurried, w.dur > Self.hurryMinDur, !hurryBlocked,
+           w.stopPlan == nil, w.arrivalTurn == nil, w.turn.map({ w.t >= $0.start + $0.dur + 0.2 }) ?? true {
+            let tw = w.t - w.relax - w.pausedTime
+            if w.t >= hurryCutTime(w), w.dur - tw > Self.hurryLead / 10 + 1.0 {
+                w.hurried = true
+                hurryCut(&w) // walkAnim을 새 짧은 걷기로 교체 — 아래 블록이 그 걷기를 t=0부터 이어간다
+            }
+        }
         if mode == .walking, var w = walkAnim {
             w.t += dt
             if var tp = w.turn, w.t >= tp.start {
