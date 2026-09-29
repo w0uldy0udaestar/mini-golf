@@ -373,16 +373,17 @@ public enum CourseGenerator {
     /// 실제로는 파3 전용 — 파4·5는 makeCourse의 덱(allCases)이 뽑는다. 아래 파4·5 분기는 원조 4종만 알고 M5-④ 4종을 모른다 (preferredKind 없는 호출용 폴백)
     static func pickSignatureKind(par: Int, dist: Double, rand: inout SeededRandom) -> SignatureKind {
         if par ==
-            3 { // 2026-09-29 잔손질: 파3도 5종 — 절벽 티(150m+, 실효 ≈18%)·산정(≈31%)·숲 18%·폭포 17%·능선 15%. 계곡은 파3에 안 들어간다(바닥 60m).
+            3 { // 2026-09-29 잔손질: 파3도 5종 — 절벽 티(150m+, 실효 ≈23%)·산정(≈42%)·숲 10%·폭포 10%·능선 15%. 계곡은 파3에 안 들어간다(바닥 60m).
+            // 숲·폭포는 18/17%였다가 판정 "파3 연못·나무가 잦다"(2026-09-29 v0.8.9)로 절반 — 나온 홀에서는 티샷을 바꾸는 배치(첫 나무·그린 앞 연못)를 유지
             // 구 코드는 dist < 150이면 난수를 안 소비했고 지금은 항상 소비 — 짧은 파3 뒤 시드 구성이 바뀐다 (리뷰 m4)
             let r = rand.next()
-            if r < 0.28 {
+            if r < 0.36 {
                 return dist >= 150 ? .skyTee : .summitGreen
             }
-            if r < 0.50 {
+            if r < 0.65 {
                 return .summitGreen
             }
-            if r < 0.68 {
+            if r < 0.75 {
                 return .forest
             }
             if r < 0.85 {

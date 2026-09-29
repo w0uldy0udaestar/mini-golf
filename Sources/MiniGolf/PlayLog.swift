@@ -24,7 +24,14 @@ enum PlayLog {
 
     nonisolated(unsafe) static var toStdout = false
 
+    /// `swift test`가 GameScene을 띄우면(서프라이즈·세로 과장 테스트) 실플레이 로그에 HOLE 줄이 수십 개 섞였다(2026-09-29 10:17, 69줄) —
+    /// 판정 근거가 오염되므로 XCTest 프로세스 안에서는 파일에 쓰지 않는다
+    static let underTest = NSClassFromString("XCTestCase") != nil
+
     static func note(_ line: String) {
+        if underTest {
+            return
+        }
         if toStdout {
             print("PLAY " + line)
             fflush(stdout)
