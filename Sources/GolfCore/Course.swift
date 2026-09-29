@@ -54,6 +54,11 @@ public enum SignatureKind: String, Sendable, CaseIterable {
     case summitGreen // 산정 그린 — 벤치 계단을 밟고 오르는 등정
     case canyon // 대협곡 — 중원의 깊은 골 (바닥에 워터 60%)
     case terraces // 계단 대지 — 내려가는 거대 테라스 3~4단
+    // M5-④ (2026-09-29 사용자 선택 4종, 링크스는 보류 — 급경사 ≥ 1·낙차 > 8 불변식과 "전 홀 다이나믹" 결정에 어긋남)
+    case valley // 계곡 페어웨이 — 림에서 넓은 골 바닥(페어웨이)으로 내려가 치고, 사면·절벽을 올라 그린 림으로
+    case ridge // 능선 홀 — 중원의 큰 언덕(오르막 사면+절벽+마루+절벽+내리막 사면), 짧으면 사면에 서고 넘기면 반대편 내리막
+    case cascade // 폭포 — 내려가는 단마다 절벽 발치에 연못 (파5 3단·파4 2단), 짧으면 입수
+    case forest // 숲 — 완만한 오르막 한 단 + 나무 회랑 3~4그루 (펀치·로브의 무대)
 }
 
 public struct Hole: Sendable {
@@ -126,10 +131,19 @@ public struct Hole: Sendable {
         return x - seg.from < seg.to - x ? seg.from - 2.5 : seg.to + 2.5
     }
 
-    /// 워터 드롭 존 — 홀 방향 기준 앞 물가(티 쪽 둑). 샷 방향 `dir`로 고르면 그린 위에서 되돌아 치다 빠질 때 반대편 연못 너머로 간다 (리뷰 m5)
-    public func waterDropX() -> Double {
-        let wr = waterRange ?? (holeX - 3) ... (holeX + 3)
-        return holeX >= teeX ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+    /// 워터 드롭 존 — 홀 방향 기준 앞 물가(티 쪽 둑). 샷 방향 `dir`로 고르면 그린 위에서 되돌아 치다 빠질 때 반대편 연못 너머로 간다 (리뷰 m5).
+    /// `waterRange`(아일랜드 그린의 앞뒤 병합 구간·협곡 바닥)가 공을 품으면 그 앞 둑, 아니면 **공이 빠진 물 세그먼트**의 앞 둑 — 폭포 홀은 연못이
+    /// 여러 개라(M5-④) 세그먼트로 찾는다. 물이 없으면(호출측 오류) 홀컵 앞
+    public func waterDropX(from x: Double) -> Double {
+        let toward = holeX >= teeX
+        if let wr = waterRange, wr.contains(x) {
+            return toward ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+        }
+        let waters = segments.filter { $0.type == .water }
+        guard let seg = waters.first(where: { x >= $0.from && x < $0.to })
+            ?? waters.min(by: { abs(($0.from + $0.to) / 2 - x) < abs(($1.from + $1.to) / 2 - x) })
+        else { return toward ? holeX - 5.5 : holeX + 5.5 }
+        return toward ? seg.from - 2.5 : seg.to + 2.5
     }
 
     /// 핀 이동 서프라이즈 — 컵만 그린 안 다른 자리로 옮긴 사본. 지형·세그먼트·파·거리는 그대로
@@ -231,6 +245,11 @@ public enum CourseGenerator {
         case .summitGreen: par == 3 ? rand.next(10, 16) : rand.next(20, 36)
         case .canyon: 0
         case .terraces: -(par == 3 ? rand.next(14, 20) : rand.next(24, 40))
+        // M5-④ (파3는 덱을 안 쓰므로 파4·5 값만 의미 있다)
+        case .valley: -rand.next(4, 8) // 티 림에서 골로 깊이 내려갔다(16~22) 그린 림으로 조금 덜 올라온다(12~18) — 실루엣이 협곡급으로 읽히게
+        case .ridge: -rand.next(4, 12) // 능선 반대편이 더 깊다 — 넘긴 공은 내리막
+        case .cascade: -(par == 5 ? rand.next(27, 39) : rand.next(20, 28)) // 단 높이 9~14m × 3단(파5)·2단(파4) — ≤ maxRiser
+        case .forest: rand.next(9, 14) // 완만한 오르막 한 단
         }
     }
 
@@ -263,7 +282,7 @@ public enum CourseGenerator {
     static let undulationAmp = (short: 0.22, long: 0.45)
     static func addUndulation(
         _ elev: inout [Double], teeEnd: Double, apronStart: Double,
-        risers: [ClosedRange<Double>], water: ClosedRange<Double>?, bunkers: [ClosedRange<Double>], worldW: Double
+        risers: [ClosedRange<Double>], waters: [ClosedRange<Double>], bunkers: [ClosedRange<Double>], worldW: Double
     ) {
         let mix = Int(worldW * 100) ^ (Int(teeEnd * 100) << 8) ^ (Int(apronStart * 100) << 16)
         var r = SeededRandom(seed: UInt32(truncatingIfNeeded: mix))
@@ -272,9 +291,7 @@ public enum CourseGenerator {
         var exclude: [ClosedRange<Double>] = [(-1) ... (teeEnd + 8), (apronStart - 6) ... (worldW + 2)]
         exclude += risers.map { ($0.lowerBound - 4) ... ($0.upperBound + 4) }
         exclude += bunkers.map { ($0.lowerBound - 4) ... ($0.upperBound + 4) }
-        if let w = water {
-            exclude.append((w.lowerBound - 4) ... (w.upperBound + 4))
-        }
+        exclude += waters.map { ($0.lowerBound - 4) ... ($0.upperBound + 4) }
         let fade = 6.0
         for i in 0 ..< elev.count {
             let x = Double(i)
@@ -315,7 +332,8 @@ public enum CourseGenerator {
         return elev
     }
 
-    /// 파·거리에 맞는 시그니처 아키타입 선택 (짧은 파3에 협곡·테라스는 물리적으로 안 들어간다)
+    /// 파·거리에 맞는 시그니처 아키타입 선택 (짧은 파3에 협곡·테라스는 물리적으로 안 들어간다).
+    /// 실제로는 파3 전용 — 파4·5는 makeCourse의 덱(allCases)이 뽑는다. 아래 파4·5 분기는 원조 4종만 알고 M5-④ 4종을 모른다 (preferredKind 없는 호출용 폴백)
     static func pickSignatureKind(par: Int, dist: Double, rand: inout SeededRandom) -> SignatureKind {
         if par == 3 {
             return dist >= 150 && rand.next() < 0.6 ? .skyTee : .summitGreen
@@ -351,13 +369,13 @@ public enum CourseGenerator {
         kind: SignatureKind, par: Int, worldW: Double, teeEnd: Double, apronStart: Double,
         plannedRise: Double, rand: inout SeededRandom
     ) -> (
-        elev: [Double], water: ClosedRange<Double>?, risers: [ClosedRange<Double>], ramps: [ClosedRange<Double>],
+        elev: [Double], waters: [ClosedRange<Double>], risers: [ClosedRange<Double>], ramps: [ClosedRange<Double>],
         roughRamps: [ClosedRange<Double>]
     ) {
         let riserRatio = 1.65 // 라이저 폭 = 낙차 × 1.65 → cos 보간 중앙 최대 경사 ≈ 0.95
         var nodes: [(x: Double, e: Double)] = []
         var risers: [ClosedRange<Double>] = []
-        var water: ClosedRange<Double>? = nil
+        var waters: [ClosedRange<Double>] = [] // 협곡 바닥·계곡 개울은 하나, 폭포는 단마다 (M5-④)
         // 비탈 라이 구간 (2026-09-28 사용자 판정 "경사에 공이 서지를 않아서 그런 샷이 안 나온다" → 완경사 cos 굴곡은 2차 판정 "안 서가지고 샷이
         // 달라지는지도 확인 안 됨" → 12~16° 직선 사면으로 재설계, 3차 판정 통과): 절벽(공이 못 섬)과 평탄 트레드 사이에 addRamp가 직선 사면을 둔다.
         // 굴곡은 이 구간을 피한다. 난수는 부속 열(홀 기하 파생)
@@ -528,7 +546,7 @@ public enum CourseGenerator {
             x = addRiser(from: x, rise: -depth - rim)
             nodes.append((x + floorW, nodes.last!.e)) // 협곡 바닥 트레드
             if rand.next() < 0.6 { // 바닥의 워터 — 캐리 실패의 대가
-                water = (x + 4) ... (x + floorW - 4)
+                waters = [(x + 4) ... (x + floorW - 4)]
             }
             x += floorW
             x = addRiser(from: x, rise: depth + rim)
@@ -568,13 +586,143 @@ public enum CourseGenerator {
                 nodes.append((x, nodes.last!.e))
             }
             nodes.append((worldW, max(0, nodes.last!.e)))
+
+        case .valley:
+            // 계곡 페어웨이 (M5-④): 티 림 → 내리막 러프 사면 + 절벽(16~22m)으로 넓은 골 바닥(페어웨이, 드라이브 착지 지대) → 오르막 사면 + 절벽(≤ maxRiser)으로
+            // 조금 낮은 그린 림(순낙차 −4~−8). 협곡은 '넘기는' 홀, 계곡은 '내려가서 치고 올라오는' 홀 — 바닥 최소 60m. 35%는 바닥 중간에 개울(8~12m).
+            // 첫 캡처(깊이 10~14 대칭)는 얕은 접시로 읽혀 과장했다 — 1.3배 구분 불가 교훈
+            var depth = rand.next(16, 22)
+            let downStart = teeEnd + rand.next(12, 24) // 티 트레드는 짧게 — 드라이브가 골에 떨어진다
+            // 그린 림 선반 ≥ 17m(뽑기 20~30, 램프 경사 0.22~0.28 편차로 −3m까지 — 리뷰 m3): 절벽 바로 위가 그린이면 사면에 선 공(오르막 라이 +13°)의
+            // 짧은 웨지가 절벽 면에 맞고 되굴러 왕복한다 (봇 고착 실측). 포대 램프(14m)와는 안 겹치지만 계곡은 포대 제외
+            let climbEnd = apronStart - rand.next(20, 30)
+            func climbOf(_ d: Double) -> Double {
+                max(8, d + plannedRise) // 등반 = 낙하 − 4~8
+            }
+            func climbW(_ d: Double) -> Double {
+                let c = climbOf(d)
+                let up = min(8, 0.5 * c)
+                return up / 0.22 + (c - up) * riserRatio // 0.22 = addRamp 최완경사(최악 폭) — 추정이 실제보다 좁으면 바닥·선반이 깎인다 (리뷰 m3)
+            }
+            func descentW(_ d: Double) -> Double {
+                let dn = min(8, 0.4 * d)
+                return dn / 0.22 + (d - dn) * riserRatio
+            }
+            while climbEnd - climbW(depth) - (downStart + descentW(depth)) < 60, depth > 10 {
+                depth *= 0.9 // 바닥 60m 확보까지 얕게 (짧은 파4)
+            }
+            let downRamp = min(8, 0.4 * depth)
+            let climb = climbOf(depth)
+            let upRamp = min(8, 0.5 * climb)
+            nodes = [(0, 0), (downStart, 0)]
+            var x = addRamp(from: downStart, rise: -downRamp) // 러프 사면 — 내리막 라이 티샷 착지
+            x = addRiser(from: x, rise: -(depth - downRamp))
+            let floorEnd = climbEnd - climbW(depth)
+            let base = nodes.last!.e
+            let floorLen = floorEnd - x
+            if floorLen >= 90, tiltRand.next() < 0.35 { // 개울 — 2온·레이업의 선택 (둑 6m, 수면 −1.6, 둑 최대 경사 0.42)
+                // 바닥 굴곡은 0.6으로 낮춘다 — 2.2면 골(−2.2)이 수면보다 낮아 물이 땅 위에 떠 보였다 (리뷰 m4, 개울 48%). 굴곡(±0.67)을 더해도 −1.27 > −1.6
+                let cw = rand.next(8, 12)
+                let cFrom = x + floorLen * rand.next(0.35, 0.55)
+                rolls(from: x, to: cFrom - 6, around: base, amp: 0.6)
+                nodes.append((cFrom, base - 1.6))
+                nodes.append((cFrom + cw, base - 1.6))
+                nodes.append((cFrom + cw + 6, base))
+                waters = [(cFrom + 1) ... (cFrom + cw - 1)]
+                rolls(from: cFrom + cw + 6, to: floorEnd, around: base, amp: 0.6)
+            } else {
+                rolls(from: x, to: floorEnd, around: base, amp: 2.2)
+            }
+            x = addRamp(from: floorEnd, rise: upRamp) // 오르막 사면 — 어프로치가 오르막 라이
+            x = addRiser(from: x, rise: climb - upRamp)
+            nodes.append((worldW, nodes.last!.e))
+
+        case .ridge:
+            // 능선 홀 (M5-④): 평지 → 오르막 사면 + 절벽으로 마루(30~50m) → 절벽 + 내리막 러프 사면으로 더 낮은 그린 쪽. 짧으면 사면에 오르막 라이로
+            // 서고, 마루에 올리거나 넘기면 내리막. 중원(트레드의 40~55%)에 둔다 — 파4 드라이브는 사면·마루·너머 어디든 갈 수 있다
+            var up = rand.next(14, 20) // 첫 캡처 10~16은 둔덕으로 읽혔다 — 사면 ≤ 8 + 절벽 ≤ 14 예산 안에서 최대로
+            var down = up - plannedRise // 반대편이 4~12m 더 깊다
+            var hillUp = min(8, 0.5 * up), rampDown = min(8, 0.4 * down), crestW = rand.next(30, 50)
+            func ridgeW() -> Double { // 램프 폭은 최완경사 0.22 기준(최악 폭, 리뷰 m3)
+                hillUp / 0.22 + (up - hillUp) * riserRatio + crestW + (down - rampDown) * riserRatio + rampDown / 0.22
+            }
+            let ridgeLo = teeEnd + 40, ridgeHi = apronStart - 30
+            if ridgeW() > ridgeHi -
+                ridgeLo { // 짧은 홀: 사면을 버리고 절벽만 (마루 30) — 절벽 하나가 up 전부라 maxRiser로 깎는다 (리뷰 m5, 32,000회 실측 미발동)
+                hillUp = 0; rampDown = 0; crestW = 30
+                up = min(up, maxRiser)
+                down = up - plannedRise
+            }
+            let ridgeStart = min(ridgeHi - ridgeW(), ridgeLo + (ridgeHi - ridgeLo - ridgeW()) * rand.next(0.4, 0.55))
+            nodes = [(0, 0), (teeEnd + 8, 0)]
+            rolls(
+                from: teeEnd + 8,
+                to: ridgeStart,
+                around: 0,
+                amp: 2.2
+            ) // ridgeStart ≥ ridgeLo = teeEnd + 40 (구 max(teeEnd+24, ·)는 죽은 가드 — 리뷰 n5)
+            var x = ridgeStart
+            if hillUp >= 3 {
+                x = addRamp(from: x, rise: hillUp)
+            }
+            x = addRiser(from: x, rise: up - hillUp)
+            nodes.append((x + crestW, nodes.last!.e))
+            x += crestW
+            x = addRiser(from: x, rise: -(down - rampDown))
+            if rampDown >= 3 {
+                x = addRamp(from: x, rise: -rampDown) // 러프 사면 — 넘긴 공이 내리막 라이로 선다
+            }
+            rolls(from: x, to: worldW, around: nodes.last!.e, amp: 2.2)
+
+        case .cascade:
+            // 폭포 (M5-④): 계단 대지의 물 버전 — 파5 3단·파4 2단, 각 단의 절벽 발치가 연못(14~22m, 둑 4.5m·수면 −1.2). 짧으면 입수,
+            // 트레드는 착지 가능한 40m 이상(안 들어가면 낙차 축소). 수면 아래 절벽은 러프라 굴러 떨어진 공도 연못으로
+            let n = par == 5 ? 3 : 2
+            let spanFrom = teeEnd + rand.next(10, 18)
+            let spanTo = apronStart - 24
+            var teeH = -plannedRise
+            let pools = (0 ..< n).map { _ in rand.next(14, 22) } // 첫 캡처 10~16은 웅덩이로 읽혔다
+            let poolsW = pools.reduce(0, +)
+            while ((spanTo - spanFrom) - teeH * riserRatio - poolsW) / Double(n) < 40, teeH > 12 {
+                teeH *= 0.87
+            }
+            let treadW = max(40, ((spanTo - spanFrom) - teeH * riserRatio - poolsW) / Double(n))
+            let step = teeH / Double(n)
+            nodes = [(0, teeH), (spanFrom, teeH)]
+            var x = spanFrom
+            for i in 0 ..< n {
+                x = addRiser(from: x, rise: -step)
+                let e = nodes.last!.e
+                let pw = pools[i]
+                nodes.append((x + 4.5, e - 1.2)) // 둑 4.5m: cos 최대 경사 0.42 < 페어웨이 0.5 규칙 (3m는 0.63으로 걸렸다)
+                nodes.append((x + pw - 4.5, e - 1.2))
+                nodes.append((x + pw, e))
+                waters.append((x + 2) ... (x + pw - 2))
+                x += pw
+                let tw = i == n - 1 ? spanTo - x : treadW * rand.next(0.9, 1.1)
+                x += max(30, tw)
+                nodes.append((x, e))
+            }
+            nodes.append((worldW, max(0, nodes.last!.e)))
+
+        case .forest:
+            // 숲 (M5-④): 완만한 오르막 한 단(9~14m = 사면 ≤ 8 + 절벽)을 중원에, 나무 회랑은 makeHole이 3~4그루 심는다 — 펀치(낮게)·로브(높게)의 무대
+            let rise = plannedRise
+            let hill = min(8, 0.55 * rise)
+            let riseW = hill / 0.22 + (rise - hill) * riserRatio // 최완경사 기준 최악 폭
+            let riseStart = teeEnd + max(30, (apronStart - 30 - riseW - teeEnd) * rand.next(0.35, 0.6))
+            nodes = [(0, 0), (teeEnd + 8, 0)]
+            rolls(from: teeEnd + 8, to: riseStart, around: 0, amp: 2.2)
+            var x = addRamp(from: riseStart, rise: hill)
+            x = addRiser(from: x, rise: rise - hill)
+            rolls(from: x, to: worldW, around: nodes.last!.e, amp: 2.2)
         }
 
         var elev = interpolate(nodes: nodes, worldW: worldW, linear: ramps)
         for i in 0 ..< elev.count { // 절대 클램프 (+2는 그린 브레이크 여유)
             elev[i] = max(-elevClamp, min(elevClamp + 2, elev[i]))
         }
-        return (elev, water, risers, ramps, roughRamps)
+        return (elev, waters, risers, ramps, roughRamps)
     }
 
     /// 세그먼트 배열에서 [from, to) 구간을 지정 타입으로 대체 (겹치는 밴드는 쪼갬)
@@ -672,7 +820,7 @@ public enum CourseGenerator {
         segments.append(Segment(from: greenEnd, to: worldW, type: .rough))
 
         // ── 시그니처 홀: 표준 지형·클램프를 통째로 대체하는 계단 프로파일 (아키타입은 위에서 결정) ──
-        var sigWater: ClosedRange<Double>? = nil
+        var sigWaters: [ClosedRange<Double>] = [] // 협곡 바닥·계곡 개울 하나, 폭포는 단마다 (M5-④)
         var sigRisers: [ClosedRange<Double>] = []
         var sigRamps: [ClosedRange<Double>] = [] // 비탈 라이 구간 — 굴곡 제외
         var sigRoughRamps: [ClosedRange<Double>] = [] // 내리막 사면 — 러프로 깐다
@@ -681,7 +829,7 @@ public enum CourseGenerator {
         // (2026-08-15 사용자 요청: 더 다이나믹하게 — 기복 폭·제어점 간격·지형 형상 다양화)
         var elev: [Double]
         if let sig = signature {
-            (elev, sigWater, sigRisers, sigRamps, sigRoughRamps) = signatureElevation(
+            (elev, sigWaters, sigRisers, sigRamps, sigRoughRamps) = signatureElevation(
                 kind: sig, par: par, worldW: worldW, teeEnd: teeEnd, apronStart: apronStart,
                 plannedRise: plannedRise, rand: &rand
             )
@@ -728,9 +876,14 @@ public enum CourseGenerator {
         for r in sigRoughRamps { // 내리막 언덕 사면은 러프 — 페어웨이 잔디(정지 마찰 0.34·굴림 2.2)로는 12~16° 사면에서 구르는 공을 못 세운다
             segments = carve(segments, from: r.lowerBound, to: r.upperBound, type: .rough)
         }
-        if let sw = sigWater {
-            waterRange = sw
+        for sw in sigWaters {
             segments = carve(segments, from: sw.lowerBound, to: sw.upperBound, type: .water)
+        }
+        if sigWaters.count == 1 { // 연못이 여럿(폭포)이면 waterRange 없음 — 드롭·벙커·굴곡은 물 세그먼트로 (M5-④)
+            waterRange = sigWaters[0]
+        }
+        func waterSegs() -> [ClosedRange<Double>] {
+            segments.filter { $0.type == .water }.map { $0.from ... $0.to }
         }
         if signature == nil, par >= 4, rand.next() < 0.35 {
             let wTo = landing - rand.next(15, 25)
@@ -760,7 +913,7 @@ public enum CourseGenerator {
         @discardableResult
         func addBunker(from bFrom: Double, width: Double) -> Bool {
             let bTo = bFrom + width
-            if let wr = waterRange, bFrom < wr.upperBound + 6, bTo > wr.lowerBound - 6 {
+            if waterSegs().contains(where: { bFrom < $0.upperBound + 6 && bTo > $0.lowerBound - 6 }) {
                 return false
             }
             if bTo >= greenStart - 1 || bFrom <= teeEnd + 5 {
@@ -828,7 +981,7 @@ public enum CourseGenerator {
         // 램프 발치에 워터가 있으면 생략 (수면 주변 지형 왜곡 방지 — 리뷰 S-4)
         // 표고 상·하한 대비 여유분으로 lift/drop을 제한해 경계 초과를 구조적으로 차단
         let rampFrom = max(0, gFrom - 45)
-        let waterAtRampFoot = waterRange.map { $0.upperBound > Double(rampFrom) - 4 } ?? false
+        let waterAtRampFoot = waterSegs().contains { $0.upperBound > Double(rampFrom) - 4 }
         let greenRoll = rand.next()
         // 시그니처 홀은 생략 — 재클램프(±17)가 고지 그린을 뭉갠다
         if signature == nil, !waterAtRampFoot, greenRoll < 0.7 {
@@ -852,9 +1005,10 @@ public enum CourseGenerator {
         // 포대 그린 (M5-②): 시그니처 홀(산정·협곡 제외) 30% — 그린이 솟고 앞 14m smoothstep 램프는 짧은 어프로치를 되돌려 보낸다(에이프런 굴림
         // 1.6 < 중력 성분). 총 상승(지형 차 + 포대) ≤ 2.8m → 최대 경사 0.30 = 정착 규칙 경계(램프 중턱에 선 공을 발치로 텔레포트하지 않는다 — 리뷰 M2)
         var podiumRange: ClosedRange<Double>? = nil // 포대 램프 — 굴곡 제외 (리뷰 M3)
-        let island = par == 3 && signature == .skyTee && waterRange == nil && rand
+        let island = par == 3 && signature == .skyTee && waterSegs().isEmpty && rand
             .next() < 0.25 // 아일랜드 그린 (아래) — 포대와 겹치지 않는다
-        if let sig = signature, sig != .summitGreen, sig != .canyon, !waterAtRampFoot, !island, rand.next() < 0.3 {
+        if let sig = signature, sig != .summitGreen, sig != .canyon, sig != .valley, !waterAtRampFoot, !island,
+           rand.next() < 0.3 { // 계곡도 제외 — 그린 림 선반(8~14m)이 포대 램프(14m)와 겹쳐 절벽 위에 램프가 얹힌다 (M5-④)
             // 협곡은 제외(림 위 오르막 램프와 겹쳐 탈출·어프로치가 이중으로 어려워진다 — 봇 +0.38타 실측). 램프는 접근 지면(pFrom)에서 솟은 그린까지
             // 하나의 smoothstep. 뒤에 오는 트레드 굴곡은 podiumRange로 제외한다(합쳐지면 페어웨이 0.5를 넘는다 — 리뷰 M3)
             let pFrom = max(0, gFrom - 14)
@@ -887,16 +1041,27 @@ public enum CourseGenerator {
             }
         }
         // 2단 그린 (M5-②): 파4·5의 25%, 그린 22m 이상 — 뒤쪽 단이 0.6~1.0m 높고 턱은 6m smoothstep(최대 경사 0.15~0.25: 그린 정지 마찰 0.17 언저리라
-        // 턱 위에선 공이 굴러 내린다). 핀은 윗단 60%(턱을 넘겨 올려야 한다) / 아랫단 40%(넘기면 턱 위에서 굴러 돌아온다). 턱은 컵에서 3m 이상
+        // 턱 위에선 공이 굴러 내린다). 핀이 윗단(턱을 넘겨 올려야 한다) / 아랫단(넘기면 턱 위에서 굴러 돌아온다) — 60/40으로 뽑되 핀 자리상 안 들어가면
+        // 반대 단이라 실제는 반반(앞핀은 아랫단, 뒷핀은 윗단), 발생은 적격 홀의 ≈19%(리뷰 m1 600시드 실측 — 양쪽 다 안 들어가는 짧은 그린은 탈락). 턱은 컵에서 4m 이상
         if par >= 4, greenLen >= 22, rand.next() < 0.25 {
             let tier = rand.next(0.6, 1.0) // 0.8~1.2는 봇 퍼팅이 턱을 못 넘겨 왕복 고착(3%) — 사람도 5.7~7.2 m/s 창이 좁다
-            let upperPin = rand.next() < 0.6
-            let lo = upperPin ? greenStart + 5 : holeX + 3
-            let hi = upperPin ? holeX - 9 : greenEnd - 9
+            var upperPin = rand.next() < 0.6
+            func bounds(_ upper: Bool) -> (lo: Double, hi: Double) {
+                upper ? (greenStart + 5, holeX - 10) :
+                    (holeX + 4, greenEnd - 9) // 턱은 컵에서 4m 이상 — ±2m 중앙차분 검사가 턱 첫 셀을 안 본다
+            }
+            if bounds(upperPin).hi <= bounds(upperPin)
+                .lo { // 핀 자리상 그쪽 단이 안 들어가면 반대 단 — 없으면 25%가 조용히 ≈11%로 준다 (M5-④ 실측 9/157 → 폴백 뒤 ≈19%)
+                upperPin.toggle()
+            }
+            let (lo, hi) = bounds(upperPin)
             if hi > lo {
                 let tierFrom = rand.next(lo, hi)
                 for i in Int(tierFrom) ... gTo where i < elev.count {
-                    let u = min(1, (Double(i) - tierFrom) / 6)
+                    let u = min(1, max(
+                        0,
+                        (Double(i) - tierFrom) / 6
+                    )) // max(0): 첫 셀(u < 0)에 u²(3−2u) > 0 혹이 생겨 컵 근처 경사 0.09를 넘겼다 (M5-④ seed 84)
                     elev[i] += tier * (u * u * (3 - 2 * u))
                 }
             }
@@ -968,9 +1133,24 @@ public enum CourseGenerator {
         func gentleGround(_ x: Double) -> Bool {
             guard signature != nil else { return true }
             let i = max(1, min(elev.count - 2, Int(x)))
-            return abs(elev[i + 1] - elev[i - 1]) / 2 < 0.25
+            // 0.15: 언덕 사면(0.22~0.28)이 구 0.25 문턱 아래로 통과해 사면 위 트렁크가 수직으로 서서 캐노피가 떠 보였다 (리뷰 M1, 숲 34%).
+            // 저지대 굴곡(rolls ≤ 0.12)은 남긴다 — 굴곡(addUndulation)은 배치 뒤라 여기 안 보인다
+            return abs(elev[i + 1] - elev[i - 1]) / 2 < 0.15
         }
-        if par >= 4, rand.next() < 0.4 {
+        if signature == .forest { // 숲 (M5-④): 나무 회랑 3~4그루 — 간격 ≥ 40m, 사면·라이저·해저드 위는 피한다 (자리가 안 나오면 그만큼만)
+            // 첫 캡처 3그루(캐노피 3.4~5.2)는 숲으로 안 읽혔고, 4~5그루(4.5~6.5)는 순진 봇 파 대비 +0.68로 대역(0.6)을 넘겼다 → 3~4그루·4.2~6.0,
+            // 그린 앞 40m는 비운다(어프로치 착지)
+            let want = rand.next() < 0.5 ? 3 : 4
+            var placed: [Double] = []
+            for _ in 0 ..< 18 where placed.count < want {
+                let size = rand.next(4.2, 6.0)
+                let t = rand.next(teeEnd + 45, apronStart - 40)
+                if hazardFree(t, margin: size + 1), gentleGround(t), placed.allSatisfy({ abs($0 - t) >= 40 }) {
+                    obstacles.append(Obstacle(kind: .tree, x: t, size: size))
+                    placed.append(t)
+                }
+            }
+        } else if par >= 4, rand.next() < 0.4 {
             let size = rand.next(3.2, 5.0)
             let t = landing + (greenStart - landing) * rand.next(0.3, 0.65)
             // 마진은 캐노피 반지름 연동 — 큰 나무가 해저드 렌더와 겹쳐 보이지 않게 (리뷰 지적)
@@ -998,7 +1178,7 @@ public enum CourseGenerator {
             let bunkers = segments.filter { $0.type == .bunker }.map { $0.from ... $0.to }
             addUndulation(
                 &elev, teeEnd: teeEnd, apronStart: apronStart,
-                risers: sigRisers + sigRamps + (podiumRange.map { [$0] } ?? []), water: waterRange,
+                risers: sigRisers + sigRamps + (podiumRange.map { [$0] } ?? []), waters: waterSegs(),
                 bunkers: bunkers,
                 worldW: worldW
             )

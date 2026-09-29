@@ -397,7 +397,8 @@ final class GolfCoreTests: XCTestCase {
             // 전 홀 다이나믹 (2026-08-20 사용자 판정 2차: "모든 홀 전부")
             XCTAssertEqual(sigs.count, 9, "모든 홀이 시그니처여야 함 (\(sigs.count))")
             let roundKinds = Set(sigs.compactMap(\.signature))
-            XCTAssertGreaterThanOrEqual(roundKinds.count, 3, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
+            // 덱 8종에서 파4·5 7홀이 중복 없이 뽑으므로 항상 ≥ 7 — 덱 회귀(중복 허용·종류 누락)를 잡는다 (리뷰 n4)
+            XCTAssertGreaterThanOrEqual(roundKinds.count, 7, "라운드 내 아키타입 다양성 부족: \(roundKinds)")
             for h in sigs {
                 try kindsSeen.insert(XCTUnwrap(h.signature))
                 let lo = h.elevation.min() ?? 0
@@ -422,7 +423,11 @@ final class GolfCoreTests: XCTestCase {
                     XCTAssertLessThan(abs(h.slope(at: x)), 1.15, "\(h.signature!): 경사 초과 @\(x)")
                 }
                 // 그린은 설 수 있어야 함 (브레이크 2~6%만)
-                XCTAssertLessThan(abs(h.slope(at: h.holeX - 2)), 0.09, "\(h.signature!): 그린이 가파름")
+                XCTAssertLessThan(
+                    abs(h.slope(at: h.holeX - 2)),
+                    0.09,
+                    "\(h.signature!): 그린이 가파름 seed \(seed) 파\(h.par) cup \(h.holeX)"
+                )
                 // 티 주변 평탄 (티샷 스탠스)
                 XCTAssertLessThan(abs(h.slope(at: h.teeX)), 0.06, "\(h.signature!): 티가 가파름")
             }
@@ -486,25 +491,42 @@ final class GolfCoreTests: XCTestCase {
                         "협곡 탈출 불가 깊이 (\(rim - floor))"
                     )
                 }
-                if sig == .summitGreen {
+                if sig == .valley { // 계곡 바닥에서 그린 림까지 — 사면(≤ 8) + 절벽(≤ 8)으로 오른다 (M5-④)
+                    let floor = h.elevation.min() ?? 0
+                    let rim = h.ground(at: h.holeX)
+                    // 구조 등반 ≤ 18 위에 바닥 골(rolls −2.2)·굴곡(−0.67)·그린 브레이크(+2.0)·윗단 턱(+1.0)이 얹힌다 → 이론 최대 ≈ 24, 600시드 실측
+                    // 21.1 (리뷰 m2)
+                    XCTAssertLessThanOrEqual(
+                        rim - floor,
+                        18 + 6,
+                        "계곡 등반 불가 깊이 (\(rim - floor)) — 사면 ≤ 8 + 절벽 ≤ 10 + 부속 ≤ 6"
+                    )
+                }
+                if sig != .canyon { // 오르막 라이저 한 단 ≤ maxRiser — 산정뿐 아니라 능선·계곡·숲의 오르막도 (협곡 반대편 라이저는 depth+rim ≤ 21이라 별도)
                     // '한 샷으로 넘어야 하는' 가파른 상승(경사 >0.3) 연속 구간의 낙차만 측정
                     // — 완경사 저지대는 걸어가 별도 샷이 가능하므로 라이저가 아니다
+                    // 홀 진행 방향으로 잰다 — 미러 홀은 배열 순서가 반대라 절벽(내리막)이 오르막으로 읽힌다 (M5-④에서 전 종류로 넓히며 발견)
+                    let path = h.holeX >= h.teeX ? h.elevation : Array(h.elevation.reversed())
                     var maxRiser = 0.0
-                    var runStart = h.elevation[0]
+                    var runStart = path[0]
                     var climbing = false
-                    for i in 1 ..< h.elevation.count {
-                        let d = h.elevation[i] - h.elevation[i - 1]
+                    for i in 1 ..< path.count {
+                        let d = path[i] - path[i - 1]
                         if d > 0.3 {
                             if !climbing {
                                 climbing = true
-                                runStart = h.elevation[i - 1]
+                                runStart = path[i - 1]
                             }
-                            maxRiser = max(maxRiser, h.elevation[i] - runStart)
+                            maxRiser = max(maxRiser, path[i] - runStart)
                         } else {
                             climbing = false
                         }
                     }
-                    XCTAssertLessThanOrEqual(maxRiser, CourseGenerator.maxRiser + 1.5, "산정 라이저가 상한 초과 (\(maxRiser))")
+                    XCTAssertLessThanOrEqual(
+                        maxRiser,
+                        CourseGenerator.maxRiser + 1.5,
+                        "\(sig) 오르막 라이저가 상한 초과 (\(maxRiser)) seed \(seed)"
+                    )
                 }
             }
         }
@@ -829,6 +851,7 @@ final class GolfCoreTests: XCTestCase {
     /// 핀 위치·그린 형태 변주 (M5-②): 40시드×9홀에서 앞핀·뒷핀·2단·포대·아일랜드가 충분히 나오고, 컵 주변은 여전히 평탄하다
     func testPinAndGreenVariety() {
         var front = 0, back = 0, tiered = 0, podium = 0, island = 0, holes = 0
+        var tieredByKind: [String: Int] = [:], tierEligible: [String: Int] = [:]
         for seed: UInt32 in 1 ... 40 {
             for h in CourseGenerator.makeCourse(seed: seed) {
                 holes += 1
@@ -851,9 +874,13 @@ final class GolfCoreTests: XCTestCase {
                 }
                 if maxOnGreen >= 0.12 {
                     tiered += 1
+                    tieredByKind[h.signature?.rawValue ?? "plain", default: 0] += 1
                 }
-                if h.signature == .skyTee || h.signature == .terraces,
-                   h.ground(at: gFront) - h.ground(at: gFront - d * 22) >= 1.8 { // 포대는 이 둘만 (리뷰 m7)
+                if h.par >= 4, abs(gBack - gFront) >= 22 {
+                    tierEligible[h.signature?.rawValue ?? "plain", default: 0] += 1
+                }
+                if let sig = h.signature, ![.summitGreen, .canyon, .valley].contains(sig),
+                   h.ground(at: gFront) - h.ground(at: gFront - d * 22) >= 1.8 { // 포대 허용 종류만 (리뷰 m7 — 산정·협곡·계곡 제외)
                     podium += 1
                 }
                 if h.par == 3, h.surface(at: gFront - d * 12) == .water,
@@ -863,9 +890,13 @@ final class GolfCoreTests: XCTestCase {
             }
         }
         print("GREENS front \(front) back \(back) tiered \(tiered) podium \(podium) island \(island) / \(holes)")
+        print(
+            "GREENS tiered by kind \(tieredByKind.sorted { $0.key < $1.key }) eligible \(tierEligible.sorted { $0.key < $1.key })"
+        )
         XCTAssertGreaterThan(Double(front) / Double(holes), 0.15, "앞핀이 적음 (\(front))")
         XCTAssertGreaterThan(Double(back) / Double(holes), 0.15, "뒷핀이 적음 (\(back))")
-        XCTAssertGreaterThan(tiered, 20, "2단 그린이 적음 (\(tiered))")
+        // 적격(파4·5, 그린 ≥ 22m) ≈150홀 × 발생 ≈19% = 기대 28, σ ≈ 5 → 15는 −2.7σ (덱·난수 재편마다 흔들리는 값이라 20은 경계선 — 리뷰 m1)
+        XCTAssertGreaterThan(tiered, 15, "2단 그린이 적음 (\(tiered))")
         XCTAssertGreaterThan(podium, 20, "포대 그린이 적음 (\(podium))")
         XCTAssertGreaterThan(island, 3, "아일랜드 그린이 적음 (\(island))")
     }
@@ -878,17 +909,16 @@ final class GolfCoreTests: XCTestCase {
                 where h.par == 3 && h.signature == .skyTee && h.waterRange != nil {
                 let d = h.holeX >= h.teeX ? 1.0 : -1.0
                 XCTAssertEqual(h.outOfWater(h.holeX), h.holeX, "그린 위 공이 옮겨짐 seed \(seed)")
-                let gFront = d > 0 ? h.greenStart : h.greenEnd
+                let gFront = d > 0 ? h.greenStart : h.greenEnd, gBack = d > 0 ? h.greenEnd : h.greenStart
                 let inFront = gFront - d * 12
                 XCTAssertEqual(h.surface(at: inFront), .water, "앞 연못 위치 seed \(seed)")
                 let out = h.outOfWater(inFront)
                 XCTAssertNotEqual(h.surface(at: out), .water, "물 밖으로 못 나감 seed \(seed)")
                 XCTAssertLessThan(abs(out - inFront), 20, "연못 너머로 순간이동 seed \(seed) (\(out - inFront)m)")
-                XCTAssertEqual(
-                    h.surface(at: h.waterDropX()),
-                    h.surface(at: h.waterDropX()) == .water ? .fairway : h.surface(at: h.waterDropX()),
-                    "드롭 존이 물"
-                )
+                for wx in [inFront, gBack + d * 8] { // 앞·뒤 연못 어디에 빠져도 드롭 존은 물이 아니고 앞 둑 (waterRange 병합 구간)
+                    XCTAssertNotEqual(h.surface(at: h.waterDropX(from: wx)), .water, "드롭 존이 물 seed \(seed)")
+                    XCTAssertEqual(h.waterDropX(from: wx), h.waterDropX(from: inFront), "뒤 연못 드롭이 앞 둑이 아님 seed \(seed)")
+                }
                 checked += 1
             }
         }

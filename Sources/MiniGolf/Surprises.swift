@@ -407,7 +407,7 @@ extension GameScene {
         SoundKit.shared.splash()
         let splashPt = CGPoint(x: px(ball.x), y: groundY(ball.x))
         FX.ripple(on: self, at: splashPt)
-        let bankX = hole.waterDropX() // 앞 물가(티 쪽 둑) — 홀 방향 기준 (리뷰 m5)
+        let bankX = hole.waterDropX(from: ball.x) // 빠진 연못의 앞 물가(티 쪽 둑) — 홀 방향 기준 (리뷰 m5)
         let bankPt = CGPoint(x: px(bankX), y: groundY(bankX))
         let frog = makeFrog()
         frog.name = Self.surpriseNodeName
