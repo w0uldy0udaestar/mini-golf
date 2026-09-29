@@ -142,6 +142,12 @@ public struct Hole: Sendable {
     /// 리플레이·봇도 같다. 러프가 아니거나 사면이면 .normal
     public func roughLie(at x: Double) -> RoughLie {
         guard surface(at: x) == .rough, abs(slope(at: x)) < 0.12 else { return .normal }
+        // 라이저 발치 ±8m는 보통 — 협곡 "PW 한 방 탈출"(pwRoughHeight)이 보통 러프 기준인데 정착 규칙이 공을 바로 그 평탄 발치에 세운다
+        // (리뷰 M1: 깊은 러프면 탈출 실패 2/173 → 16/173). addBunker의 "절벽 발치 금지"와 같은 패턴
+        let i0 = max(1, Int(x) - 8), i1 = min(elevation.count - 1, Int(x) + 8)
+        if i1 > i0, (i0 ..< i1).contains(where: { abs(elevation[$0 + 1] - elevation[$0]) > 0.5 }) {
+            return .normal
+        }
         var h = UInt32(truncatingIfNeeded: Int((x / 3).rounded(.down))) &* 2_654_435_761
         h ^= UInt32(truncatingIfNeeded: Int(holeX * 10)) &* 40503
         h ^= UInt32(truncatingIfNeeded: Int(worldW)) &* 2_246_822_519
@@ -366,7 +372,9 @@ public enum CourseGenerator {
     /// 파·거리에 맞는 시그니처 아키타입 선택 (짧은 파3에 협곡·테라스는 물리적으로 안 들어간다).
     /// 실제로는 파3 전용 — 파4·5는 makeCourse의 덱(allCases)이 뽑는다. 아래 파4·5 분기는 원조 4종만 알고 M5-④ 4종을 모른다 (preferredKind 없는 호출용 폴백)
     static func pickSignatureKind(par: Int, dist: Double, rand: inout SeededRandom) -> SignatureKind {
-        if par == 3 { // 2026-09-29 잔손질: 파3도 5종 — 절벽 티(150m+)·산정·숲·폭포(1단)·능선. 계곡은 파3에 안 들어간다(바닥 60m)
+        if par ==
+            3 { // 2026-09-29 잔손질: 파3도 5종 — 절벽 티(150m+, 실효 ≈18%)·산정(≈31%)·숲 18%·폭포 17%·능선 15%. 계곡은 파3에 안 들어간다(바닥 60m).
+            // 구 코드는 dist < 150이면 난수를 안 소비했고 지금은 항상 소비 — 짧은 파3 뒤 시드 구성이 바뀐다 (리뷰 m4)
             let r = rand.next()
             if r < 0.28 {
                 return dist >= 150 ? .skyTee : .summitGreen
@@ -695,12 +703,21 @@ public enum CourseGenerator {
             }
             let ridgeLo = teeEnd + (par == 3 ? 20 : 40), ridgeHi = apronStart - (par == 3 ? 22 : 30)
             if ridgeW() > ridgeHi -
-                ridgeLo { // 짧은 홀: 사면을 버리고 절벽만 (마루 30) — 절벽 하나가 up 전부라 maxRiser로 깎는다 (리뷰 m5, 32,000회 실측 미발동)
-                hillUp = 0; rampDown = 0; crestW = 30
+                ridgeLo { // 짧은 홀: 사면을 버리고 절벽만 — 절벽 하나가 up 전부라 maxRiser로 깎는다 (파4·5는 32,000회 미발동, 파3는 5% 발동 — 리뷰 m2)
+                hillUp = 0; rampDown = 0; crestW = par == 3 ? 18 : 30
                 up = min(up, maxRiser)
                 down = up - plannedRise
+                let avail = ridgeHi - ridgeLo - crestW
+                if ridgeW() - crestW > avail, avail > 0 { // 그래도 안 들어가면 언덕을 비례 축소 (파3 130m·뒷핀)
+                    let k = max(0.5, avail / (ridgeW() - crestW))
+                    up *= k
+                    down *= k
+                }
             }
-            let ridgeStart = min(ridgeHi - ridgeW(), ridgeLo + (ridgeHi - ridgeLo - ridgeW()) * rand.next(0.4, 0.55))
+            let ridgeStart = max(
+                ridgeLo,
+                min(ridgeHi - ridgeW(), ridgeLo + (ridgeHi - ridgeLo - ridgeW()) * rand.next(0.4, 0.55))
+            )
             nodes = [(0, 0), (teeEnd + 8, 0)]
             rolls(
                 from: teeEnd + 8,
@@ -1063,8 +1080,13 @@ public enum CourseGenerator {
         // 포대 그린 (M5-②): 시그니처 홀(산정·협곡 제외) 30% — 그린이 솟고 앞 14m smoothstep 램프는 짧은 어프로치를 되돌려 보낸다(에이프런 굴림
         // 1.6 < 중력 성분). 총 상승(지형 차 + 포대) ≤ 2.8m → 최대 경사 0.30 = 정착 규칙 경계(램프 중턱에 선 공을 발치로 텔레포트하지 않는다 — 리뷰 M2)
         var podiumRange: ClosedRange<Double>? = nil // 포대 램프 — 굴곡 제외 (리뷰 M3)
-        let island = par == 3 && signature == .skyTee && waterSegs().isEmpty && rand
-            .next() < 0.25 // 아일랜드 그린 (아래) — 포대와 겹치지 않는다
+        // 아일랜드 그린 (아래) — 포대와 겹치지 않는다. 파3 절벽 티·숲·능선 30% (리뷰 M2: 절벽 티 파3만 25%일 때 파3 5종화로 실효 18%×25% —
+        // 라운드 20~40개당 1회로 소멸했다). 그린 주변을 평탄 분지로 다듬는 변환이라 아키타입은 무관, 폭포(물 있음)·산정(정상 위)은 제외
+        // 그린 앞 30m에 라이저·사면이 있으면 제외 — 아일랜드의 분지·둑·바깥 블렌드(에이프런 −29m부터)가 절벽 꼬리를 끌어내려 셀 경사 1.2가 났다 (파3 능선 seed 34)
+        let approachClear = !(sigRisers + sigRamps).contains { $0.upperBound > apronStart - 30 }
+        let island = par == 3 && [.skyTee, .forest, .ridge].contains(signature) && waterSegs()
+            .isEmpty && approachClear && rand
+            .next() < 0.3
         if let sig = signature, sig != .summitGreen, sig != .canyon, sig != .valley, !waterAtRampFoot, !island,
            rand.next() < 0.3 { // 계곡도 제외 — 그린 림 선반(8~14m)이 포대 램프(14m)와 겹쳐 절벽 위에 램프가 얹힌다 (M5-④)
             // 협곡은 제외(림 위 오르막 램프와 겹쳐 탈출·어프로치가 이중으로 어려워진다 — 봇 +0.38타 실측). 램프는 접근 지면(pFrom)에서 솟은 그린까지
@@ -1201,11 +1223,15 @@ public enum CourseGenerator {
             // 첫 캡처 3그루(캐노피 3.4~5.2)는 숲으로 안 읽혔고, 4~5그루(4.5~6.5)는 순진 봇 파 대비 +0.68로 대역(0.6)을 넘겼다 → 3~4그루·4.2~6.0,
             // 그린 앞 40m는 비운다(어프로치 착지)
             let want = par == 3 ? 2 : rand.next() < 0.5 ? 3 : 4 // 파3는 2그루 (2026-09-29)
-            let gap = par == 3 ? 28.0 : 40.0
+            let gap = par == 3 ? 20.0 : 40.0
             var placed: [Double] = []
             for _ in 0 ..< 18 where placed.count < want {
                 let size = rand.next(4.2, 6.0)
-                let t = rand.next(teeEnd + (par == 3 ? 30 : 45), apronStart - (par == 3 ? 30 : 40))
+                let t = rand
+                    .next(
+                        teeEnd + (par == 3 ? 24 : 45),
+                        apronStart - (par == 3 ? 24 : 40)
+                    ) // 파3 창 넓게 (리뷰 m3: 2그루가 35%만)
                 if hazardFree(t, margin: size + 1), gentleGround(t), placed.allSatisfy({ abs($0 - t) >= gap }) {
                     obstacles.append(Obstacle(kind: .tree, x: t, size: size))
                     placed.append(t)
@@ -1219,7 +1245,7 @@ public enum CourseGenerator {
                 obstacles.append(Obstacle(kind: .tree, x: t, size: size))
             }
         }
-        if par == 3, rand.next() < 0.25 {
+        if par == 3, signature != .forest, rand.next() < 0.25 { // 숲 파3는 회랑 나무가 있다 — 소형 나무가 겹쳤다 (리뷰 m3 13%)
             let size = rand.next(2.8, 3.8)
             let t = teeX + dist * rand.next(0.45, 0.7)
             if t < apronStart - 15, hazardFree(t, margin: size + 1), gentleGround(t) {

@@ -198,18 +198,19 @@ final class SoundKit {
     func whistle() {
         play(duration: 0.62) { t in
             let vib = 1 + 0.008 * sin(2 * .pi * 5.5 * t)
+            // 글라이드는 위상 적분(f0·t + k·t²/2) — sin(2π·f(t)·t)는 순간 주파수가 2배로 뛴다 (리뷰 n2)
             if t < 0.22 {
-                let f = (1500 + 400 * t / 0.22) * vib
+                let phase = 2 * .pi * (1500 * t + 0.5 * (400 / 0.22) * t * t) * vib
                 let env = min(1, t / 0.03) * (1 - max(0, (t - 0.17) / 0.05))
-                return sin(2 * .pi * f * t) * env * 0.045
+                return sin(phase) * env * 0.045
             }
             if t < 0.3 {
                 return 0
             }
             let tt = t - 0.3
-            let f = (1900 - 500 * tt / 0.32) * vib
+            let phase = 2 * .pi * (1900 * tt - 0.5 * (500 / 0.32) * tt * tt) * vib
             let env = min(1, tt / 0.03) * (1 - max(0, (tt - 0.22) / 0.1))
-            return sin(2 * .pi * f * tt) * max(0, env) * 0.045
+            return sin(phase) * max(0, env) * 0.045
         }
     }
 

@@ -2537,13 +2537,8 @@ final class GameScene: SKScene {
         if mode == .motion, !walkAfterSlip { // 넘어져 있는 동안 공이 멈추면 정지 분기가 매 프레임 재실행되지 않게 (리뷰 #2)
             acc += dt * timeScale
             var terminal = StepEvent.none
-            var landing: (
-                speed: Double,
-                surface: Surface,
-                x: Double,
-                pre: Double,
-                post: Double
-            )? // pre/post: 착지 전후 전진 속도(m/s) — 3태 연출
+            // pre/post: 착지 전후 전진 속도(m/s, dir 부호) — 3태 연출. airborne: 캐노피 히트도 .bounce로 온다 — 공중이면 착지 큐가 아니다 (리뷰 m1)
+            var landing: (speed: Double, surface: Surface, x: Double, pre: Double, post: Double, airborne: Bool)?
             var wallHit: (speed: Double, x: Double)?
             var lipped = false
             var settledFrom: Double? // 정착 스냅이 일어난 프레임 — 궤적 잔상은 정지 지점까지만
@@ -2557,7 +2552,14 @@ final class GameScene: SKScene {
                     terminal = event
                 case let .bounce(speed, surface): // 프레임당 가장 강한 착지 하나만 연출
                     if speed > (landing?.speed ?? 0) {
-                        landing = (speed, surface, ball.x, vxBefore * dir, ball.vx * dir)
+                        landing = (
+                            speed,
+                            surface,
+                            ball.x,
+                            vxBefore * dir,
+                            ball.vx * dir,
+                            ball.y > hole.ground(at: ball.x) + 0.3
+                        )
                     }
                 case let .wall(speed):
                     if speed > (wallHit?.speed ?? 0) {
@@ -2595,11 +2597,14 @@ final class GameScene: SKScene {
                 )
                 // 착지 3태 (2026-09-29 잔손질, 스핀 리서치 §5-4): 첫 본격 착지(법선 4m/s+)에서 전진 속도가 어떻게 남았는지로 —
                 // 백업(뒤로 감김: 역회전 점이 뒤로 튐) · 체크(전진 35% 미만: 임팩트 링) · 릴리스(굴러감: 앞으로 낮게 먼지 줄기). 스핀이 눈에 읽히게
-                if !landingCueShown, l.speed > 4, l.surface != .water, l.surface != .bunker {
+                if !landingCueShown, !l.airborne, l.speed > 4, l.surface != .water, l.surface != .bunker {
                     landingCueShown = true
                     let at = CGPoint(x: px(l.x), y: groundY(l.x))
+                    // 역행 착지(맞바람 로브·벽 반사 뒤, SW 6%)는 실제 진행 방향 기준으로 (리뷰 m5)
+                    let s: Double = l.pre >= 0 ? 1 : -1
+                    let fwd = l.post * s, preAbs = abs(l.pre)
+                    let cue = fwd < -0.4 ? "backup" : fwd < 0.35 * preAbs ? "check" : "release"
                     if demo.active { // 계측: 3태 분포 (관찰용)
-                        let cue = l.post < -0.4 ? "backup" : l.post < 0.35 * l.pre ? "check" : "release"
                         print(String(
                             format: "LANDCUE %@ x %.0f %@ pre %.1f post %.1f vn %.1f",
                             cue,
@@ -2611,12 +2616,10 @@ final class GameScene: SKScene {
                         ))
                         fflush(stdout)
                     }
-                    if l.post < -0.4 {
-                        FX.backspin(on: self, at: at, dir: dir)
-                    } else if l.post < 0.35 * l.pre {
-                        FX.contactTick(on: self, at: CGPoint(x: at.x, y: at.y + 4))
-                    } else {
-                        FX.skid(on: self, at: at, dir: dir, surface: l.surface, intensity: min(1, l.post / 20))
+                    switch cue {
+                    case "backup": FX.backspin(on: self, at: at, dir: dir * s)
+                    case "check": FX.contactTick(on: self, at: CGPoint(x: at.x, y: at.y + 4))
+                    default: FX.skid(on: self, at: at, dir: dir * s, surface: l.surface, intensity: min(1, fwd / 20))
                     }
                 }
             }
