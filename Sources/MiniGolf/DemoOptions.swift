@@ -41,7 +41,7 @@ struct DemoOptions: Equatable {
     var restartIn: Double? // --demo-restart-in T: 서프라이즈 시작 T초 뒤 새 라운드 (인터럽트 정리 관찰)
     var hour: Int? // --demo-hour H: 뻐꾸기 시각 고정, 0~23로 정규화 (밤 20~05시 반딧불 대체 관찰)
     var clubId: String? // --club ID: 홀 시작 클럽 지정 (DR·7I·SW·PT… — 클럽별 어드레스 관찰)
-    var shape: ShotShape? // --demo-shape punch|running|lob: 매 샷 종류 강제 (탄도·폼 관찰, Tab 없이)
+    var shape: ShotShape? // --demo-shape punch|lob: 매 샷 종류 강제 (탄도·폼 관찰, Tab 없이)
     var swingStyle: SwingStyle? // --style: 스윙 스타일 지정 (관찰·캡처용, 저장 안 함)
     var hat: Hat? // --hat: 모자 시각 검증 (저장 안 함)
 

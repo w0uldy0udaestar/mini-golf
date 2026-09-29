@@ -2172,7 +2172,7 @@ final class GameScene: SKScene {
         let shape = club.isPutter ? ShotShape.standard : shotShape
         clubTitle.setText(club.name + (shape.label.map { " · \($0)" } ?? ""))
         let cat = (club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터")
-            + (shape.cue.map { " · \($0)" } ?? "")
+            + (shape.cue(for: club.cat).map { " · \($0)" } ?? "")
         // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
         let w = hole.wind
         let windStr = abs(w) < 0.5 ? "" : " · 바람 \(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
@@ -2198,7 +2198,7 @@ final class GameScene: SKScene {
         case 123: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); onClubChanged() // ←
         case 124: clubIdx = max(0, clubIdx - 1); onClubChanged() // →
         case 49: startSwing() // Space
-        case 48: // Tab — 샷 종류 순환 (퍼터는 무관). 폼은 profile.shaped, 물리는 launch(shape:)
+        case 48: // Tab — 샷 종류 순환 기본→펀치→로브 (퍼터는 무관). 폼은 profile.shaped, 물리는 launch(shape:)
             if !club.isPutter {
                 shotShape = shotShape.next; updateHUD()
             }

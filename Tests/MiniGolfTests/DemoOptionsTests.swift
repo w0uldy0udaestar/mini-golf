@@ -42,7 +42,7 @@ final class DemoOptionsTests: XCTestCase {
 
     func testShapeFlagParsesAndFallsBack() {
         XCTAssertEqual(DemoOptions(arguments: ["MiniGolf", "--demo-shape", "lob"]).shape, .lob)
-        XCTAssertEqual(DemoOptions(arguments: ["MiniGolf", "--demo-shape", "running"]).shape, .running)
+        XCTAssertEqual(DemoOptions(arguments: ["MiniGolf", "--demo-shape", "punch"]).shape, .punch)
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--demo-shape", "flop"]).shape, "모르는 값은 nil → 기본 샷")
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--demo-shape"]).shape, "값 없음은 nil")
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf"]).shape)
