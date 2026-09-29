@@ -16,16 +16,18 @@ enum WalkFlavorKind: CaseIterable {
     case airSwing, airPutt, clubInspect
     /// ── C 머리·시선 (3) ──
     case lookBack, skyGaze, doubleTake
-    /// ── D 팔 제스처 (7) ──
+    /// ── D 팔 제스처 (9) ──
     case wave, fistPump, skyPoint, facepalm, shrug, stretch, chinStroke
+    case hatTouch, pocketPat // 2026-09-29 잔손질: 모자 매만지기 · 주머니 두드리기(공 있나)
     /// ── E 상체·자세 (4) ──
     case bow, leanBack, crouchSneak, yawn
     /// ── F 리듬·스텝 (6) ──
     case skip, hopscotch, marchStep, tipToe, strut, stumble
     /// ── G 감정 (4) ──
     case cheer, dejected, laugh, nervous
-    /// ── H 관찰·잡동사니 (4) ──
+    /// ── H 관찰·잡동사니 (5) ──
     case windCheck, distanceScan, watchCheck, sneeze
+    case whistle // 2026-09-29 잔손질: 고개 들고 휘파람 (합성음 두 음)
 
     /// 클럽이 손에 있어야 하는 모션 (어깨 캐리 중 금지)
     var needsClub: Bool {
@@ -54,6 +56,9 @@ enum WalkFlavorKind: CaseIterable {
         case .sneeze: 1.1
         case .doubleTake, .stumble: 1.2
         case .fistPump: 1.3
+        case .hatTouch: 1.4
+        case .pocketPat: 1.5
+        case .whistle: 1.8
         case .shrug, .hopscotch, .laugh: 1.4
         case .clubSword, .wave, .skyPoint: 1.5
         case .helicopter, .clubInspect, .facepalm, .cheer: 1.6
@@ -262,6 +267,27 @@ enum WalkFlavorKind: CaseIterable {
             f.setClubHand(angle: -0.15, reach: 0.62, w: w)
             f.setClubPhi(-0.9, w: w)
             f.shoulderXOff -= 2 * w
+        case .hatTouch: // 모자 매만지기 — 손을 머리 위에 얹고 챙을 두 번 톡톡, 고개 살짝 숙임
+            let w = env(u, in: 0.2, out: 0.25)
+            let tap = 0.06 * abs(sin(4 * .pi * min(1, max(0, (u - 0.25) / 0.5))))
+            f.setFreeHand(angle: 3.0 - tap, reach: 0.66 + tap, w: w)
+            f.headDyOff -= 1.5 * w
+            f.headDxOff += 1 * w
+            f.shoulderYOff += 0.5 * w
+        case .pocketPat: // 주머니 두드리기 — 공 있나? 손을 허리 옆에 대고 두 번 톡톡, 고개 내려 확인
+            let w = env(u, in: 0.2, out: 0.25)
+            let pat = abs(sin(4 * .pi * min(1, max(0, (u - 0.2) / 0.55))))
+            f.setFreeHand(angle: 0.35, reach: 0.42 + 0.1 * pat, w: w)
+            f.headDyOff -= 2 * w
+            f.headDxOff += 1.5 * w
+            f.armAmpBoost -= 1 * w
+        case .whistle: // 휘파람 — 고개 살짝 들고 손은 입가에 잠깐, 어깨 리듬 (소리는 GameScene이 u 0.2에서 한 번)
+            let w = env(u, in: 0.2, out: 0.3)
+            let hand = env(u, in: 0.25, out: 0.35) * (u < 0.55 ? 1 : 0)
+            f.setFreeHand(angle: 2.55, reach: 0.4, w: hand)
+            f.headDyOff += 2 * w
+            f.headDxOff += 1 * w
+            f.shoulderYOff += 0.8 * w * sin(6 * .pi * u)
         case .facepalm: // 아이고… 손으로 얼굴, 고개 푹, 어깨 처짐
             let w = env(u, in: 0.2, out: 0.3)
             f.setFreeHand(angle: 2.75, reach: 0.37, w: w)

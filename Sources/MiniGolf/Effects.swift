@@ -105,6 +105,41 @@ enum FX {
         ]))
     }
 
+    /// 릴리스 착지 — 앞으로 낮게 쓸리는 먼지 줄기 3개 (스핀이 남지 않고 굴러간다)
+    static func skid(on parent: SKNode, at p: CGPoint, dir: Double, surface: Surface, intensity: Double) {
+        let color = surface == .rough ? Palette.roughGray.withAlphaComponent(0.55) : Palette.hairline
+            .withAlphaComponent(0.6)
+        for k in 0 ..< 3 {
+            let dot = SKShapeNode(circleOfRadius: 1.1)
+            dot.fillColor = color
+            dot.strokeColor = .clear
+            dot.position = CGPoint(x: p.x + CGFloat(dir) * CGFloat(k) * 3, y: p.y + 1.5)
+            parent.addChild(dot)
+            let dx = CGFloat(dir) * CGFloat(16 + 12 * intensity) * CGFloat(1 + Double(k) * 0.35)
+            let move = SKAction.moveBy(x: dx, y: CGFloat(3 + k * 2), duration: 0.28)
+            move.timingMode = .easeOut
+            dot.run(.sequence([.group([move, .fadeOut(withDuration: 0.3)]), .removeFromParent()]))
+        }
+    }
+
+    /// 백업 착지 — 역회전이 물고 뒤로 감기는 순간: 작은 점 3개가 진행 반대쪽·위로 튀고, 접지 링이 한 번
+    static func backspin(on parent: SKNode, at p: CGPoint, dir: Double) {
+        contactTick(on: parent, at: CGPoint(x: p.x, y: p.y + 4))
+        for k in 0 ..< 3 {
+            let dot = SKShapeNode(circleOfRadius: 1.2)
+            dot.fillColor = NSColor(white: 1, alpha: 0.75)
+            dot.strokeColor = .clear
+            dot.position = CGPoint(x: p.x, y: p.y + 2)
+            parent.addChild(dot)
+            let dx = -CGFloat(dir) * CGFloat(8 + k * 5)
+            let up = SKAction.moveBy(x: dx * 0.6, y: CGFloat(9 + k * 3), duration: 0.14)
+            up.timingMode = .easeOut
+            let down = SKAction.moveBy(x: dx * 0.4, y: -CGFloat(6 + k * 2), duration: 0.22)
+            down.timingMode = .easeIn
+            dot.run(.sequence([.group([.sequence([up, down]), .fadeOut(withDuration: 0.36)]), .removeFromParent()]))
+        }
+    }
+
     static func holePop(on parent: SKNode, at p: CGPoint) {
         for _ in 0 ..< 3 {
             let dot = SKShapeNode(circleOfRadius: 1.2)

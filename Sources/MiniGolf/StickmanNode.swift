@@ -69,6 +69,7 @@ struct WalkFlavorEvent {
     let kind: WalkFlavorKind
     let t0: Double
     let dur: Double
+    var soundFired = false // 휘파람 등 한 번만 나는 소리 (2026-09-29)
 }
 
 func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {

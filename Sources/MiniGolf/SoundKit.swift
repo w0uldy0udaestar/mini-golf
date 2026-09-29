@@ -194,6 +194,25 @@ final class SoundKit {
         }
     }
 
+    /// 휘파람 — 걷기 잔동작 whistle (2026-09-29): 두 음, 올라갔다 내려오는 글라이드 + 약한 비브라토, 같은 '작고 마른' 결
+    func whistle() {
+        play(duration: 0.62) { t in
+            let vib = 1 + 0.008 * sin(2 * .pi * 5.5 * t)
+            if t < 0.22 {
+                let f = (1500 + 400 * t / 0.22) * vib
+                let env = min(1, t / 0.03) * (1 - max(0, (t - 0.17) / 0.05))
+                return sin(2 * .pi * f * t) * env * 0.045
+            }
+            if t < 0.3 {
+                return 0
+            }
+            let tt = t - 0.3
+            let f = (1900 - 500 * tt / 0.32) * vib
+            let env = min(1, tt / 0.03) * (1 - max(0, (tt - 0.22) / 0.1))
+            return sin(2 * .pi * f * tt) * max(0, env) * 0.045
+        }
+    }
+
     /// 땅 울림 — 두더지 예고 (저음 두 번)
     func thump() {
         play(duration: 0.5) { t in
