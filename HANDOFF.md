@@ -330,7 +330,7 @@ main = 9935736(홀 전환 타이머 수정 머지), 작업 트리 클린, 원격
 실행: `swift build && .build/debug/MiniGolf` (⛳️ 좌클릭 재개/일시정지 · 우클릭 메뉴)
 플래그 파싱·목록은 `Sources/MiniGolf/DemoOptions.swift` 한 곳(테스트 `DemoOptionsTests`). CI 상태는 `gh run list --limit 5`.
 플래그: `--demo` `--demo-motions` `--demo-memes` `--demo-surprise` `--surprise KIND` `--demo-pickup` `--demo-trip`
-`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-turn` `--demo-mood M` `--demo-replan` `--demo-hour H` `--screen N` `--seed N` `--hat` `--demo-records`
+`--demo-idle` `--demo-setback` `--demo-greet` `--demo-gir` `--demo-settle` `--demo-power P` `--demo-restart-after-holed T` `--demo-hole N` `--demo-ball X` `--demo-shape S` `--demo-turn` `--demo-mood M` `--demo-replan` `--demo-hour H` `--screen N` `--seed N` `--hat` `--demo-records`
 
 ### ⚠️ 핫픽스 절차 교훈 (2026-09-15 실측)
 

@@ -937,6 +937,63 @@ final class GolfCoreTests: XCTestCase {
         )
     }
 
+    // ── 샷 종류 (Tab, M5-③) ──
+
+    func testShotShapesChangeLaunch() {
+        let c = club("7I")
+        func launch(_ shape: ShotShape, club cl: Club = ClubTable.all.first { $0.id == "7I" }!) -> BallState {
+            var b = BallState(x: 0, y: 0)
+            Ballistics.launch(&b, club: cl, heightPct: 1, lie: .fairway, dir: 1, shape: shape)
+            return b
+        }
+        let base = launch(.standard), punch = launch(.punch), run = launch(.running), lob = launch(.lob)
+        func deg(_ b: BallState) -> Double {
+            atan2(b.vy, b.vx) * 180 / .pi
+        }
+        func v(_ b: BallState) -> Double {
+            hypot(b.vx, b.vy)
+        }
+        XCTAssertEqual(deg(base), c.loft, accuracy: 0.01)
+        XCTAssertEqual(deg(punch), c.loft - 10, accuracy: 0.01, "펀치 로프트 -10°")
+        XCTAssertEqual(deg(run), c.loft - 16, accuracy: 0.01, "런닝 로프트 -16°")
+        XCTAssertEqual(deg(lob), c.loft + 18, accuracy: 0.01, "로브 로프트 +18°")
+        XCTAssertEqual(v(punch) / v(base), ShotShape.punch.speedScale(for: .iron), accuracy: 0.001, "펀치 스피드 (아이언)")
+        XCTAssertEqual(v(run) / v(base), ShotShape.running.speedScale(for: .iron), accuracy: 0.001, "런닝 스피드 (아이언)")
+        XCTAssertLessThan(
+            ShotShape.running.speedScale(for: .wedge),
+            ShotShape.running.speedScale(for: .iron),
+            "웨지 런닝은 더 큰 손실"
+        )
+        XCTAssertEqual(v(lob) / v(base), 0.92, accuracy: 0.001, "로브 스피드 -8%")
+        XCTAssertEqual(punch.spin / base.spin, 0.5, accuracy: 0.001, "펀치 스핀 -50%")
+        XCTAssertEqual(run.spin / base.spin, 0.3, accuracy: 0.001, "런닝 스핀 -70%")
+        XCTAssertEqual(lob.spin / base.spin, 0.9, accuracy: 0.001, "로브 스핀 -10%")
+        // 클램프: 드라이버(10.5°) 낮은 샷은 바닥 8°, 샌드웨지(56°) 로브는 상한 62°
+        XCTAssertEqual(deg(launch(.running, club: club("DR"))), ShotShape.minLoftDeg, accuracy: 0.01, "드라이버 런닝 로프트 바닥")
+        XCTAssertEqual(deg(launch(.lob, club: club("SW"))), ShotShape.maxLoftDeg, accuracy: 0.01, "샌드웨지 로브 로프트 상한")
+        // 자동 펀치(나무·벽)와 겹치면 둘 다 — 단 바닥 아래로는 안 내려간다
+        var both = BallState(x: 0, y: 0)
+        Ballistics.launch(&both, club: club("3I"), heightPct: 1, lie: .fairway, dir: 1, punch: 1, shape: .punch)
+        XCTAssertEqual(deg(both), max(ShotShape.minLoftDeg, 21 - 8 - 10), accuracy: 0.01, "자동+수동 펀치 로프트 바닥")
+        // 퍼터는 종류 무관 — 전 종류 (리뷰 F3: 낮은 샷의 로프트 바닥 8°가 퍼터에 새어 vx −1%였다)
+        var pt = BallState(x: 0, y: 0)
+        Ballistics.launch(&pt, club: club("PT"), heightPct: 0.5, lie: .green, dir: 1)
+        for shape in ShotShape.allCases {
+            var pt2 = BallState(x: 0, y: 0)
+            Ballistics.launch(&pt2, club: club("PT"), heightPct: 0.5, lie: .green, dir: 1, shape: shape)
+            XCTAssertEqual(pt.vx, pt2.vx, accuracy: 1e-9, "퍼터에 샷 종류 \(shape)가 적용됨")
+            XCTAssertEqual(pt.vy, pt2.vy, accuracy: 1e-9)
+        }
+        // Tab 순환은 4종을 한 바퀴 돈다
+        var sh = ShotShape.standard
+        var seen: [ShotShape] = []
+        for _ in 0 ..< 4 {
+            seen.append(sh); sh = sh.next
+        }
+        XCTAssertEqual(Set(seen).count, 4)
+        XCTAssertEqual(sh, .standard)
+    }
+
     // ── 미스샷 (풀파워 리스크) ──
 
     func testMishitReducesPowerSpinAndLiftsLaunchAngle() {

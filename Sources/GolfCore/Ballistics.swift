@@ -119,11 +119,98 @@ public enum StepEvent: Sendable, Equatable {
     case wall(speed: Double) // 화면 가장자리 반사
 }
 
+/// 샷 종류 — 플레이어가 Tab으로 고른다 (M5-③, 2026-09-29 사용자 선택 3종). 벽·나무 자동 펀치(`launch(punch:)`)와는 별개로 겹쳐 적용된다.
+/// 수치는 평지 계측(ShotShapeProbe)으로 정했다 — 7I 풀샷 정점 57m 기준: 펀치 32m·굴림 26m(기본 12m), 런닝 16m·굴림 42m,
+/// 로브 66m·총거리 −40%. 차이는 화면에서 읽히도록 과장한다 (1.3배 구분 불가 교훈)
+public enum ShotShape: String, CaseIterable, Sendable {
+    case standard, punch, running, lob
+
+    /// 로프트 변화(도). 낮은 샷은 `minLoftDeg`가 바닥, 로브는 `maxLoftDeg`가 상한
+    public var loftDelta: Double {
+        switch self {
+        case .standard: 0
+        case .punch: -10
+        case .running: -16
+        case .lob: 18
+        }
+    }
+
+    /// 볼스피드 배율 — 짧은 백스윙(펀치·런닝)·열린 페이스(로브)의 손실. 낮은 샷은 클럽군별: 로프트가 클수록 로프트를 깎는 이득이
+    /// 커서(웨지는 풍선 탄도라 −16°가 총거리 +36%) 같은 배율이면 "런닝 = 공짜 거리"가 된다 — 평지 풀샷 총거리를 모든 클럽에서
+    /// 기본의 +12% 안에 두는 값 (ShotShapeProbe 가드, 리뷰 F2)
+    public func speedScale(for cat: ClubCategory) -> Double {
+        switch self {
+        case .standard: 1
+        case .lob: 0.92
+        case .punch:
+            switch cat {
+            case .wood: 0.90
+            case .iron: 0.89
+            case .wedge: 0.82
+            case .putter: 1
+            }
+        case .running:
+            switch cat {
+            case .wood: 0.85
+            case .iron: 0.83
+            case .wedge: 0.74
+            case .putter: 1
+            }
+        }
+    }
+
+    /// 스핀 배율 — 런닝은 거의 무스핀이라 착지 후 오래 구른다
+    public var spinScale: Double {
+        switch self {
+        case .standard: 1
+        case .punch: 0.5
+        case .running: 0.3
+        case .lob: 0.9
+        }
+    }
+
+    /// 낮은 샷의 로프트 바닥 — 없으면 드라이버 펀치가 0°로 땅을 345m 구른다 (계측)
+    public static let minLoftDeg = 8.0
+    /// 로브 로프트 상한 — 없으면 샌드웨지 로브가 71°로 떠서 20m밖에 못 가고 9m 되감긴다 (계측)
+    public static let maxLoftDeg = 62.0
+
+    public var isLow: Bool {
+        self == .punch || self == .running
+    }
+
+    /// Tab 순환: 기본 → 펀치 → 런닝 → 로브 → 기본 (낮은 둘을 이웃에)
+    public var next: ShotShape {
+        let all = ShotShape.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+
+    /// HUD 단어 (클럽 이름 옆). 기본은 표시 없음
+    public var label: String? {
+        switch self {
+        case .standard: nil
+        case .punch: "펀치"
+        case .running: "런닝"
+        case .lob: "로브"
+        }
+    }
+
+    /// HUD 한 줄 설명 — 수치가 아니라 결과의 말 (어시스트 금지 원칙 안)
+    public var cue: String? {
+        switch self {
+        case .standard: nil
+        case .punch: "낮게 뚫고 조금 구른다"
+        case .running: "낮게 굴려 보낸다"
+        case .lob: "높이 띄워 바로 세운다"
+        }
+    }
+}
+
 public enum Ballistics {
     /// 샷 발사: 클럽·백스윙 높이·라이를 반영해 공 상태를 설정
     /// mishit: 미스샷 정도 [-1, 1] — 발사각 ±4°, 파워 -12%, 스핀 -30%까지 (풀파워 리스크는 호출측)
     /// punch: 펀치샷 정도 [0, 1] — 로프트 -8°·스핀 -40% (벽 등 백스윙 제한 상황의 낮은 탈출샷)
     /// slope: 유효 경사(dy/dx, 호출측에서 스탠스 기울기 비율 적용) — 오르막 라이는 발사각↑·스피드↓
+    /// shape: 플레이어가 고른 샷 종류 — 로프트·스피드·스핀 배율 (ShotShape). 자동 펀치와 겹치면 둘 다 적용, 로프트는 바닥·상한으로 클램프
     public static func launch(
         _ b: inout BallState,
         club: Club,
@@ -133,7 +220,8 @@ public enum Ballistics {
         mishit: Double = 0,
         punch: Double = 0,
         slope: Double = 0,
-        kind: BallKind = .standard
+        kind: BallKind = .standard,
+        shape: ShotShape = .standard
     ) {
         // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
@@ -141,16 +229,23 @@ public enum Ballistics {
         v0 *= club.isPutter ? 1 : kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다 — 퍼터는 면제 (0.16x '죽은 샷' 방지, 리뷰 m4)
         let slopeDeg = abs(atan(slope)) * 180 / .pi
         v0 *= 1 - min(0.12, 0.006 * slopeDeg) // 경사 라이 스피드 손실 (~0.6%/도, 실측 — 3eccc4f 복원)
-        let loft = max(
-            0.02,
-            club.loft * .pi / 180 + atan(slope * dir) + mishit * 4 * .pi / 180 - punch * 8 * .pi / 180
-        )
+        let shape = club.isPutter ? ShotShape.standard : shape // 퍼터는 종류 무관 — 호출측 가드와 무관하게 여기서 정규화 (리뷰 F3)
+        v0 *= shape.speedScale(for: club.cat)
+        // 클럽 로프트 + 자동 펀치 + 샷 종류 → 종류별 바닥·상한 클램프 → 경사·미스힛은 그 뒤 (내리막 라이는 물리대로 더 낮아진다)
+        var loftDeg = club.loft - punch * 8 + shape.loftDelta
+        if shape.isLow {
+            loftDeg = max(ShotShape.minLoftDeg, loftDeg)
+        }
+        if shape == .lob {
+            loftDeg = min(ShotShape.maxLoftDeg, loftDeg)
+        }
+        let loft = max(0.02, loftDeg * .pi / 180 + atan(slope * dir) + mishit * 4 * .pi / 180)
         b.vx = dir * v0 * cos(loft)
         b.vy = club.isPutter ? 0 : v0 * sin(loft)
         // 스핀 = 클럽 스피드 비례 × 압축 효율(저속에서 sublinear) — 부분 스윙의 상대 스핀 인플레 제거.
         // 구식 (0.6+0.4h)는 살살 칠수록 상대 스핀이 최대 2.4배로 부풀었다 (리서치 §3-3). 풀스윙은 불변
         let spinPower = (Phys.minPowerRatio + (1 - Phys.minPowerRatio) * heightPct) * (0.75 + 0.25 * heightPct)
-        b.spin = club.spin * lie.spinFactor * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch)
+        b.spin = club.spin * lie.spinFactor * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape.spinScale
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly
         b.lipped = false

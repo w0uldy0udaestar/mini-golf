@@ -173,6 +173,7 @@ final class GameScene: SKScene {
     var aimTime = 0.0 // 조준 진입 후 경과 — 진입 직후엔 천천히 가라앉는다
     private var renderWallT = 0.0 // 벽 스탠스 근접도 (스무딩) — 뒷발 벽 딛기 자세 블렌드
     private var renderTreeT = 0.0 // 나무 캐노피 근접도 (스무딩) — 웅크린 펀치 자세 블렌드
+    private var shotShape = ShotShape.standard // 샷 종류 (Tab 순환, M5-③) — 걷기 시작·홀 시작마다 기본으로 돌아간다
     private var finishAt: TimeInterval = 0 // 피니시 도달 시각 — 무빙 홀드 감쇠 진동 기준
     /// 홀아웃 직후 스틱맨의 스코어 반응 (QA·Whimsy 리뷰 — 결과에 감정을 싣는다)
     enum ReactionKind { case none, rejoice, fistPump, nod, slump, dejected, startled, shoo, laugh } // 뒤 셋은 서프라이즈 반응
@@ -215,7 +216,7 @@ final class GameScene: SKScene {
     var swingStyle = SwingStyle.saved
 
     private var profile: SwingProfile {
-        SwingProfile.profile(for: club.cat, style: swingStyle)
+        SwingProfile.profile(for: club.cat, style: swingStyle).shaped(club.isPutter ? .standard : shotShape)
     }
 
     func setSwingStyle(_ style: SwingStyle) {
@@ -302,7 +303,7 @@ final class GameScene: SKScene {
         trailUnderNode.lineCap = .round
 
         layoutHUD()
-        hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료")
+        hintLabel.setText("←→ 클럽 · ↑↓ 백스윙 · Tab 샷 종류 · Space 스윙 · R 새 라운드 · Esc 종료")
         pauseLabel.setText("일시정지 — 메뉴바 ⛳️ 클릭으로 재개")
         pauseLabel.isHidden = true
         toastTitle.alpha = 0
@@ -413,6 +414,7 @@ final class GameScene: SKScene {
         if let id = demo.clubId, let i = ClubTable.all.firstIndex(where: { $0.id == id }) {
             clubIdx = i // 관찰용 클럽 고정
         }
+        shotShape = demo.shape ?? .standard // 홀 시작은 기본 샷 (관찰 모드 --demo-shape는 강제)
         renderBallFwd = profile.ballFwd // 홀 시작 클럽의 스탠스로 즉시 — 퍼터(6)→드라이버(20) 활강이 티 의식 발 기준점을 미끄러뜨린다 (리뷰)
         ball = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX)) // 미러 홀은 오른쪽 티에서 시작
         if demo.pickupForce { // 공 줍기 의식 관찰: 컵 앞 그린에서 시작 — 탭인 → 홀인 → 줍기
@@ -1248,6 +1250,7 @@ final class GameScene: SKScene {
             return
         }
         endShotTrail()
+        shotShape = demo.shape ?? .standard // 샷마다 기본으로 — 도착 자리(walkTarget)가 기본 스탠스로 계획되게 먼저
         // 원점 통일 (2026-09-14 전환 개편): 포즈 리그는 공이 원점이고 몸(힙)은 공 뒤 ballFwd+5px에 선다.
         // 걷기 리그는 몸이 원점이므로, 걷기의 출발·도착을 '몸이 서는 자리'로 잡아야 전환 순간 좌표 점프가 0이다
         // (구: 출발 stickX·도착 ball.x → 출발 때 몸이 25px 앞으로 튀고, 도착 때 25px 뒤로 미끄러졌다).
@@ -1417,7 +1420,8 @@ final class GameScene: SKScene {
         Ballistics.launch(
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
-            kind: ballKind // 공 바꿔치기 (Surprises2)
+            kind: ballKind, // 공 바꿔치기 (Surprises2)
+            shape: club.isPutter ? .standard : shotShape // Tab 샷 종류 (M5-③)
         )
         if !teeNode.isHidden { // 임팩트에 티가 튕겨 날아간다 — 앞으로 살짝 뜨며 한 바퀴 반 돌고 떨어져 사라진다
             let d = CGFloat(dir)
@@ -1448,10 +1452,11 @@ final class GameScene: SKScene {
             )
         }
         PlayLog.note(String(
-            format: "SHOT %d %@ h%.2f from %.1f lie %@",
+            format: "SHOT %d %@ h%.2f%@ from %.1f lie %@",
             strokes,
             club.id,
             heightPct,
+            club.isPutter || shotShape == .standard ? "" : " \(shotShape.rawValue)", // 샷 종류 (기본은 생략)
             preShot.x,
             "\(lie)"
         ))
@@ -2163,8 +2168,11 @@ final class GameScene: SKScene {
         let facing = hole.slope(at: ball.x) * toward
         let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lie.label
         scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lieWord) · \(Int(remain))m" + elevStr)
-        clubTitle.setText(club.name)
-        let cat = club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터"
+        // 샷 종류 (Tab): 클럽 이름 옆 단어 + 아랫줄 결과의 말 — 수치가 아니라 이름이라 어시스트 금지 원칙 안 (퍼터는 없음)
+        let shape = club.isPutter ? ShotShape.standard : shotShape
+        clubTitle.setText(club.name + (shape.label.map { " · \($0)" } ?? ""))
+        let cat = (club.cat == .wood ? "우드" : club.cat == .iron ? "아이언" : club.cat == .wedge ? "웨지" : "퍼터")
+            + (shape.cue.map { " · \($0)" } ?? "")
         // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
         let w = hole.wind
         let windStr = abs(w) < 0.5 ? "" : " · 바람 \(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
@@ -2187,11 +2195,24 @@ final class GameScene: SKScene {
         switch event.keyCode {
         case 126, 125: heldKeys.insert(event.keyCode) // ↑↓
         // → = 드라이버(긴 클럽) 쪽, ← = 퍼터 쪽 (2026-08-15 사용자 요청 — 오른쪽 = 멀리)
-        case 123: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); presetPutterHeight(); updateHUD() // ←
-        case 124: clubIdx = max(0, clubIdx - 1); presetPutterHeight(); updateHUD() // →
+        case 123: clubIdx = min(ClubTable.all.count - 1, clubIdx + 1); onClubChanged() // ←
+        case 124: clubIdx = max(0, clubIdx - 1); onClubChanged() // →
         case 49: startSwing() // Space
+        case 48: // Tab — 샷 종류 순환 (퍼터는 무관). 폼은 profile.shaped, 물리는 launch(shape:)
+            if !club.isPutter {
+                shotShape = shotShape.next; updateHUD()
+            }
         default: break
         }
+    }
+
+    /// ←→ 클럽 변경 뒤: 퍼터로 넘어가면 샷 종류를 기본으로 (숨었다가 되돌아오면 "리셋됐나?"가 불명확 — 리뷰 F4)
+    private func onClubChanged() {
+        if club.isPutter {
+            shotShape = .standard
+        }
+        presetPutterHeight()
+        updateHUD()
     }
 
     override func keyUp(with event: NSEvent) {
