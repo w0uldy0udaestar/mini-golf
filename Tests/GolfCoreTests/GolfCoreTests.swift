@@ -946,7 +946,7 @@ final class GolfCoreTests: XCTestCase {
             Ballistics.launch(&b, club: cl, heightPct: 1, lie: .fairway, dir: 1, shape: shape)
             return b
         }
-        let base = launch(.standard), punch = launch(.punch), run = launch(.running), lob = launch(.lob)
+        let base = launch(.standard), punch = launch(.punch), lob = launch(.lob)
         func deg(_ b: BallState) -> Double {
             atan2(b.vy, b.vx) * 180 / .pi
         }
@@ -955,21 +955,24 @@ final class GolfCoreTests: XCTestCase {
         }
         XCTAssertEqual(deg(base), c.loft, accuracy: 0.01)
         XCTAssertEqual(deg(punch), c.loft - 10, accuracy: 0.01, "펀치 로프트 -10°")
-        XCTAssertEqual(deg(run), c.loft - 16, accuracy: 0.01, "런닝 로프트 -16°")
         XCTAssertEqual(deg(lob), c.loft + 18, accuracy: 0.01, "로브 로프트 +18°")
         XCTAssertEqual(v(punch) / v(base), ShotShape.punch.speedScale(for: .iron), accuracy: 0.001, "펀치 스피드 (아이언)")
-        XCTAssertEqual(v(run) / v(base), ShotShape.running.speedScale(for: .iron), accuracy: 0.001, "런닝 스피드 (아이언)")
         XCTAssertLessThan(
-            ShotShape.running.speedScale(for: .wedge),
-            ShotShape.running.speedScale(for: .iron),
-            "웨지 런닝은 더 큰 손실"
+            ShotShape.punch.speedScale(for: .wedge), ShotShape.punch.speedScale(for: .iron), "웨지 펀치는 더 큰 스피드 손실"
+        )
+        XCTAssertGreaterThan(
+            ShotShape.punch.spinScale(for: .wood), ShotShape.punch.spinScale(for: .iron), "우드 펀치는 스핀을 덜 깎는다 (캐리 유지)"
         )
         XCTAssertEqual(v(lob) / v(base), 0.92, accuracy: 0.001, "로브 스피드 -8%")
-        XCTAssertEqual(punch.spin / base.spin, 0.5, accuracy: 0.001, "펀치 스핀 -50%")
-        XCTAssertEqual(run.spin / base.spin, 0.3, accuracy: 0.001, "런닝 스핀 -70%")
+        XCTAssertEqual(punch.spin / base.spin, ShotShape.punch.spinScale(for: .iron), accuracy: 0.001, "펀치 스핀 (아이언)")
         XCTAssertEqual(lob.spin / base.spin, 0.9, accuracy: 0.001, "로브 스핀 -10%")
         // 클램프: 드라이버(10.5°) 낮은 샷은 바닥 8°, 샌드웨지(56°) 로브는 상한 62°
-        XCTAssertEqual(deg(launch(.running, club: club("DR"))), ShotShape.minLoftDeg, accuracy: 0.01, "드라이버 런닝 로프트 바닥")
+        XCTAssertEqual(
+            deg(launch(.punch, club: club("DR"))),
+            ShotShape.minLoftDeg,
+            accuracy: 0.01,
+            "드라이버 펀치 로프트 바닥 (10.5−4 → 8)"
+        )
         XCTAssertEqual(deg(launch(.lob, club: club("SW"))), ShotShape.maxLoftDeg, accuracy: 0.01, "샌드웨지 로브 로프트 상한")
         // 자동 펀치(나무·벽)와 겹치면 둘 다 — 단 바닥 아래로는 안 내려간다
         var both = BallState(x: 0, y: 0)
@@ -984,13 +987,13 @@ final class GolfCoreTests: XCTestCase {
             XCTAssertEqual(pt.vx, pt2.vx, accuracy: 1e-9, "퍼터에 샷 종류 \(shape)가 적용됨")
             XCTAssertEqual(pt.vy, pt2.vy, accuracy: 1e-9)
         }
-        // Tab 순환은 4종을 한 바퀴 돈다
+        // Tab 순환은 3종을 한 바퀴 돈다
         var sh = ShotShape.standard
         var seen: [ShotShape] = []
-        for _ in 0 ..< 4 {
+        for _ in 0 ..< 3 {
             seen.append(sh); sh = sh.next
         }
-        XCTAssertEqual(Set(seen).count, 4)
+        XCTAssertEqual(Set(seen).count, 3)
         XCTAssertEqual(sh, .standard)
     }
 

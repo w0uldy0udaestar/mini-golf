@@ -119,53 +119,44 @@ public enum StepEvent: Sendable, Equatable {
     case wall(speed: Double) // 화면 가장자리 반사
 }
 
-/// 샷 종류 — 플레이어가 Tab으로 고른다 (M5-③, 2026-09-29 사용자 선택 3종). 벽·나무 자동 펀치(`launch(punch:)`)와는 별개로 겹쳐 적용된다.
-/// 수치는 평지 계측(ShotShapeProbe)으로 정했다 — 7I 풀샷 정점 57m 기준: 펀치 32m·굴림 26m(기본 12m), 런닝 16m·굴림 42m,
-/// 로브 66m·총거리 −40%. 차이는 화면에서 읽히도록 과장한다 (1.3배 구분 불가 교훈)
+/// 샷 종류 — 플레이어가 Tab으로 고른다 (M5-③). 벽·나무 자동 펀치(`launch(punch:)`)와는 별개로 겹쳐 적용된다.
+/// 2026-09-29 1차 판정: 3종(펀치·런닝·로브)에서 "런닝은 어프로치 말고는 들어본 적 없고 펀치와 차이를 모르겠다" → 런닝 삭제(2종).
+/// "펀치가 약하다" → 드라이버 펀치가 평지 캐리 249→157m(로프트 바닥 8°에 걸리고 스핀 반감으로 양력 소실)이라 클럽군별로 나눴다:
+/// 우드는 스핀을 덜 깎아 낮지만 캐리가 사는 스팅어, 아이언·웨지는 캐리 ≈ 기본·낮은 정점·긴 굴림. 밸런스 가드는 굴림 포함 총거리가 아니라
+/// **캐리 ≤ 기본**(굴림은 러프·경사가 먹는다 — 실플레이 절벽 티 DR 펀치 224 vs 기본 290m). 수치는 평지 계측 ShotShapeProbe
 public enum ShotShape: String, CaseIterable, Sendable {
-    case standard, punch, running, lob
+    case standard, punch, lob
 
     /// 로프트 변화(도). 낮은 샷은 `minLoftDeg`가 바닥, 로브는 `maxLoftDeg`가 상한
-    public var loftDelta: Double {
+    public func loftDelta(for cat: ClubCategory) -> Double {
         switch self {
         case .standard: 0
-        case .punch: -10
-        case .running: -16
+        case .punch: cat == .wood ? -4 : -10 // 우드는 로프트가 낮아 바닥에 걸린다 — 스팅어는 로프트보다 스핀·탄도로
         case .lob: 18
         }
     }
 
-    /// 볼스피드 배율 — 짧은 백스윙(펀치·런닝)·열린 페이스(로브)의 손실. 낮은 샷은 클럽군별: 로프트가 클수록 로프트를 깎는 이득이
-    /// 커서(웨지는 풍선 탄도라 −16°가 총거리 +36%) 같은 배율이면 "런닝 = 공짜 거리"가 된다 — 평지 풀샷 총거리를 모든 클럽에서
-    /// 기본의 +12% 안에 두는 값 (ShotShapeProbe 가드, 리뷰 F2)
+    /// 볼스피드 배율 — 짧은 백스윙(펀치)·열린 페이스(로브)의 손실
     public func speedScale(for cat: ClubCategory) -> Double {
         switch self {
         case .standard: 1
         case .lob: 0.92
         case .punch:
             switch cat {
-            case .wood: 0.90
+            case .wood: 0.95
             case .iron: 0.89
-            case .wedge: 0.82
-            case .putter: 1
-            }
-        case .running:
-            switch cat {
-            case .wood: 0.85
-            case .iron: 0.83
-            case .wedge: 0.74
+            case .wedge: 0.83
             case .putter: 1
             }
         }
     }
 
-    /// 스핀 배율 — 런닝은 거의 무스핀이라 착지 후 오래 구른다
-    public var spinScale: Double {
+    /// 스핀 배율 — 펀치는 낮게 날아 착지 후 구른다. 우드는 스핀을 반으로 깎으면 양력이 사라져 공이 뚝 떨어진다(1차 판정 "약하다")
+    public func spinScale(for cat: ClubCategory) -> Double {
         switch self {
         case .standard: 1
-        case .punch: 0.5
-        case .running: 0.3
         case .lob: 0.9
+        case .punch: cat == .wood ? 0.75 : 0.5
         }
     }
 
@@ -175,10 +166,10 @@ public enum ShotShape: String, CaseIterable, Sendable {
     public static let maxLoftDeg = 62.0
 
     public var isLow: Bool {
-        self == .punch || self == .running
+        self == .punch
     }
 
-    /// Tab 순환: 기본 → 펀치 → 런닝 → 로브 → 기본 (낮은 둘을 이웃에)
+    /// Tab 순환: 기본 → 펀치 → 로브 → 기본
     public var next: ShotShape {
         let all = ShotShape.allCases
         return all[(all.firstIndex(of: self)! + 1) % all.count]
@@ -189,17 +180,15 @@ public enum ShotShape: String, CaseIterable, Sendable {
         switch self {
         case .standard: nil
         case .punch: "펀치"
-        case .running: "런닝"
         case .lob: "로브"
         }
     }
 
-    /// HUD 한 줄 설명 — 수치가 아니라 결과의 말 (어시스트 금지 원칙 안)
-    public var cue: String? {
+    /// HUD 한 줄 설명 — 수치가 아니라 결과의 말 (어시스트 금지 원칙 안). 웨지 펀치가 곧 런닝 어프로치
+    public func cue(for cat: ClubCategory) -> String? {
         switch self {
         case .standard: nil
-        case .punch: "낮게 뚫고 조금 구른다"
-        case .running: "낮게 굴려 보낸다"
+        case .punch: cat == .wedge ? "낮게 굴려 붙인다" : "낮게 뚫고 조금 구른다"
         case .lob: "높이 띄워 바로 세운다"
         }
     }
@@ -232,7 +221,7 @@ public enum Ballistics {
         let shape = club.isPutter ? ShotShape.standard : shape // 퍼터는 종류 무관 — 호출측 가드와 무관하게 여기서 정규화 (리뷰 F3)
         v0 *= shape.speedScale(for: club.cat)
         // 클럽 로프트 + 자동 펀치 + 샷 종류 → 종류별 바닥·상한 클램프 → 경사·미스힛은 그 뒤 (내리막 라이는 물리대로 더 낮아진다)
-        var loftDeg = club.loft - punch * 8 + shape.loftDelta
+        var loftDeg = club.loft - punch * 8 + shape.loftDelta(for: club.cat)
         if shape.isLow {
             loftDeg = max(ShotShape.minLoftDeg, loftDeg)
         }
@@ -245,7 +234,8 @@ public enum Ballistics {
         // 스핀 = 클럽 스피드 비례 × 압축 효율(저속에서 sublinear) — 부분 스윙의 상대 스핀 인플레 제거.
         // 구식 (0.6+0.4h)는 살살 칠수록 상대 스핀이 최대 2.4배로 부풀었다 (리서치 §3-3). 풀스윙은 불변
         let spinPower = (Phys.minPowerRatio + (1 - Phys.minPowerRatio) * heightPct) * (0.75 + 0.25 * heightPct)
-        b.spin = club.spin * lie.spinFactor * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape.spinScale
+        b.spin = club.spin * lie.spinFactor * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape
+            .spinScale(for: club.cat)
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly
         b.lipped = false
