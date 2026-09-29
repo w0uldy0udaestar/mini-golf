@@ -904,7 +904,7 @@ final class GolfCoreTests: XCTestCase {
         // 적격(파4·5, 그린 ≥ 22m) ≈150홀 × 발생 ≈19% = 기대 28, σ ≈ 5 → 15는 −2.7σ (덱·난수 재편마다 흔들리는 값이라 20은 경계선 — 리뷰 m1)
         XCTAssertGreaterThan(tiered, 15, "2단 그린이 적음 (\(tiered))")
         XCTAssertGreaterThan(podium, 20, "포대 그린이 적음 (\(podium))")
-        XCTAssertGreaterThan(island, 3, "아일랜드 그린이 적음 (\(island))")
+        XCTAssertGreaterThan(island, 6, "아일랜드 그린이 적음 (\(island)) — 파3 절벽 티·숲·능선 30%, 기대 ≈ 12/40시드 (리뷰 M2)")
     }
 
     /// 아일랜드 그린의 병합 waterRange(앞뒤 연못 한 구간)가 서프라이즈의 '물 밖으로'를 오작동시키지 않는다 (리뷰 M1 회귀)
@@ -912,7 +912,7 @@ final class GolfCoreTests: XCTestCase {
         var checked = 0
         for seed: UInt32 in 1 ... 60 {
             for h in CourseGenerator.makeCourse(seed: seed)
-                where h.par == 3 && h.signature == .skyTee && h.waterRange != nil {
+                where h.par == 3 && h.waterRange != nil && h.signature != .cascade { // 아일랜드는 파3 절벽 티·숲·능선 (리뷰 M2) — 폭포 파3의 연못은 아일랜드가 아니다
                 let d = h.holeX >= h.teeX ? 1.0 : -1.0
                 XCTAssertEqual(h.outOfWater(h.holeX), h.holeX, "그린 위 공이 옮겨짐 seed \(seed)")
                 let gFront = d > 0 ? h.greenStart : h.greenEnd, gBack = d > 0 ? h.greenEnd : h.greenStart
@@ -1007,7 +1007,6 @@ final class GolfCoreTests: XCTestCase {
             for h in CourseGenerator.makeCourse(seed: seed) {
                 for x in stride(from: 5.0, to: h.worldW - 5, by: 1.0) where h.surface(at: x) == .rough {
                     let rl = h.roughLie(at: x)
-                    XCTAssertEqual(rl, h.roughLie(at: x), "결정론")
                     if abs(h.slope(at: x)) >= 0.12 {
                         checkedSteep += 1
                         if rl != .normal {
@@ -1020,6 +1019,12 @@ final class GolfCoreTests: XCTestCase {
             }
         }
         XCTAssertTrue(steepNormal, "사면 러프는 항상 보통 (\(checkedSteep)셀)")
+        let a = CourseGenerator.makeCourse(seed: 7), b = CourseGenerator.makeCourse(seed: 7) // 시드 재생성 결정론 (리뷰 n4)
+        for (ha, hb) in zip(a, b) {
+            for x in stride(from: 5.0, to: ha.worldW - 5, by: 7.0) {
+                XCTAssertEqual(ha.roughLie(at: x), hb.roughLie(at: x), "시드 재생성 결정론 @\(x)")
+            }
+        }
         let total = Double(counts.values.reduce(0, +))
         XCTAssertGreaterThan(total, 1000)
         XCTAssertEqual(Double(counts[.flier, default: 0]) / total, 0.2, accuracy: 0.05, "플라이어 비율 \(counts)")

@@ -40,7 +40,10 @@ final class CanyonEscapeProbe: XCTestCase {
                     continue
                 }
                 let ls = h.slope(at: b.x)
-                Ballistics.launch(&b, club: pw, heightPct: 1, lie: lie, dir: dir, slope: ls * Phys.stanceSlopeRatio)
+                Ballistics.launch(
+                    &b, club: pw, heightPct: 1, lie: lie, dir: dir, slope: ls * Phys.stanceSlopeRatio,
+                    roughLie: lie == .rough ? h.roughLie(at: b.x) : .normal // 실제 라이 — 발치 깊은 러프가 탈출을 깨면 여기서 잡힌다 (리뷰 M1)
+                )
                 t = 0
                 while b.phase != .rest, t < 60 {
                     if Ballistics.step(&b, hole: h) == .water {
