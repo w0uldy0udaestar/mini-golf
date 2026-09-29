@@ -506,7 +506,7 @@ final class GameScene: SKScene {
         var prof = WalkProfile(dist: abs(to - stickX) + xIn, dur: 1)
         for _ in 0 ..< 2 {
             let dist = abs(to - stickX) + xIn
-            let dur = min(9.0, max(1.2, dist / 10 * moodSpeed))
+            let dur = walkDuration(dist: dist, slow: moodSpeed)
             prof = WalkProfile(dist: dist, dur: dur)
             xIn = prof.position(at: prof.rampIn)
         }
@@ -1264,6 +1264,14 @@ final class GameScene: SKScene {
         return (ball.x - arrivalDir * (arrivalFwd + 5) / Double(pxPerM), arrivalDir)
     }
 
+    /// 걷기 시간 (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답" → 상한 9s로도 "똑같잖아"): 구 10 m/s는 파3(≈9.6px/m)에선 96px/s인데 파5(3.2px/m)에선
+    /// 32px/s — 같은 걸음이 홀 길이에 따라 3배 느려 보였다. 속도를 **화면 기준** ≥ 90px/s로 정의(짧은 홀은 그대로), 보폭 22px이라 초당 ≈4보 잰걸음. 상한 9s
+    static let walkScreenSpeed: Double = 90 // px/s
+    func walkDuration(dist: Double, slow: Double) -> Double {
+        let vWorld = max(10, Self.walkScreenSpeed / Double(pxPerM)) // m/s
+        return min(9.0, max(1.2, dist / vWorld * slow))
+    }
+
     /// fromBody: 걷기 도착 자리(몸 원점)에서 다시 출발 — 걷는 동안 공이 옮겨져 도착해 보니 공이 없을 때 (2026-09-23 재계획)
     func startWalk(fromBody: Bool = false) {
         if slip != nil { // 넘어져 있다 — 일어난 뒤 updateSlip이 다시 부른다
@@ -1302,8 +1310,7 @@ final class GameScene: SKScene {
         // 처진 걸음 1.45 + 험한 길 1.4가 겹치면 2배까지 느려져 "어떨 땐 너무 느리다"(2026-09-24 판정) → 처짐 1.15·험한 길 최대 1.2·합계 상한 1.3
         let moodSpeed = mood == .elated ? 0.85 : mood == .sad ? 1.15 : 1.0
         let slow = min(1.3, (1 + 0.2 * hardness) * moodSpeed)
-        // 상한 14 → 9s (2026-09-29 판정 "파4·5에서 걸음이 너무 느려서 답답" — 드라이브 뒤 매번 14초). 긴 걷기는 보폭은 그대로(22px) 걸음 빈도가 올라 잰걸음이 된다
-        let dur = min(9.0, max(1.2, dist / 10 * slow))
+        let dur = walkDuration(dist: dist, slow: slow)
         var anim = WalkAnim(
             fromX: from, toX: to, dur: dur,
             // 한두 걸음에 제속도 → 등속 → 마지막 한두 걸음에 정지 (구 전구간 포물선은 "느릿하다 가속")
