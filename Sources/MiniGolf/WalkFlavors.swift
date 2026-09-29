@@ -28,6 +28,13 @@ enum WalkFlavorKind: CaseIterable {
     /// ── H 관찰·잡동사니 (5) ──
     case windCheck, distanceScan, watchCheck, sneeze
     case whistle // 2026-09-29 잔손질: 고개 들고 휘파람 (합성음 두 음)
+    /// ── I 어깨 캐리 전용 (2) — 클럽을 어깨에 메고 걷는 동안만 (잔손질 2라운드) ──
+    case hum, strapTug
+
+    /// 어깨 캐리 중에만 나오는 모션 (클럽이 어깨에 있어야 말이 된다) — 스케줄러가 캐리 구간에서만 뽑는다
+    var carryOnly: Bool {
+        self == .hum || self == .strapTug
+    }
 
     /// 클럽이 손에 있어야 하는 모션 (어깨 캐리 중 금지)
     var needsClub: Bool {
@@ -59,6 +66,8 @@ enum WalkFlavorKind: CaseIterable {
         case .hatTouch: 1.4
         case .pocketPat: 1.5
         case .whistle: 1.8
+        case .hum: 2.0
+        case .strapTug: 1.3
         case .shrug, .hopscotch, .laugh: 1.4
         case .clubSword, .wave, .skyPoint: 1.5
         case .helicopter, .clubInspect, .facepalm, .cheer: 1.6
@@ -74,16 +83,20 @@ enum WalkFlavorKind: CaseIterable {
         stopsWalking ? 0.35 : 1
     }
 
-    static func weightedRandom() -> WalkFlavorKind {
-        let total = allCases.reduce(0) { $0 + $1.weight }
+    static func weightedRandom(carry: Bool = false) -> WalkFlavorKind {
+        // 어깨 캐리 구간이면 40%는 캐리 전용, 아니면 캐리 전용 제외 (클럽이 어깨에 없으면 말이 안 된다)
+        let pool: [WalkFlavorKind] = carry && Double.random(in: 0 ..< 1) < 0.4
+            ? allCases.filter(\.carryOnly)
+            : allCases.filter { !$0.carryOnly }
+        let total = pool.reduce(0) { $0 + $1.weight }
         var r = Double.random(in: 0 ..< total)
-        for k in allCases {
+        for k in pool {
             r -= k.weight
             if r < 0 {
                 return k
             }
         }
-        return allCases.last!
+        return pool.last!
     }
 
     /// 걸음 수정자 — 게이트가 매 프레임 묻는다. stride: 보폭 배율(케이던스는 거리 구동이라 자동 반비례),
@@ -267,6 +280,20 @@ enum WalkFlavorKind: CaseIterable {
             f.setClubHand(angle: -0.15, reach: 0.62, w: w)
             f.setClubPhi(-0.9, w: w)
             f.shoulderXOff -= 2 * w
+        case .hum: // 콧노래 — 어깨에 멘 클럽을 리듬에 맞춰 까딱, 고개 좌우로 살랑, 자유 팔은 차분
+            let w = env(u, in: 0.2, out: 0.25)
+            f.headDxOff += 1.8 * w * sin(4 * .pi * u)
+            f.headDyOff += 0.8 * w * (1 + sin(8 * .pi * u)) / 2
+            f.shoulderYOff += 0.9 * w * sin(8 * .pi * u)
+            f.phiWobble += 0.06 * w * sin(8 * .pi * u)
+            f.armAmpBoost -= 1.5 * w
+        case .strapTug: // 클럽 고쳐 메기 — 자유손이 반대 어깨로 올라가 한 번 당기고, 어깨 으쓱, 클럽이 살짝 들렸다 놓임
+            let w = env(u, in: 0.2, out: 0.3)
+            let tug = smoothstep(seg(u, 0.25, 0.45)) * (1 - smoothstep(seg(u, 0.6, 0.85)))
+            f.setFreeHand(angle: 2.5, reach: 0.5, w: w)
+            f.shoulderYOff += 2.5 * tug
+            f.gripLift += 0.35 * tug
+            f.headDxOff -= 1 * tug
         case .hatTouch: // 모자 매만지기 — 손을 머리 위에 얹고 챙을 두 번 톡톡, 고개 살짝 숙임
             let w = env(u, in: 0.2, out: 0.25)
             let tap = 0.06 * abs(sin(4 * .pi * min(1, max(0, (u - 0.25) / 0.5))))
