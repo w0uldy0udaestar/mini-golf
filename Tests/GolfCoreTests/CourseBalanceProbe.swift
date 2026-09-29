@@ -95,7 +95,10 @@ final class CourseBalanceProbe: XCTestCase {
             } else if lie == .bunker {
                 club = ClubTable.all.first { $0.id == "SW" }!
                 h = 1
-            } else if lastMoved < 3, treeT(hole, x: b.x, dir: dir) > 0.5 { // 캐노피 밑에 갇혔다 — 롱아이언 펀치로 낮게 빠져나간다 (사람의 반응)
+            } else if lastMoved < 3,
+                      treeT(hole, x: b.x, dir: dir) >=
+                      0.25 { // 캐노피가 앞(≤ 16m)에 드리웠다 — 롱아이언 펀치로 낮게 빠져나간다 (사람의 반응). 0.5는 7~20m 앞 나무를 벽으로 오판해 PW 무한 반복(M5-④
+                // 숲 실측)
                 club = ClubTable.all.first { $0.id == "4I" }!
                 h = 1
             } else if lastMoved < 3 { // 벽에 막혔다 — 피칭으로 넘긴다 (러프 SW는 45m밖에 못 간다)
@@ -140,8 +143,7 @@ final class CourseBalanceProbe: XCTestCase {
                 case .water:
                     water += 1
                     strokes += 1
-                    let wr = hole.waterRange ?? (b.x - 3) ... (b.x + 3)
-                    let dropX = dir > 0 ? wr.lowerBound - 2.5 : wr.upperBound + 2.5
+                    let dropX = hole.waterDropX(from: b.x) // 게임과 같은 규칙 — 빠진 연못의 앞 둑 (폭포는 연못이 여럿)
                     b = BallState(x: dropX, y: hole.ground(at: dropX))
                     ended = true
                 default:
@@ -223,9 +225,12 @@ final class CourseBalanceProbe: XCTestCase {
         var naive: [HoleResult] = []
         var aware: [HoleResult] = []
         for seed: UInt32 in 1 ... 40 {
-            for h in CourseGenerator.makeCourse(seed: seed) {
-                naive.append(Self.play(h, elevK: 0))
-                aware.append(Self.play(h, elevK: 1.0))
+            for (i, h) in CourseGenerator.makeCourse(seed: seed).enumerated() {
+                var n = Self.play(h, elevK: 0), a = Self.play(h, elevK: 1.0)
+                n.trace.insert("seed \(seed) hole \(i + 1)", at: 0) // STUCK 재현용 (--seed N --demo-hole H)
+                a.trace.insert("seed \(seed) hole \(i + 1)", at: 0)
+                naive.append(n)
+                aware.append(a)
             }
         }
         var lines = Self.summarize(naive, label: "NAIVE (수평 거리만)") + Self.summarize(aware, label: "AWARE (표고차 k=1.0)")

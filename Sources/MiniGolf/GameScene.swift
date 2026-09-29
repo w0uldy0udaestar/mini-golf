@@ -1727,7 +1727,8 @@ final class GameScene: SKScene {
         endShotTrail()
         SoundKit.shared.splash()
         FX.ripple(on: self, at: CGPoint(x: px(ball.x), y: groundY(ball.x)))
-        let dropX = hole.waterDropX() // 앞 물가(티 쪽 둑) — 샷 방향이 아니라 홀 방향 기준: 그린 위에서 되돌아 치다 빠져도 앞 둑 (리뷰 m5)
+        let dropX = hole
+            .waterDropX(from: ball.x) // 빠진 연못의 앞 물가(티 쪽 둑) — 샷 방향이 아니라 홀 방향 기준: 그린 위에서 되돌아 치다 빠져도 앞 둑 (리뷰 m5)
         ball = BallState(x: dropX, y: hole.ground(at: dropX))
         toast("워터 해저드", sub: "+1 벌타 · 드롭")
         if strokes >= Phys.maxStrokes {
