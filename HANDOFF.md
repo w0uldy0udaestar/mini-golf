@@ -163,7 +163,7 @@ yt-dlp에 `--js-runtimes node --remote-components ejs:github`가 있어야 403�
 
 ### 재개 지점 (2026-09-29 — 다음 세션은 여기서)
 
-**세션 종료 요약 (2026-09-28 13:00 ~ 09-29 00:30, 한 세션)**: 객관 평가 → 창 범퍼 제거·DemoOptions·CI → **v0.8.3** → 경사 라이 체감(반영 1.0·굴곡) →
+**세션 종료 요약 (2026-09-28 13:00 ~ 18:30 작업, 09-29 10:00 마무리 — 한 세션)**: 객관 평가 → 창 범퍼 제거·DemoOptions·CI → **v0.8.3** → 경사 라이 체감(반영 1.0·굴곡) →
 경사 넘어지기·디봇 → 급경사 언덕 사면(판정 3회 만에 통과)·스탠스 45%(판정 통과) → **v0.8.4** → M5-② 핀·그린(앞핀/뒷핀·2단·포대·아일랜드,
 리뷰 반영 완료, **판정 미수집**). main은 CI 전부 통과. `dist/MiniGolf.app`은 58180f5 빌드(= v0.8.5 후보), brew는 0.8.4.
 머지된 feature 브랜치 7개가 로컬·원격에 남아 있다(remove-window-bumpers·demo-options-ci·slope-lie-feel·slope-lies·slope-lies-followup·
