@@ -1026,22 +1026,24 @@ public enum CourseGenerator {
             // 협곡은 제외(림 위 오르막 램프와 겹쳐 탈출·어프로치가 이중으로 어려워진다 — 봇 +0.38타 실측). 램프는 접근 지면(pFrom)에서 솟은 그린까지
             // 하나의 smoothstep. 뒤에 오는 트레드 굴곡은 podiumRange로 제외한다(합쳐지면 페어웨이 0.5를 넘는다 — 리뷰 M3)
             let pFrom = max(0, gFrom - 14)
-            let e0 = elev[pFrom]
-            let podium = min(rand.next(2.0, 2.6), 2.8 - (elev[gFrom] - e0))
+            /// 벙커 모래 딥(addBunker와 같은 식)은 램프 계산에서 빼고 나중에 다시 얹는다 — 파인 바닥을 기준 높이로 쓰면 딥이 두 번 들어가고 벙커 경계에서
+            /// 1.2~1.85m 단차가 났다 (리뷰 2026-09-29 m6, 300시드 32건 → 0)
+            func bunkerDip(_ i: Int) -> Double {
+                guard let seg = segments
+                    .first(where: { $0.type == .bunker && Double(i) >= $0.from && Double(i) < $0.to }) else { return 0 }
+                let mid = (seg.from + seg.to) / 2, half = (seg.to - seg.from) / 2 + 0.5
+                return max(0, 1 - abs(Double(i) - mid) / half) * 0.9
+            }
+            let e0 = elev[pFrom] + bunkerDip(pFrom)
+            let gBaseFlat = elev[gFrom] + bunkerDip(gFrom)
+            let podium = min(rand.next(2.0, 2.6), 2.8 - (gBaseFlat - e0))
             if podium >= 1 {
-                let e1 = elev[gFrom] + podium
+                let e1 = gBaseFlat + podium
                 for i in pFrom ... gTo where i < elev.count {
                     let u = min(1, Double(i - pFrom) / Double(max(1, gFrom - pFrom)))
-                    elev[i] = i <= gFrom ? e0 + (e1 - e0) * (u * u * (3 - 2 * u)) : elev[i] + podium
+                    elev[i] = i <= gFrom ? e0 + (e1 - e0) * (u * u * (3 - 2 * u)) - bunkerDip(i) : elev[i] + podium
                 }
                 podiumRange = Double(pFrom) ... Double(gFrom)
-                // 램프가 덮어쓴 가드 벙커 셀의 모래 딥 재적용 — gFrom 안쪽은 딥+podium이 남아 벙커 안에 단차가 생긴다 (리뷰 m1)
-                for seg in segments where seg.type == .bunker && seg.to > Double(pFrom) && seg.from < Double(gFrom) {
-                    let mid = (seg.from + seg.to) / 2, half = (seg.to - seg.from) / 2 + 0.5
-                    for i in max(pFrom, Int(seg.from)) ... min(gFrom, Int(ceil(seg.to))) where i < elev.count {
-                        elev[i] -= max(0, 1 - abs(Double(i) - mid) / half) * 0.9
-                    }
-                }
             }
         }
         let trend: Double = elev[gTo] >= elev[gFrom] ? 1 : -1

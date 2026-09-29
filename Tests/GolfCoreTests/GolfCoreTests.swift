@@ -422,6 +422,12 @@ final class GolfCoreTests: XCTestCase {
                 for x in stride(from: 2.0, to: h.worldW - 2, by: 1.0) {
                     XCTAssertLessThan(abs(h.slope(at: x)), 1.15, "\(h.signature!): 경사 초과 @\(x)")
                 }
+                // 셀 단차 상한 — 중앙차분은 1셀 스파이크를 평균해 놓친다 (포대 램프 × 벙커 1.85m 단차, 리뷰 m6)
+                for i in 1 ..< h.elevation.count where abs(h.elevation[i] - h.elevation[i - 1]) > 1.15 {
+                    XCTFail(
+                        "\(h.signature!) seed \(seed): 1셀 단차 \(h.elevation[i] - h.elevation[i - 1]) @\(i) \(h.surface(at: Double(i)))"
+                    )
+                }
                 // 그린은 설 수 있어야 함 (브레이크 2~6%만)
                 XCTAssertLessThan(
                     abs(h.slope(at: h.holeX - 2)),
