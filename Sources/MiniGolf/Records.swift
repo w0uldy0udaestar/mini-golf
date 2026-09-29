@@ -55,7 +55,7 @@ enum Hat: String, CaseIterable, Codable {
         case .straw: 2
         case .propeller: 6 // 배지 11 → 15종 (2026-09-29) — 간격 재배분, 왕관은 전부 모아야
         case .top: 10
-        case .crown: 15
+        case .crown: Badge.allCases.count // 전부 모아야 (리뷰 F9)
         }
     }
 
@@ -127,8 +127,8 @@ struct Records: Codable {
         return true
     }
 
-    var unlockedHats: [Hat] {
-        Hat.allCases.filter { $0.need <= badges.count }
+    var unlockedHats: [Hat] { // 쓰고 있는 모자는 유지 — 해금 기준이 오르면(배지 11 → 15) 이미 얻은 왕관이 '잠김'이 되던 회귀 (리뷰 F3)
+        Hat.allCases.filter { $0.need <= badges.count || $0 == hat }
     }
 
     /// 기록 카드 본문 (메뉴 → 기록)

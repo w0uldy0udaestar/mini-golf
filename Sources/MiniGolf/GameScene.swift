@@ -1354,7 +1354,7 @@ final class GameScene: SKScene {
                 anim.showAt = anim.relax + Double.random(in: 1.2 ... latest)
             }
         }
-        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 37종 모션을 겹치지 않게 흩뿌린다 (무드 관찰 --demo-mood에서는 끈다 — 계측 오염)
+        // 랜덤 잉여 동작: 긴 이동은 어깨 캐리 + 42종 모션을 겹치지 않게 흩뿌린다 (무드 관찰 --demo-mood에서는 끈다 — 계측 오염)
         if demo.mood == nil, anim.dur > 4.5, Double.random(in: 0 ..< 1) < 0.5 {
             anim.shoulderRange = (anim.relax + 0.8) ... (anim.relax + anim.dur * 0.72)
         }
@@ -1364,9 +1364,14 @@ final class GameScene: SKScene {
                 t += 1.1
                 continue
             }
-            let inCarry = anim.shoulderRange.map { $0.contains(t) && $0.contains(t + 1.5) } ?? false
+            // 캐리 전용은 올리는 0.6s·내리는 0.6s를 뺀 구간 안에 통째로 들어갈 때만 (리뷰 F4)
+            let inCarry = anim.shoulderRange.map { $0.lowerBound + 0.6 <= t && t + 2.0 <= $0.upperBound - 0.6 } ?? false
             let kind = WalkFlavorKind.weightedRandom(carry: inCarry) // 멈추는 모션은 드물게 · 어깨 캐리 중엔 캐리 전용 40%
             let dur = kind.duration
+            if kind.carryOnly, let r = anim.shoulderRange, t + dur > r.upperBound - 0.6 {
+                t += 1.0
+                continue
+            }
             // 어깨에 클럽을 걸친 동안엔 클럽 손짓 불가 (클럽이 손에 없다)
             if kind.needsClub, let r = anim.shoulderRange, r.overlaps(t ... (t + dur)) {
                 t += 1.0
@@ -1386,7 +1391,7 @@ final class GameScene: SKScene {
             anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: t, dur: dur))
             t += dur + Double.random(in: 0.8 ... 2.2)
         }
-        if demo.motionShowcase { // 카탈로그 캡처: 랜덤 대신 37종을 커서 순서로, 트립·어깨 캐리 없이
+        if demo.motionShowcase { // 카탈로그 캡처: 랜덤 대신 42종을 커서 순서로, 트립·어깨 캐리 없이
             anim.flavorEvents = []
             anim.shoulderRange = nil
             anim.tripAt = nil
@@ -1395,9 +1400,15 @@ final class GameScene: SKScene {
             var st = anim.relax + 0.8
             while st < anim.relax + anim.dur - 1.5, motionCursor < WalkFlavorKind.allCases.count {
                 let kind = WalkFlavorKind.allCases[motionCursor]
+                if kind.carryOnly { // 캐리 전용은 어깨 캐리를 씌워 재생 — 클럽을 손에 든 채면 의미가 사라진다 (리뷰 F5)
+                    anim.shoulderRange = (st - 0.7) ... (st + kind.duration + 0.7)
+                }
                 anim.flavorEvents.append(WalkFlavorEvent(kind: kind, t0: st, dur: kind.duration))
                 motionCursor += 1
                 st += kind.duration + 1.3
+                if kind.carryOnly {
+                    break
+                } // 한 걷기에 캐리 창은 하나
             }
             if motionCursor >= WalkFlavorKind.allCases.count, anim.flavorEvents.isEmpty {
                 print("MOTIONS DONE")
@@ -2225,7 +2236,7 @@ final class GameScene: SKScene {
         let shape = club.isPutter ? ShotShape.standard : shotShape
         clubTitle.setText(club.name + (shape.label.map { " · \($0)" } ?? ""))
         // 아랫줄 한마디: 샷 종류가 있으면 그 결과, 없으면 라이의 결과(깊은 러프·플라이어·벙커) — 수치가 아니라 말 (잔손질 2라운드)
-        let lieCue: String? = lie == .bunker ? "모래 — 탈출샷만 나간다"
+        let lieCue: String? = lie == .bunker ? "모래에서는 탈출샷만 나간다"
             : lie == .rough ?
             (hole.roughLie(at: ball.x) == .deep ? "풀에 감겨 짧고 높게" : hole
                 .roughLie(at: ball.x) == .flier ? "스핀이 빠져 멀리 굴러간다" : nil)
@@ -2784,7 +2795,7 @@ final class GameScene: SKScene {
                 let down = min(1, max(0, (r.upperBound - w.t) / 0.6))
                 flavor.shoulder = smoothstep(min(up, down))
             }
-            // 모션 레시피는 WalkFlavorKind.apply(37종 — WalkFlavors.swift)가 채널에 합산한다
+            // 모션 레시피는 WalkFlavorKind.apply(42종 — WalkFlavors.swift)가 채널에 합산한다
             for e in w.flavorEvents {
                 let u = (w.t - e.t0) / e.dur
                 guard u > 0 else { continue }
@@ -2796,7 +2807,7 @@ final class GameScene: SKScene {
                 }
                 e.kind.apply(u: u, into: &flavor)
             }
-            // (구 1.7× 진폭 부스트는 제거 — 37종은 관절 사거리 안에서 최종 크기로 직접 작성됐다, 2026-09-15)
+            // (구 1.7× 진폭 부스트는 제거 — 42종은 관절 사거리 안에서 최종 크기로 직접 작성됐다, 2026-09-15)
             // 쇼피스 밈 모션 — 동결된 무대 위에 크게 얹는다 (WalkFlavors.swift ShowpieceKind)
             if let sa = w.showAt, let sk = w.showKind {
                 let su = (w.t - sa) / sk.duration
