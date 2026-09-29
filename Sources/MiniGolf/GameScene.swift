@@ -1451,7 +1451,8 @@ final class GameScene: SKScene {
             &ball, club: club, heightPct: heightPct, lie: lie, dir: dir,
             mishit: mishit, punch: max(wallPunch, treePunchT * 0.85), slope: slope,
             kind: ballKind, // 공 바꿔치기 (Surprises2)
-            shape: club.isPutter ? .standard : shotShape // Tab 샷 종류 (M5-③)
+            shape: club.isPutter ? .standard : shotShape, // Tab 샷 종류 (M5-③)
+            roughLie: lie == .rough ? hole.roughLie(at: ball.x) : .normal // 러프 이원화 (잔손질 2026-09-29)
         )
         if !teeNode.isHidden { // 임팩트에 티가 튕겨 날아간다 — 앞으로 살짝 뜨며 한 바퀴 반 돌고 떨어져 사라진다
             let d = CGFloat(dir)
@@ -1489,7 +1490,9 @@ final class GameScene: SKScene {
             heightPct,
             club.isPutter || shotShape == .standard ? "" : " \(shotShape.rawValue)", // 샷 종류 (기본은 생략)
             preShot.x,
-            "\(lie)"
+            lie == .rough && hole
+                .roughLie(at: preShot.x) != .normal ? "rough-\(hole.roughLie(at: preShot.x).rawValue)" : "\(lie)" // 러프
+            // 라이
         ))
         if club.isPutter { // 퍼팅 타격감 (2026-09-24 판정): 작은 스쿼시 + 접촉 링 — 헤드보다 느리게 굴러 나가는 공을 '출발'로 읽히게
             let ks = ballKind.renderScale
@@ -2203,7 +2206,9 @@ final class GameScene: SKScene {
         // 비탈 라이 단어 (2026-09-28): 발밑이 홀 쪽으로 0.10 이상 기울면 '오르막/내리막' — 수치가 아니라 라이 이름이라 어시스트 금지 원칙 안
         let toward: Double = hole.holeX >= ball.x ? 1 : -1 // 렌더 dir은 걷는 동안 직전 샷 방향일 수 있다 (리뷰) — 홀 방향으로
         let facing = hole.slope(at: ball.x) * toward
-        let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lie.label
+        let lieName = lie == .rough ? hole.roughLie(at: ball.x).label : lie
+            .label // 러프 이원화: "플라이어 러프"/"깊은 러프" — 이름이라 어시스트 금지 원칙 안
+        let lieWord = (facing >= 0.10 ? "오르막 " : facing <= -0.10 ? "내리막 " : "") + lieName
         scoreSub.setText("타수 \(strokes) · 합계 \(totalStr) · \(lieWord) · \(Int(remain))m" + elevStr)
         // 샷 종류 (Tab): 클럽 이름 옆 단어 + 아랫줄 결과의 말 — 수치가 아니라 이름이라 어시스트 금지 원칙 안 (퍼터는 없음)
         let shape = club.isPutter ? ShotShape.standard : shotShape

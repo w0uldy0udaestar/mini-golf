@@ -973,6 +973,59 @@ final class GolfCoreTests: XCTestCase {
         )
     }
 
+    // ── 러프 라이 이원화 (2026-09-29 잔손질) ──
+
+    func testRoughLieVariance() {
+        let c = club("7I")
+        func launch(_ rl: RoughLie, lie: Surface = .rough) -> BallState {
+            var b = BallState(x: 0, y: 0)
+            Ballistics.launch(&b, club: c, heightPct: 1, lie: lie, dir: 1, roughLie: rl)
+            return b
+        }
+        func v(_ b: BallState) -> Double {
+            hypot(b.vx, b.vy)
+        }
+        func deg(_ b: BallState) -> Double {
+            atan2(b.vy, b.vx) * 180 / .pi
+        }
+        let n = launch(.normal), f = launch(.flier), d = launch(.deep)
+        XCTAssertEqual(v(f) / v(n), 1.12, accuracy: 0.001, "플라이어 파워 +12%")
+        XCTAssertEqual(v(d) / v(n), 0.86, accuracy: 0.001, "깊은 러프 파워 −14%")
+        XCTAssertEqual(f.spin / n.spin, 0.6, accuracy: 0.001, "플라이어 스핀 −40%")
+        XCTAssertEqual(d.spin / n.spin, 1.25, accuracy: 0.001, "깊은 러프 스핀 +25%")
+        XCTAssertEqual(deg(f) - deg(n), 2, accuracy: 0.01, "플라이어 +2°")
+        XCTAssertEqual(deg(d) - deg(n), 5, accuracy: 0.01, "깊은 러프 +5°")
+        XCTAssertEqual(
+            0.6 + 0.2 * RoughLie.flier.powerMul + 0.2 * RoughLie.deep.powerMul,
+            1.0,
+            accuracy: 0.01,
+            "60/20/20 가중 파워 평균 보존"
+        )
+        XCTAssertEqual(v(launch(.deep, lie: .fairway)), v(launch(.normal, lie: .fairway)), accuracy: 1e-9, "러프가 아니면 무시")
+        var counts: [RoughLie: Int] = [:], steepNormal = true, checkedSteep = 0
+        for seed: UInt32 in 1 ... 40 {
+            for h in CourseGenerator.makeCourse(seed: seed) {
+                for x in stride(from: 5.0, to: h.worldW - 5, by: 1.0) where h.surface(at: x) == .rough {
+                    let rl = h.roughLie(at: x)
+                    XCTAssertEqual(rl, h.roughLie(at: x), "결정론")
+                    if abs(h.slope(at: x)) >= 0.12 {
+                        checkedSteep += 1
+                        if rl != .normal {
+                            steepNormal = false
+                        }
+                    } else {
+                        counts[rl, default: 0] += 1
+                    }
+                }
+            }
+        }
+        XCTAssertTrue(steepNormal, "사면 러프는 항상 보통 (\(checkedSteep)셀)")
+        let total = Double(counts.values.reduce(0, +))
+        XCTAssertGreaterThan(total, 1000)
+        XCTAssertEqual(Double(counts[.flier, default: 0]) / total, 0.2, accuracy: 0.05, "플라이어 비율 \(counts)")
+        XCTAssertEqual(Double(counts[.deep, default: 0]) / total, 0.2, accuracy: 0.05, "깊은 러프 비율 \(counts)")
+    }
+
     // ── 샷 종류 (Tab, M5-③) ──
 
     func testShotShapesChangeLaunch() {

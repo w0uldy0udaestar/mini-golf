@@ -138,6 +138,20 @@ public struct Hole: Sendable {
         ground(at: x + 0.5) - ground(at: x - 0.5)
     }
 
+    /// 러프 라이 (RoughLie): 평탄한 러프(|경사| < 0.12)를 3m 셀마다 결정론적 해시로 60/20/20 — 같은 자리는 늘 같은 라이라 HUD가 샷 전에 보여줄 수 있고
+    /// 리플레이·봇도 같다. 러프가 아니거나 사면이면 .normal
+    public func roughLie(at x: Double) -> RoughLie {
+        guard surface(at: x) == .rough, abs(slope(at: x)) < 0.12 else { return .normal }
+        var h = UInt32(truncatingIfNeeded: Int((x / 3).rounded(.down))) &* 2_654_435_761
+        h ^= UInt32(truncatingIfNeeded: Int(holeX * 10)) &* 40503
+        h ^= UInt32(truncatingIfNeeded: Int(worldW)) &* 2_246_822_519
+        h ^= h >> 13
+        h = h &* 1_274_126_177
+        h ^= h >> 16
+        let r = Double(h % 10000) / 10000
+        return r < 0.2 ? .flier : r < 0.4 ? .deep : .normal
+    }
+
     /// x가 물이면 가장 가까운 물 세그먼트 경계 밖 2.5m, 아니면 x 그대로 — 서프라이즈가 공을 옮길 때 쓴다.
     /// `waterRange`는 아일랜드 그린에서 앞뒤 연못을 한 구간으로 묶은 드롭용 경계라 여기 못 쓴다(그린 위 공을 연못 너머로 보냈다 — 리뷰 M1)
     public func outOfWater(_ x: Double) -> Double {

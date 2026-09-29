@@ -72,3 +72,45 @@ public enum Surface: String, CaseIterable, Sendable {
         }
     }
 }
+
+/// 러프 라이 이원화 (2026-09-29 잔손질, 스핀 리서치 §4 "러프의 본질은 평균이 아니라 분산"): 평탄한 러프를 3m 셀마다 결정론적으로
+/// 러프 60% · 플라이어 20%(풀이 성겨 스핀이 빠지고 멀리 난다) · 깊은 러프 20%(풀에 감겨 짧고 높게)로 나눈다. 평균 파워·스핀은 구 러프(0.75·0.5)와 같다.
+/// HUD에는 이름으로만(수치 어시스트 금지). 사면·라이저 러프(|경사| ≥ 0.12)는 항상 보통 — 협곡 탈출 규칙(pwRoughHeight)이 보통 러프 기준
+public enum RoughLie: String, Sendable, CaseIterable {
+    case normal, flier, deep
+
+    /// 러프 powerFactor(0.75)에 곱하는 배율
+    public var powerMul: Double {
+        switch self {
+        case .normal: 1.0
+        case .flier: 1.12
+        case .deep: 0.86
+        }
+    }
+
+    /// 러프 spinFactor(0.5)에 곱하는 배율
+    public var spinMul: Double {
+        switch self {
+        case .normal: 1.0
+        case .flier: 0.6
+        case .deep: 1.25
+        }
+    }
+
+    /// 발사각 변화(도) — 풀이 페이스와 공 사이에 끼어 로프트가 는다
+    public var loftDelta: Double {
+        switch self {
+        case .normal: 0
+        case .flier: 2
+        case .deep: 5
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .normal: "러프"
+        case .flier: "플라이어 러프"
+        case .deep: "깊은 러프"
+        }
+    }
+}

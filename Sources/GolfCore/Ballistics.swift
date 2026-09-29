@@ -200,6 +200,7 @@ public enum Ballistics {
     /// punch: 펀치샷 정도 [0, 1] — 로프트 -8°·스핀 -40% (벽 등 백스윙 제한 상황의 낮은 탈출샷)
     /// slope: 유효 경사(dy/dx, 호출측에서 스탠스 기울기 비율 적용) — 오르막 라이는 발사각↑·스피드↓
     /// shape: 플레이어가 고른 샷 종류 — 로프트·스피드·스핀 배율 (ShotShape). 자동 펀치와 겹치면 둘 다 적용, 로프트는 바닥·상한으로 클램프
+    /// roughLie: 러프 라이 이원화 (RoughLie) — 러프에서만 의미, 파워·스핀 배율과 로프트 +2°/+5°
     public static func launch(
         _ b: inout BallState,
         club: Club,
@@ -210,18 +211,20 @@ public enum Ballistics {
         punch: Double = 0,
         slope: Double = 0,
         kind: BallKind = .standard,
-        shape: ShotShape = .standard
+        shape: ShotShape = .standard,
+        roughLie: RoughLie = .normal
     ) {
         // 퍼터: 선형 파워 + 낮은 바닥값(탭인). 정밀함은 입력측 조절 속도에서 확보
         let minR = club.isPutter ? Phys.putterMinRatio : Phys.minPowerRatio
-        var v0 = club.power * lie.powerFactor * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
+        let rl = lie == .rough ? roughLie : .normal // 러프 라이 이원화 (2026-09-29)
+        var v0 = club.power * lie.powerFactor * rl.powerMul * (minR + (1 - minR) * heightPct) * (1 - abs(mishit) * 0.12)
         v0 *= club.isPutter ? 1 : kind.launchScale // 공 바꿔치기: 볼링공은 느리게 떠난다 — 퍼터는 면제 (0.16x '죽은 샷' 방지, 리뷰 m4)
         let slopeDeg = abs(atan(slope)) * 180 / .pi
         v0 *= 1 - min(0.12, 0.006 * slopeDeg) // 경사 라이 스피드 손실 (~0.6%/도, 실측 — 3eccc4f 복원)
         let shape = club.isPutter ? ShotShape.standard : shape // 퍼터는 종류 무관 — 호출측 가드와 무관하게 여기서 정규화 (리뷰 F3)
         v0 *= shape.speedScale(for: club.cat)
         // 클럽 로프트 + 자동 펀치 + 샷 종류 → 종류별 바닥·상한 클램프 → 경사·미스힛은 그 뒤 (내리막 라이는 물리대로 더 낮아진다)
-        var loftDeg = club.loft - punch * 8 + shape.loftDelta(for: club.cat)
+        var loftDeg = club.loft - punch * 8 + shape.loftDelta(for: club.cat) + (club.isPutter ? 0 : rl.loftDelta)
         if shape.isLow {
             loftDeg = max(ShotShape.minLoftDeg, loftDeg)
         }
@@ -234,7 +237,8 @@ public enum Ballistics {
         // 스핀 = 클럽 스피드 비례 × 압축 효율(저속에서 sublinear) — 부분 스윙의 상대 스핀 인플레 제거.
         // 구식 (0.6+0.4h)는 살살 칠수록 상대 스핀이 최대 2.4배로 부풀었다 (리서치 §3-3). 풀스윙은 불변
         let spinPower = (Phys.minPowerRatio + (1 - Phys.minPowerRatio) * heightPct) * (0.75 + 0.25 * heightPct)
-        b.spin = club.spin * lie.spinFactor * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape
+        b.spin = club.spin * lie.spinFactor * rl
+            .spinMul * spinPower * (1 - abs(mishit) * 0.3) * (1 - 0.4 * punch) * shape
             .spinScale(for: club.cat)
         b.spinSign = dir
         b.phase = club.isPutter ? .roll : .fly
