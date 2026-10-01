@@ -4,3 +4,6 @@
 --maxwidth 120
 --wraparguments before-first
 --disable wrapMultilineStatementBraces
+
+# 광고 영상 작업 폴더(캡처 보조 스크립트)는 게임 코드가 아니라 린트 제외
+--exclude ads

@@ -1,0 +1,7 @@
+# 생성물 — 스크립트로 다시 만든다 (scripts/prep.py · scripts/make-audio.py). 원본 캡처는 dist/cap/ad (저장소 밖 규칙)
+assets/gen/
+assets/cap
+audio/*.wav
+audio/stems/
+node_modules/
+renders/

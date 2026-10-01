@@ -1,0 +1,11 @@
+# 생성물 — 스크립트로 다시 만든다 (scripts/prep-clips.py · prep-rigs.py · prep-hook.py · make-audio.py). 원본 캡처는 dist/cap/ad/30s (저장소 밖 규칙)
+assets/gen/
+assets/cap
+audio/*.wav
+audio/*.json
+audio/stems/
+data/*.js
+data/*.json
+node_modules/
+renders/
+__pycache__/
