@@ -1,0 +1,12 @@
+{
+  "name": "mini-golf-30s",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "gsap": "3.14.2",
+    "hyperframes": "0.8.70",
+    "pretendard": "1.3.9",
+    "@fontsource/jetbrains-mono": "5.2.5"
+  }
+}

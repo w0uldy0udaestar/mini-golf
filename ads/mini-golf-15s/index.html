@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- mini-golf 15s — 가로 1920×1080 셸. 내용은 src/main.js 하나가 그린다(방향은 #root 크기, 언어는 변수 lang).
+     렌더: scripts/render.sh  ·  기획·비트 시트: plan.md -->
+<html lang="ko" data-composition-variables='[{"id":"lang","type":"string","label":"Language","description":"ko 또는 en — 문구·메뉴·HUD 판","default":"ko"},{"id":"mix","type":"string","label":"Audio mix","description":"언어별 믹스 WAV 경로","default":"audio/mix-ko.wav"}]'>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<link rel="stylesheet" href="src/main.css">
+<script src="vendor/gsap.min.js"></script>
+<script src="data/rig.js"></script>
+<script src="data/ground.js"></script>
+<script src="data/trail.js"></script>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="15" data-fps="30" data-width="1920" data-height="1080" style="width:1920px;height:1080px">
+  <audio id="mix" data-var-src="mix" src="audio/mix-ko.wav" data-start="0" data-duration="15" data-volume="1" data-track-index="8"></audio>
+</div>
+<script src="src/main.js"></script>
+</body>
+</html>

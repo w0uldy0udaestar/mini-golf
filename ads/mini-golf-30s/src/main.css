@@ -1,0 +1,136 @@
+/* mini-golf 30s — 공용 스타일 (가로·세로 셸이 함께 쓴다). 디자인 시스템은 15초판과 같다: 어두운 데스크탑 · 흰 선화 · 회색 계조 · 포인트 레드 하나 */
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Regular.woff2") format("woff2"); font-weight:400; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Medium.woff2") format("woff2"); font-weight:500; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-SemiBold.woff2") format("woff2"); font-weight:600; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Bold.woff2") format("woff2"); font-weight:700; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-ExtraBold.woff2") format("woff2"); font-weight:800; font-display:block; }
+@font-face { font-family:"JBM"; src:url("../brand/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); font-weight:400; font-display:block; }
+@font-face { font-family:"JBM"; src:url("../brand/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); font-weight:500; font-display:block; }
+
+:root { --wall:#101113; --wall2:#0B0C0D; --win:#1A1B1E; --bar:#222327; --line:#2E2F34; --ink:#F4F4F1; --ink2:#8E8F8B; --ink3:#5C5D5A; --red:#D94D3D; }
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { background:#000; overflow:hidden; }
+#root { position:relative; overflow:hidden; background:var(--wall2); font-family:"Pretendard", sans-serif; color:var(--ink); }
+#preload { position:absolute; left:0; top:0; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
+#preload img { position:absolute; left:0; top:0; width:1px; height:1px; }
+
+/* 장면 = 1920×1080pt 데스크탑 한 벌 (카메라는 2D translate+scale 하나). will-change 없음 — 15초판 결정성 교훈 */
+.desk { position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; overflow:hidden; display:none;
+  background:radial-gradient(120% 90% at 30% 15%, #16171A 0%, var(--wall) 55%, var(--wall2) 100%); }
+.dim { position:absolute; left:0; top:0; width:100%; height:100%; background:#050506; opacity:0; pointer-events:none; }
+
+.menubar { position:absolute; left:0; top:0; right:0; height:28px; background:rgba(22,23,25,.94); border-bottom:1px solid #202124;
+  display:flex; align-items:center; gap:22px; padding:0 18px; font-size:13.5px; font-weight:500; color:#C9CAC6; white-space:nowrap; }
+.menubar .app { font-weight:700; color:#E6E6E2; }
+.menubar .sp { flex:1; }
+.menubar .flag { width:14px; height:16px; display:block; }
+.menubar .flagbox { display:flex; align-items:center; justify-content:center; width:26px; height:22px; border-radius:5px; }
+
+.win { position:absolute; background:var(--win); border-radius:11px; overflow:hidden;
+  box-shadow:0 0 0 1px #2A2B30, 0 18px 50px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.35); }
+.win .bar { height:34px; background:var(--bar); border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 13px; gap:8px; }
+.win .bar i { width:12px; height:12px; border-radius:50%; background:#3A3B40; display:block; flex:none; }
+.win .bar .t { flex:1; text-align:center; font-size:13px; font-weight:500; color:#8C8D8A; margin-right:52px; white-space:nowrap; }
+.win .body { position:absolute; top:34px; left:0; right:0; bottom:0; overflow:hidden; }
+
+/* 에디터 (15초판과 같은 결) */
+.code { font-family:"JBM", "Pretendard", monospace; font-variant-ligatures:none; font-size:16.5px; line-height:27px; color:#575854; padding-top:12px; white-space:pre; }
+.code .ln { display:inline-block; width:58px; text-align:right; padding-right:20px; color:#404145; }
+.code .k { color:#7B7C77; font-weight:500; }
+.code .c { color:#3B3C3F; }
+.code .n { color:#736A5D; }
+.code .row { display:block; height:27px; }
+
+/* 문서 */
+.doc { padding:56px 120px; color:#6B6C68; font-size:17px; line-height:31px; }
+.doc h1 { font-size:34px; line-height:44px; font-weight:700; color:#8A8B86; margin-bottom:10px; letter-spacing:-.4px; }
+.doc h2 { font-size:21px; font-weight:700; color:#7C7D78; margin:26px 0 8px; }
+.doc .meta { font-size:14px; color:#4E4F4B; margin-bottom:28px; }
+.doc p { margin-bottom:14px; }
+.doc .ph { display:block; height:13px; border-radius:3px; background:#26272B; margin:12px 0; }
+
+/* 메신저 */
+.chat { position:absolute; inset:0; display:flex; }
+.chat .side { width:250px; border-right:1px solid var(--line); padding:18px 0; background:#18191B; }
+.chat .side div { height:52px; display:flex; align-items:center; padding:0 18px; gap:12px; font-size:15px; color:#6E6F6B; }
+.chat .side div b { width:30px; height:30px; border-radius:8px; background:#2A2B30; flex:none; }
+.chat .side div.on { background:#222327; color:#9A9B96; }
+.chat .main { flex:1; position:relative; }
+.chat .msgs { position:absolute; left:0; right:0; bottom:92px; padding:0 34px; display:flex; flex-direction:column; gap:14px; }
+.chat .m { max-width:62%; padding:12px 16px; border-radius:14px; background:#24252A; color:#7E7F7A; font-size:16px; line-height:24px; align-self:flex-start; }
+.chat .m.me { align-self:flex-end; background:#2C2D33; color:#8E8F8A; }
+.chat .who { font-size:13px; color:#55564F; margin-bottom:-8px; }
+.chat .input { position:absolute; left:24px; right:24px; bottom:22px; height:52px; border-radius:12px; background:#202125; border:1px solid #2E2F34;
+  display:flex; align-items:center; padding:0 10px 0 18px; font-size:16px; color:#6A6B67; }
+.chat .input .tx { flex:1; white-space:nowrap; overflow:hidden; }
+.chat .send { height:36px; padding:0 16px; border-radius:9px; background:#34353B; color:#C9CAC6; font-weight:600; font-size:15px; display:flex; align-items:center; }
+
+/* 브라우저 */
+.browser .tabs { height:38px; background:#1C1D20; border-bottom:1px solid var(--line); display:flex; align-items:flex-end; gap:6px; padding:0 14px; }
+.browser .tab { height:30px; padding:0 18px; border-radius:8px 8px 0 0; background:#17181B; color:#6E6F6B; font-size:13px; display:flex; align-items:center; }
+.browser .tab.on { background:#232428; color:#9A9B96; }
+.browser .url { height:40px; display:flex; align-items:center; padding:0 18px; gap:12px; border-bottom:1px solid var(--line); }
+.browser .url div { flex:1; height:28px; border-radius:8px; background:#141517; color:#6A6B67; font-size:14px; display:flex; align-items:center; padding:0 14px; font-family:"JBM", "Pretendard", monospace; }
+.browser .page { padding:40px 70px; color:#6B6C68; }
+.browser .page h1 { font-size:36px; color:#8A8B86; font-weight:800; margin-bottom:12px; letter-spacing:-.5px; }
+.browser .page p { font-size:17px; line-height:29px; max-width:760px; margin-bottom:26px; }
+.browser .cards { display:flex; gap:22px; }
+.browser .card { width:300px; height:250px; border-radius:14px; background:#202125; border:1px solid #2A2B30; padding:22px; font-size:15px; color:#6A6B67; }
+.browser .card b { display:block; font-size:18px; color:#7E7F7A; margin:14px 0 8px; }
+.browser .card i { display:block; height:96px; border-radius:9px; background:#26272B; }
+
+/* 스프레드시트 */
+.sheet { position:absolute; inset:0; font-family:"JBM", "Pretendard", monospace; font-size:14px; color:#5E5F5B; }
+.sheet .row { display:flex; height:30px; border-bottom:1px solid #232428; }
+.sheet .row div { width:132px; border-right:1px solid #232428; display:flex; align-items:center; justify-content:flex-end; padding:0 10px; white-space:nowrap; }
+.sheet .row div:first-child { width:58px; justify-content:center; color:#44453F; background:#18191B; }
+.sheet .row.h div { color:#6E6F6B; background:#1D1E21; justify-content:center; }
+
+/* 캘린더 */
+.cal { position:absolute; inset:0; color:#6B6C68; }
+.cal .head { display:flex; height:56px; border-bottom:1px solid var(--line); padding-left:70px; }
+.cal .head div { flex:1; display:flex; align-items:center; justify-content:center; font-size:15px; color:#7A7B76; font-weight:600; }
+.cal .grid { position:absolute; top:56px; left:0; right:0; bottom:0; }
+.cal .hr { position:absolute; left:0; right:0; border-top:1px solid #232428; font-size:13px; color:#4C4D49; padding-left:14px; }
+.cal .ev { position:absolute; border-radius:8px; background:#25262B; border-left:3px solid #3D3E44; padding:8px 12px; font-size:14px; color:#7C7D78; line-height:19px; }
+.cal .ev.now { background:#2D2E34; border-left-color:#8E8F8B; color:#A7A8A3; }
+.cal .nowline { position:absolute; height:1px; background:#8E8F8B; }
+
+/* 터미널 */
+.term { position:absolute; inset:0; padding:28px 32px; font-family:"JBM", "Pretendard", monospace; font-size:27px; line-height:42px; color:#8E8F8A; white-space:pre; }
+.term .pr { color:#6A6B67; }
+.term .cmd { color:#E6E6E2; }
+.term .caret { display:inline-block; width:15px; height:31px; background:#E6E6E2; vertical-align:-5px; }
+
+/* 메모 (헤드라인) */
+.kick { position:absolute; font-weight:600; color:#6A6B68; white-space:nowrap; letter-spacing:-.4px; }
+.sent { position:absolute; font-weight:700; color:var(--ink); white-space:nowrap; }
+.sent .ln2 { display:block; }
+.caret { position:absolute; width:3px; background:#EDEDE8; }
+
+/* 게임층 */
+.plate { position:absolute; left:0; top:0; width:1920px; height:1080px; }
+.clip { position:absolute; }
+.fx { position:absolute; left:0; top:0; overflow:visible; }
+.ball { position:absolute; border-radius:50%; background:#FAFAF8; }
+
+/* 화면 고정층: 자막·HUD 라벨·엔드 */
+#screen { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+.cap { position:absolute; overflow:hidden; }
+.cap .ln { position:absolute; left:0; top:0; white-space:nowrap; font-weight:800; color:var(--ink); }
+.scrim { position:absolute; pointer-events:none; background:radial-gradient(closest-side, rgba(8,8,9,.86) 48%, rgba(8,8,9,0) 100%); }
+.hud { position:absolute; text-align:right; white-space:nowrap; }
+.hud .a { font-weight:700; color:#EDEDE8; letter-spacing:.3px; }
+.hud .b { font-weight:500; color:#9A9B96; margin-top:6px; letter-spacing:.2px; }
+.tele { position:absolute; font-family:"JBM", "Pretendard", monospace; font-weight:500; color:#CFCFCA; white-space:nowrap; }
+.tele .k { color:#6E6F6B; }
+.toast { position:absolute; text-align:center; white-space:nowrap; }
+.toast .a { font-weight:600; color:#F2F2EE; }
+.toast .b { font-weight:500; color:#B9BAB5; margin-top:4px; }
+#end { position:absolute; opacity:0; }
+#end .wm { font-weight:800; color:var(--ink); line-height:1; }
+#end .dash { background:var(--red); border-radius:3px; }
+#end .l2 { font-weight:500; color:var(--ink2); }
+#end .url { font-family:"JBM", "Pretendard", monospace; font-weight:500; color:#B7B8B3; }
+/* 2단계: 몽타주 브라우저는 탭·주소창만 (본문은 지면선과 엉키지 않게 비운다) */
+.webwin .page { display:none; }

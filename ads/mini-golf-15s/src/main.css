@@ -1,0 +1,71 @@
+/* mini-golf 15s — 공용 스타일 (가로·세로 셸이 함께 쓴다). 색은 게임 팔레트: 흰 선화 · 회색 계조 · 깃발 레드 하나 */
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Regular.woff2") format("woff2"); font-weight:400; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Medium.woff2") format("woff2"); font-weight:500; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-SemiBold.woff2") format("woff2"); font-weight:600; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Bold.woff2") format("woff2"); font-weight:700; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-ExtraBold.woff2") format("woff2"); font-weight:800; font-display:block; }
+@font-face { font-family:"JBM"; src:url("../brand/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); font-weight:400; font-display:block; }
+@font-face { font-family:"JBM"; src:url("../brand/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); font-weight:500; font-display:block; }
+
+:root { --wall:#101113; --wall2:#0B0C0D; --win:#1A1B1E; --bar:#222327; --line:#2E2F34; --ink:#F4F4F1; --ink2:#8E8F8B; --red:#D94D3D; }
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { background:#000; overflow:hidden; }
+#root { position:relative; overflow:hidden; background:var(--wall2); font-family:"Pretendard", sans-serif; color:var(--ink); }
+.clip { position:absolute; left:0; top:0; }
+
+#desk { position:absolute; left:0; top:0; transform-origin:0 0; /* will-change 없음: 합성 레이어 래스터 배율이 실행 타이밍에 따라 달라져 렌더가 비결정적이었다 */
+  background:radial-gradient(120% 90% at 30% 15%, #16171A 0%, var(--wall) 55%, var(--wall2) 100%); overflow:hidden; }
+#dim { position:absolute; left:0; top:0; width:100%; height:100%; background:#050506; opacity:0; pointer-events:none; }
+
+.menubar { position:absolute; left:0; top:0; right:0; height:28px; background:rgba(22,23,25,.94); border-bottom:1px solid #202124;
+  display:flex; align-items:center; gap:22px; padding:0 18px; font-size:13.5px; font-weight:500; color:#C9CAC6; }
+.menubar .app { font-weight:700; color:#E6E6E2; }
+.menubar .sp { flex:1; }
+.menubar svg { width:14px; height:16px; }
+
+.win { position:absolute; background:var(--win); border-radius:11px; overflow:hidden;
+  box-shadow:0 0 0 1px #2A2B30, 0 18px 50px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.35); }
+.win .bar { height:34px; background:var(--bar); border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 13px; gap:8px; }
+.win .bar i { width:12px; height:12px; border-radius:50%; background:#3A3B40; display:block; }
+.win .bar .t { flex:1; text-align:center; font-size:13px; font-weight:500; color:#8C8D8A; margin-right:52px; }
+.win .body { position:absolute; top:34px; left:0; right:0; bottom:0; overflow:hidden; }
+
+/* 에디터 — 내용은 뒤로 물러난다(선화가 가장 밝아야 한다) */
+.code { font-family:"JBM", monospace; font-variant-ligatures:none; font-size:16.5px; line-height:27px; color:#575854; padding-top:12px; white-space:pre; }
+.code .ln { display:inline-block; width:58px; text-align:right; padding-right:20px; color:#404145; }
+.code .k { color:#7B7C77; font-weight:500; }
+.code .c { color:#3B3C3F; }
+.code .n { color:#736A5D; }
+.code .row { display:block; height:27px; }
+.code .row.cur { background:#202126; color:#77787356; }
+.code .row.cur, .code .row.cur .k { color:#8A8B86; }
+.status { position:absolute; left:0; right:0; bottom:0; height:30px; background:#1E1F22; border-top:1px solid var(--line);
+  font-size:13px; font-weight:500; color:#6E6F6B; display:flex; align-items:center; padding-left:330px; gap:22px; }
+.runbtn { display:inline-flex; align-items:center; gap:7px; height:22px; padding:0 11px; border-radius:6px; background:#2A2B30; color:#C9CAC6; font-weight:600; }
+.runbtn svg { width:9px; height:10px; }
+.buildmsg { color:#8E8F8B; }
+
+/* 메모 창 */
+.notes .body { padding:0; }
+.kick { position:absolute; font-weight:600; color:#6A6B68; white-space:nowrap; letter-spacing:-.4px; }
+.kick .mask { position:absolute; left:0; top:0; right:-400px; overflow:hidden; }
+.kick .line { position:absolute; left:0; top:0; white-space:nowrap; }
+.sent { position:absolute; font-weight:700; color:var(--ink); white-space:nowrap; }
+.sent .ln2 { display:block; }
+.caret { position:absolute; width:3px; background:#EDEDE8; }
+.ghost { visibility:hidden; }
+
+/* 게임층 */
+.plate { position:absolute; left:0; width:1920px; height:1080px; }
+.crop { position:absolute; width:220px; height:200px; }
+#fx { position:absolute; left:0; top:0; overflow:visible; }
+#ball { position:absolute; border-radius:50%; background:#FAFAF8; }
+#cursor { position:absolute; width:22px; height:32px; transform-origin:2px 2px; }
+
+/* 엔드카드 (화면 고정층) */
+#end { position:absolute; opacity:0; }
+#end .wm { font-weight:800; color:var(--ink); line-height:1; }
+#end .dash { background:var(--red); border-radius:3px; }
+#end .l1 { font-weight:700; color:var(--ink); }
+#end .l2 { font-weight:500; color:var(--ink2); }
+#end .url { font-family:"JBM", monospace; font-weight:500; color:#B7B8B3; }

@@ -327,6 +327,15 @@ F7 티 우드 스핀 실측 기록(정점 −7m·부분 스윙 −6m) · F8~F11 
 `PlayLog.underTest`(swift test가 10:17에 play.log에 HOLE 69줄 오염 — 전후 0줄 확인) → 테스트 82·lint·CI → **v0.8.9 릴리스** 24e2a49(zip 948,677B
 SHA 5c84746a… → 공개 에셋 재다운로드 SHA 일치 → tap b0e4ef3 → tap·fetch(캐시 SHA 일치)·untap). 로컬 브랜치 3개 삭제(polish-round-2·polish-2-review·par3-variant-frequency).
 
+**광고 영상 (2026-09-29 저녁 ~ 10-01, 미커밋)** — 사용자 요청 "hyperframes로 광고 영상, 가로·세로". 스택은 prienz-animation과 같은 HyperFrames 0.8.70 + GSAP 3.14.2.
+에이전트 정의 `.claude/agents/motion-ad-director.md`(Opus 5.5 · effort max, 새 세션부터 인식). **15초판 4편** `dist/ads/final/mini-golf-15s-{h,v}-{ko,en}.mp4`(B+A 혼합: 코드 에디터
+아래 실제 띠에서 스윙 → 공이 "9홀이 조용히 돌아갑니다."의 마침표 → 클릭 통과 정직 비트 → 엔드카드; 소스 `ads/mini-golf-15s/`). **30초판 4편** `dist/ads/30s/final/mini-golf-30s-{h,v}-{ko,en}.mp4`
+(120BPM 박자 컷 16개: 슬로모 훅 → 마침표 → 창마다 다른 홀 몽타주(거위·강아지·헛스윙·뻐꾸기·"그래도 버디.") → 정직 비트 → brew 타이핑 엔드카드; 소스 `ads/mini-golf-30s/`, 사용자 결정:
+규칙 완화(빠른 컷·펀치인 허용, 흔들림·3D 금지)·추가 캡처 허용·모자 왕관 통일). QA 리포트는 각 final 폴더의 `qa-report.md`(광과민성 0, −14 LUFS, 2회 렌더 MD5 동일).
+**캡처 규칙**: 두 번째 모니터 없음(LG 4K 1대, avfoundation의 "screen 1"은 실제 디스플레이가 아님) → 개발 인스턴스가 주 화면 아래에 뜬다. ScreenCaptureKit **단일 창** 스트림만
+(`ads/mini-golf-15s/capture/capctl.swift`·`run.py`, 30fps 알파 보존), 데스크탑 내용 캡처 금지, 캡처물 `dist/cap/ad/`(커밋 금지), 원본 대용량 삭제. 사용자가 캡처에 민감함 —
+프레임 알파 검사 후 보고. 미판정: 사용자가 8편을 아직 소리와 함께 보지 않음. 미커밋: `ads/`·`.claude/agents/`·`.gitignore`(node_modules) — 사용자 확인 후 `feature/ad-video`로 커밋.
+
 **다음 세션 첫 일**
 1. **다음 마일스톤 인터뷰**(AskUserQuestion): 남은 후보 — 공개 준비(Apple 공증·영어화·소개 영상·게시처, 사용자 "염두") · 라운드 변주(비·강풍·황혼·오늘의 코스·
    미션·위험-보상) · 잔손질 3라운드(IDEAS 잔여: 연습장 모드·사운드팩·활성화 단축키 설정·Cl 이차식). 큰 단위는 착수 전 비판 게이트 + PLAN.md에 M6로 기록
