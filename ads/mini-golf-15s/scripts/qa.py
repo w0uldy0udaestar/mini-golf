@@ -7,7 +7,7 @@
   1) ffprobe: 해상도·fps·길이·프레임 수·오디오 코덱/채널/샘플레이트
   2) 프레임 차분: cv2.resize(프레임, 135×240(세로)/240×135(가로), INTER_AREA) float BGR 평균 절대차 — 최대 ≤ 12, A-B-A 0
   3) 정지 비율: 480px 폭 회색 프레임 평균 밝기차 < 0.35 인 프레임 비율 (목표 37~75%)
-  4) 광과민성: qa/flash-check.py (prienz-animation 공용 키트 복사본) — general ≤ 1, red 0
+  4) 광과민성: qa/flash-check.py (공용 QA 키트 복사본) — general ≤ 1, red 0
   5) 라우드니스: ffmpeg ebur128 (통합 LUFS, 트루피크)
   6) 안전 영역(세로): 컴포지션 ?audit=1 로 글자·공·스틱맨 사각형 → x 70~1010, y 300~1500 (가로는 5% 여백)
 """

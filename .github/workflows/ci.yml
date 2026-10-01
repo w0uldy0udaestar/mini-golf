@@ -20,7 +20,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 (SHA 고정)
+        with:
+          persist-credentials: false
 
       - name: Toolchain
         run: swift --version
@@ -31,6 +33,7 @@ jobs:
       - name: SwiftFormat lint (0.62.1 pinned)
         run: |
           curl -fsSL --retry 3 -o /tmp/swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat.zip
+          echo "7cb1cb1fae04932047c7015441c543848e8e60e1572d808d080e0a1f1661114a  /tmp/swiftformat.zip" | shasum -a 256 -c -
           unzip -q -o /tmp/swiftformat.zip -d /tmp/swiftformat
           chmod +x /tmp/swiftformat/swiftformat
           /tmp/swiftformat/swiftformat --version

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """스토리보드: storyboard.py <h|v> → dist/ads/final/sheets/storyboard-<o>.png (6비트 × 한·영 두 줄, 비트 설명 캡션)"""
-import sys, cv2
+import os, sys, cv2
 from PIL import Image, ImageDraw, ImageFont
-o = sys.argv[1]; F = "/Users/universe/Project/mini-golf/dist/ads/final"
+o = sys.argv[1]; F = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "dist", "ads", "final"))
 BEATS = [(0, "0.00 훅 — 에디터 아래 띠, 톱(실캡처)"), (11, "0.37 임팩트 — 공이 코드 위로"), (75, "2.50 풀백 뒤 — 메모에 타이핑, 공 비행"),
          (112, "3.73 공 = 마침표"), (250, "8.33 클릭이 띠를 지나 '실행'으로"), (420, "14.0 엔드카드 — 끝 정지")]
 W = 480 if o == "h" else 270; H = 270 if o == "h" else 480; CAP = 46 if o == "h" else 70

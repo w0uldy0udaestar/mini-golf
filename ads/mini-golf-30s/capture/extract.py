@@ -9,7 +9,7 @@
 import json, os, shutil, sys
 from PIL import Image
 
-OUT = "/Users/universe/Project/mini-golf/dist/cap/ad/30s"
+OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "dist", "cap", "ad", "30s"))
 # scene: (run, t0, t1, (x0, y0, x1, y1) pt, 설명)
 SEG = {
     "geese-drive":   ("geese", 1.8, 7.2, (0, 480, 1920, 1080), "협곡 티샷(프로펠러캡) — 공이 협곡 바닥으로"),

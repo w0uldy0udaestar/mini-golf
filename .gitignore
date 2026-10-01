@@ -30,3 +30,6 @@ refs/*
 
 # 광고 영상 작업(HyperFrames) — 의존성·렌더 산출물은 커밋하지 않는다 (렌더는 dist/ads/, 캡처는 dist/cap/)
 node_modules/
+
+# 내부 작업 메모 — 공개 저장소에 올리지 않는다 (로컬 전용)
+HANDOFF.md

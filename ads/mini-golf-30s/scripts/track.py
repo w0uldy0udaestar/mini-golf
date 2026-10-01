@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """공 추적(검토용): track.py <scene> <t0> <t1> [xmin xmax] — 밝고 둥근 흰 덩어리(공) 중심을 pt로 출력"""
-import sys, numpy as np, cv2, json
-CAP = "/Users/universe/Project/mini-golf/dist/cap/ad/30s"
+import os, sys, numpy as np, cv2, json
+CAP = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "dist", "cap", "ad", "30s"))
 def balls(sc, t0, t1, xmin=0, xmax=1920):
     y0 = json.load(open(f"{CAP}/{sc}/segment.json"))["box_pt"][1]
     rows = [l.split() for l in open(f"{CAP}/{sc}/times.txt")]

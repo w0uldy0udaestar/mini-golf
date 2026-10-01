@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ⚠️ 개발용 캡처 도구 — 화면 전체를 찍는다. 개인 창이 찍히지 않게 빈 화면에서만 쓰고 결과물은 커밋하지 않는다(앱에는 포함되지 않음).
 """범용 관찰 캡처: capture-demo.py OUTDIR MAXSEC --trigger "PREFIX:dur:gap:count" [...] [--display N] -- <MiniGolf args...>
 --display N: screencapture -D N (1 = 메인). 메인 화면에 다른 앱 창이 겹치면 --screen 1 + --display 2로 두 번째 디스플레이에서 찍는다"""
 import subprocess, sys, time, threading, os, re, signal
