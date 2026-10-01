@@ -27,7 +27,7 @@
 - 메인에서 직접 교차 확인한 원문 5건: Juckett IK 페이지(라이선스·수식), Nature Sci Data 2022
   데이터셋(PMC, CC BY 4.0), Quaternius 팩 페이지(CC0), Crenna·Cuong·Brenière 2001 J Physiol(PMC 원문),
   Rota 2011 walk ratio(Europe PMC 초록). 로컬 SDK 헤더에서 SpriteKit IK API 실존 확인.
-- 이 프로젝트의 과거 자산: 백업 번들의 태그 `exp-transition-lab-20260814`에 임계 감쇠 스프링
+- 이 프로젝트의 과거 자산: 태그 `exp-transition-lab-20260814`에 임계 감쇠 스프링
   (`Spring.swift`, Holden 정해)과 "다운스윙은 스프링으로 추적 불가"(halflife 3ms도 임팩트 프레임을
   못 지킴) 테스트가 보존돼 있다. 스크래치패드 복제본에서만 읽었고 저장소에는 가져오지 않았다.
 

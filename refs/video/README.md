@@ -12,7 +12,7 @@ face-on(정면) 골프 스윙 영상에서 MediaPipe Pose로 관절 키포인트
 ```bash
 uv venv --python 3.12 .venv && . .venv/bin/activate
 uv pip install "mediapipe==0.10.21" opencv-python numpy   # 1.0.x는 macOS에서 graph service 오류 — 0.10 레거시 API 사용
-uvx yt-dlp --js-runtimes node --remote-components ejs:github -f "bv*[ext=mp4][height<=1080]/b" -o rory.mp4 "<URL>"
+# 분석할 영상 파일(rory.mp4 등)은 각자 권리를 확인해 직접 준비한다 — 이 저장소에는 영상이 없다
 # pose_extract.py: segments 딕셔너리에 (t0, t1, x0, x1) — 정면 구간과 크롭(2분할 영상은 정면 패널만)
 python tools/pose_extract.py            # → pose_<name>.json (33 랜드마크 px·가시성)
 python tools/analyze.py slow            # → 이벤트(address·takeaway·top·impact·follow·finish)·파라미터 표·overlay_<name>.png

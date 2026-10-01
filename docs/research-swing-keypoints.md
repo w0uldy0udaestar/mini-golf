@@ -19,7 +19,7 @@
 
 - 영상: YouTube `7RVRBUxfGAE` "Rory Mcilroy Pure Iron Swing with Slow Motion" (Visual Golf, 2023-08-28), 1080p 30fps 74s.
   0~12s 정면 정상 속도, 12~27s 후방(미사용), 27~63s 좌 후방·우 정면 2분할 슬로모션 → 우측 패널(x 960~1920)만 사용.
-  다운로드는 yt-dlp에 Node JS 런타임(`--js-runtimes node --remote-components ejs:github`)이 있어야 403이 안 난다.
+  영상 파일은 저장소에 포함하지 않는다.
 - 키포인트: MediaPipe Pose 0.10.21 `model_complexity=2`, 트래킹 모드. (1.0.1은 macOS에서 "graph service unavailable" 크래시.)
   슬로 1095프레임 미검출 0, 정상 360프레임 미검출 6.
 - 이벤트: 손목 중점 높이 봉우리(톱·피니시)와 그 사이 타깃 쪽 최대 뻗음(팔로), 어드레스 = 톱 전 손이 바닥에 머문 마지막

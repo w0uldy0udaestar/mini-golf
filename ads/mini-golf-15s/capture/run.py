@@ -8,7 +8,7 @@
 """
 import os, subprocess, sys, threading, time
 
-ROOT = "/Users/universe/Project/mini-golf"
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = f"{ROOT}/.build/debug/MiniGolf"
 CAPCTL = os.environ.get("CAPCTL", "capctl")
 OUT = os.environ.get("CAPOUT", "/tmp/cap")
