@@ -155,7 +155,8 @@ extension GameScene {
         case .frogRescue: // 마지막 타에 빠진 공까지 구해 주진 않는다 (onWater는 즉시 기권)
             return strokes + 1 < Phys.maxStrokes
         case .pinMove: // 옮길 만한 그린 폭 + 아직 먼 거리 (옮겨도 티가 나야 한다)
-            return hole.greenEnd - hole.greenStart >= 12 && abs(hole.holeX - ball.x) > 25
+            return hole.gimmick == nil && hole.greenEnd - hole
+                .greenStart >= 12 && abs(hole.holeX - ball.x) > 25 // 장치 그린의 컵은 못 옮긴다
         case .ballSwap: // 다음 샷이 있고, 그 샷이 의미 있을 만큼 멀 때
             return strokes + 1 < Phys.maxStrokes && abs(hole.holeX - ball.x) > 30
         case .gallery: // 지켜볼 샷이 남아 있어야, 이미 와 있으면 안 겹친다

@@ -201,6 +201,9 @@ More loft means more spin and less ball speed — wedges fly short and check up 
   Clear three to unlock the **Sun visor**
 - **Hole weather** — the weather changes from hole to hole: clear (about six holes in ten) · **Rain** (the ball rolls less and greens are slower — drives roll about 40% less, carry is unchanged) ·
   **Gale** (4.5–8 m/s). The same bad weather never comes two holes in a row. Rain streaks and wind lines are drawn only just above the ground, so they never cover your work higher up the screen
+- **Trick greens** — about three holes a round swap the green for a contraption (the first one always within holes 1–2). **Volcano**: the cup sits in a crater on top of a cone —
+  land it in the crater and it rolls into the cup; miss and it tumbles down the slope to the foot (standing at the foot selects a sand-wedge lob for you).
+  **Punchbowl**: the cup is at the bottom of a V-shaped bowl, so anything that gets in rolls into the cup (par 4s and 5s only). Trick holes are always clear weather
 - **Records, badges, hats** — rounds add up: lifetime stats and 15 badges (First birdie · Hole in one · Canyon tamer · Valley walker · Cascade diver · Forest ranger ·
   Summiteer…), with your badge count **unlocking hats for the stickman** (Straw hat → Propeller cap → Top hat → Crown), and missions unlocking the Sun visor.
   New badges are announced after you start aiming on the next hole. ⛳️ menu → Records · Hat
@@ -275,7 +278,7 @@ Clicking another window only releases the keyboard — the game keeps going. Cli
 
 ```sh
 swift build          # debug build
-swift test           # 118 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · save-format compatibility)
+swift test           # 125 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · trick greens · save-format compatibility)
 swiftformat --lint . # style check
 ```
 
@@ -312,6 +315,7 @@ docs/                motion catalog · QA report · research notes
 | `--demo-memes` | Cycles through all 12 meme showpieces |
 | `--seed N` | Fix the course seed |
 | `--weather W` | Force one weather on all nine holes (`clear` / `rain` / `gale`) — works outside observation modes too |
+| `--gimmick K` | Put that trick green on every hole it fits (`volcano` / `funnel`) — works outside observation modes too |
 | `--lang L` | Set the display language (`ko` / `en`, not saved) |
 | `--mission KIND` | Put that mission on every hole (`noDriver` · `fairwayTee` · `longDrive` · `greenInReg` · `midIronGreen` · `shapeShot` · `closeApproach` · `noBunker` · `birdie`) |
 | `--demo-range` | Start in the driving range, cycling clubs every shot (watch the scale ticks and markers) |
@@ -341,6 +345,7 @@ Instrumentation logs: `AIM` · `FLAVOR[epoch]` · `MOTION` · `HOLED` · `OUTBOU
 - [x] Player trademark touches — Tiger's club twirl and uppercut, Bryson's straight arms and arm-lock putting, Rory's impact jump and finish recoil
 - [x] Multiple displays — pick and remember from ⛳️ menu → Display
 - [x] 9 hole missions · hole-by-hole weather (Rain · Gale)
+- [x] Trick greens, first batch (Volcano · Punchbowl)
 - [x] Driving range — carry and total distance per club
 - [x] Custom summon shortcut — set it yourself from the ⛳️ menu
 - [x] English UI — ⛳️ menu → Language

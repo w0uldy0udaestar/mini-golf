@@ -63,6 +63,10 @@ final class DemoOptionsTests: XCTestCase {
         XCTAssertFalse(play.active)
         XCTAssertEqual(play.weather, .gale)
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--weather", "snow"]).weather, "모르는 날씨는 무시 → 시드가 정한다")
+        let trick = DemoOptions(arguments: ["MiniGolf", "--gimmick", "volcano"])
+        XCTAssertEqual(trick.gimmick, .volcano)
+        XCTAssertFalse(trick.active, "장치만 고른 실플레이는 관찰 모드가 아니다")
+        XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--gimmick", "windmill"]).gimmick)
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--lang", "fr"]).lang)
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf"]).mission)
     }

@@ -29,16 +29,24 @@ extension GameScene {
         holeIdx < extras.weatherPlan.count ? extras.weatherPlan[holeIdx] : .clear
     }
 
-    /// 새 라운드: 홀별 날씨 → 바람 반영 코스 → 미션 편성. 연습장은 전부 끈다
+    /// 새 라운드: 장치 그린 → 홀별 날씨 → 바람 반영 코스 → 미션 편성. 연습장은 전부 끈다
     func beginRoundExtras(seed: UInt32, course: inout [Hole]) {
         extras = RoundExtras()
+        course = GimmickKind.dress(course: course, seed: seed, forced: demo.gimmick) // 장치 그린 (M7)
         // --weather는 9홀 전부 그 날씨로 (관찰·골라 치기)
         extras.weatherPlan = demo.weather.map { Array(repeating: $0, count: course.count) }
             ?? Weather.plan(seed: seed, holes: course.count)
+        // 장치 홀은 맑음 — 비에 젖은 분화구(그린 잔디)에선 공이 컵까지 구르지 못하고 선다. 안내도 장치 하나에만 쓴다
+        for i in course.indices where course[i].gimmick != nil {
+            extras.weatherPlan[i] = .clear
+        }
         course = zip(course, extras.weatherPlan).map { $0.withWind($1.wind(base: $0.wind)) }
         extras.missionPlan = MissionKind
             .plan(course: course, seed: seed, weather: extras.weatherPlan) // 그 홀 날씨에 깰 수 있는 것만
-        PlayLog.note("ROUND seed \(seed) weather \(extras.weatherPlan.map(\.rawValue).joined(separator: ","))")
+        PlayLog.note(
+            "ROUND seed \(seed) weather \(extras.weatherPlan.map(\.rawValue).joined(separator: ",")) "
+                + "gimmick \(course.map { $0.gimmick?.rawValue ?? "-" }.joined(separator: ","))"
+        )
     }
 
     /// 홀 시작: 이 홀의 미션을 걸고 인트로를 띄운다
@@ -53,13 +61,13 @@ extension GameScene {
     /// 홀 인트로 — 티 꽂기 의식 동안 화면 가운데에 홀 이름·미션을 한 번 보여 준다. 비·강풍 홀은 날씨 안내가 첫 줄
     func showHoleIntro() {
         var lines: [String] = []
-        if let cue = holeWeather.cue {
+        if let cue = hole.gimmick?.cue ?? holeWeather.cue { // 장치 홀은 맑음이라 둘이 겹치지 않는다
             lines.append(cue)
         }
         if let m = extras.mission {
             lines.append(L("미션 · ", "Mission · ") + m.kind.title(par: m.par))
         }
-        let name = hole.signature.map { " · \($0.displayName)" } ?? ""
+        let name = hole.displayName.map { " · \($0)" } ?? ""
         introShownThisHole = true
         toast(
             L("\(holeIdx + 1)번 홀 · 파 \(hole.par)", "Hole \(holeIdx + 1) · Par \(hole.par)") + name,

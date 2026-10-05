@@ -522,6 +522,11 @@ public enum Ballistics {
         if b.lipped {
             if abs(b.x - hole.holeX) > Phys.cupHalfWidth + 0.2 {
                 b.lipped = false
+            } else if hole.gimmick != nil, b.phase == .roll, abs(b.vx) <= Phys.captureRoll,
+                      abs(b.x - hole.holeX) < Phys.cupHalfWidth {
+                // 장치 그린(M7): 컵이 분지 바닥이라 턱에 맞고 튄 공도 도로 굴러 들어온다 — 튀어 오른 뒤 내려앉으면 들어간 것으로 친다.
+                // 보통 그린의 규칙(컵 옆에 걸쳐 선다)을 쓰면 깔때기 바닥에서 공이 컵을 깔고 앉은 채 2.5초 떨다가 옆으로 밀려났다 (프로브 실측)
+                return .holed
             }
         } else if abs(b.x - hole.holeX) < Phys.cupHalfWidth {
             let speed = hypot(b.vx, b.vy)
