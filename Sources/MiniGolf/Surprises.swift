@@ -146,6 +146,15 @@ extension GameScene {
         let count = surpriseCounts[kind, default: 0]
         guard count < kind.tier.perRoundCap else { return false }
         guard surpriseCounts.values.reduce(0, +) < 5 else { return false }
+        // 장치 그린 홀 (M7 리뷰 m-2·m-4): 공을 옮기는 것들은 컵 80m 안에서 걸지 않는다 — 옮긴 자리가 화산 비탈·깔때기 벽이면 공이 급경사에
+        // 그대로 선다(새는 ±35m까지 옮긴다). 볼링공·스프링클러의 젖은 잔디는 "분지에 들어온 공은 굴러 들어간다"를 깨서 그 홀에선 뺀다
+        if hole.gimmick != nil {
+            switch kind {
+            case .ballSwap, .sprinkler: return false
+            case .birdSteal, .moleNudge, .geese, .dog where abs(hole.holeX - ball.x) < 80: return false
+            default: break
+            }
+        }
         switch kind {
         case .mulligan: // 직전 샷이 나빴을 때만 — 3m도 못 나갔거나 벙커에 들어갔거나
             let remain = abs(hole.holeX - ball.x)

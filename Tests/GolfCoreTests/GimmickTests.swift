@@ -45,7 +45,7 @@ final class GimmickTests: XCTestCase {
         }
     }
 
-    func testShapeAndSurfaces() {
+    func testShapeAndSurfaces() throws {
         for d in Self.dressed {
             let h = d.hole, c = h.holeX, s = d.shape
             let k = Hole.gimmickKnots(cup: c, shape: s)
@@ -63,24 +63,56 @@ final class GimmickTests: XCTestCase {
             }
             let z0 = d.base.ground(at: c)
             switch d.kind {
-            case .volcano: // 테두리는 바닥에서 height만큼 솟고, 발치 띠는 평평하다
+            case .volcano: // 테두리는 바닥에서 height만큼 솟고, 발치 띠는 평평한 러프다
                 for (rim, foot, out) in [
                     (k.rim.lowerBound, k.foot.lowerBound, -1.0),
                     (k.rim.upperBound, k.foot.upperBound, 1.0),
                 ] {
                     XCTAssertEqual(h.ground(at: rim), z0 + s.height, accuracy: 1e-9, tag)
                     XCTAssertEqual(h.ground(at: foot + out * 2), z0, accuracy: 1e-9, tag)
-                    XCTAssertEqual(h.surface(at: foot + out * 2), .apron, tag)
+                    XCTAssertEqual(h.surface(at: foot + out * 2), .rough, tag)
                     XCTAssertEqual(h.surface(at: rim + out * 3), .rough, tag)
-                    XCTAssertGreaterThan(abs(h.slope(at: (rim + foot) / 2)), 0.45, "\(tag): 비탈은 공이 설 수 없게 가파르다")
+                    XCTAssertGreaterThan(abs(h.slope(at: (rim + foot) / 2)), 0.65, "\(tag): 비탈은 공이 설 수 없게 가파르다")
                 }
+                // 화면 끝 릴리프(46px)가 공을 비탈 위에 올려놓지 않는다 — 폭 1280pt 화면 기준, 컵 반대편 발치가 릴리프 거리 밖 (리뷰 M-2)
+                let relief = 46 * h.worldW / 1280
+                let farRoom = h.holeX >= h.teeX ? h.worldW - k.foot.upperBound : k.foot.lowerBound
+                XCTAssertGreaterThan(farRoom, relief + 1, "\(tag): 반대편 발치가 월드 끝에서 \(farRoom)m, 릴리프 \(relief)m")
             case .funnel: // 컵은 원래 그린보다 height만큼 깊다 (컵이 샘플 사이에 있어 바닥은 최대 반 칸만큼 얕다)
                 XCTAssertEqual(h.ground(at: c), z0 - s.height, accuracy: s.bowlSlope * 0.5 + 0.05, tag)
                 XCTAssertEqual(h.surface(at: k.rim.upperBound - 1), .fairway, tag)
                 XCTAssertEqual(h.surface(at: k.rim.lowerBound - 2), .rough, tag)
             }
             // 물·월드 끝과 겹치지 않고, 나머지 홀 정보는 그대로다
-            let lo = k.collar.lowerBound - Hole.gimmickBlend, hi = k.collar.upperBound + Hole.gimmickBlend
+            let extent = try XCTUnwrap(d.base.gimmickLayout(d.kind, shape: s)?.extent)
+            let lo = extent.lowerBound, hi = extent.upperBound
+            // 그린은 장치의 그린 하나뿐이고 에이프런은 없다 — 원래 그린·에이프런 조각이 장치 밖에 남으면 그 위에서 퍼터가 잡히고
+            // '온그린' 판정이 난다 (리뷰 M-1: 깔때기 홀의 64%)
+            let greens = h.segments.filter { $0.type == .green }
+            XCTAssertEqual(greens.count, 1, tag)
+            XCTAssertEqual(greens.first?.from ?? 0, h.greenStart, accuracy: 1e-9, tag)
+            XCTAssertEqual(greens.first?.to ?? 0, h.greenEnd, accuracy: 1e-9, tag)
+            XCTAssertFalse(h.segments.contains { $0.type == .apron }, tag)
+            XCTAssertFalse(
+                h.segments.contains { $0.type == .bunker && $0.to > lo && $0.from < hi },
+                "\(tag): 장치에 걸친 벙커 토막"
+            )
+            XCTAssertFalse(
+                h.obstacles.contains { $0.x + $0.size >= lo && $0.x - $0.size <= hi },
+                "\(tag): 장치 자리의 나무·바위"
+            )
+            XCTAssertEqual(
+                h.obstacles.count,
+                d.base.obstacles.filter { $0.x + $0.size < lo || $0.x - $0.size > hi }.count,
+                tag
+            )
+            // 바깥 이음 띠가 턱을 만들지 않는다 — 원래 지형이 완만한(셀 경사 ≤ 0.3) 자리는 이은 뒤에도 0.5 이하 (리뷰 m-3: 고정 8m는 0.92까지)
+            for zone in [lo ... k.collar.lowerBound, k.collar.upperBound ... hi] {
+                for x in stride(from: zone.lowerBound + 0.5, through: zone.upperBound - 0.5, by: 1.0)
+                    where abs(d.base.slope(at: x)) <= 0.3 {
+                    XCTAssertLessThanOrEqual(abs(h.slope(at: x)), 0.5, "\(tag): 이음 띠 x \(x)")
+                }
+            }
             XCTAssertFalse(h.segments.contains { $0.type == .water && $0.to > lo && $0.from < hi }, tag)
             XCTAssertGreaterThanOrEqual(lo, 1, tag)
             XCTAssertLessThanOrEqual(hi, h.worldW - 1, tag)
@@ -99,12 +131,11 @@ final class GimmickTests: XCTestCase {
         }
     }
 
-    /// 장치의 약속: 분화구·분지 안에 놓인 공은 서지 않고 컵까지 굴러 들어간다. 테두리 꼭짓점 1m 안쪽은 뺀다 — 봉우리 마루라
-    /// 가만히 놓은 공은 걸쳐 설 수 있다(실제 샷은 속도를 갖고 들어온다)
+    /// 장치의 약속: 분화구·분지 안에 놓인 공은 서지 않고 컵까지 굴러 들어간다. 컵 바로 위(±1m)는 뺀다 — 속도 0으로 컵 위에 놓인 공은
+    /// '굴러 들어온' 것이 아니라 판정이 없다
     func testBallInTheBowlAlwaysDrops() {
         for d in Self.dressed {
             let k = Hole.gimmickKnots(cup: d.hole.holeX, shape: d.shape)
-            // 컵 바로 위(±1m)도 뺀다 — 속도 0으로 컵 위에 놓인 공은 '굴러 들어온' 것이 아니라 판정이 없다
             for x in stride(from: k.rim.lowerBound + 1, through: k.rim.upperBound - 1, by: 1.0)
                 where abs(x - d.hole.holeX) >= 1 {
                 let r = release(d.hole, at: x)
@@ -113,6 +144,29 @@ final class GimmickTests: XCTestCase {
                     "\(d.kind) par \(d.hole.par): 컵에서 \(x - d.hole.holeX)m에 놓은 공이 \(r.x - d.hole.holeX)m에 섰다"
                 )
                 XCTAssertLessThan(r.t, 12, "\(d.kind): 굴러 들어가는 데 \(r.t)초")
+            }
+        }
+    }
+
+    /// 분화구 테두리 마루에도 공이 걸쳐 서지 않는다 — 테두리 안쪽 0.12~0.45m는 경사가 0.17 아래로 누운 평형 띠라 공이 섰고, 그 공을 치려면
+    /// 스틱맨이 바깥 비탈 3m 아래에 서야 했다. 테두리 근처에 놓은 공은 안으로 들어가거나(홀인) 바깥 비탈로 굴러 내려간다(발치) — 봉우리 위에는 안 남는다
+    func testNoBallHangsOnTheCraterRim() {
+        for d in Self.dressed where d.kind == .volcano {
+            let k = Hole.gimmickKnots(cup: d.hole.holeX, shape: d.shape)
+            for (rim, inward) in [(k.rim.lowerBound, 1.0), (k.rim.upperBound, -1.0)] {
+                for delta in stride(from: -0.5, through: 0.95, by: 0.05) { // 음수 = 테두리 바깥(비탈 쪽)
+                    let r = release(d.hole, at: rim + inward * delta)
+                    XCTAssertTrue(
+                        r.holed || !k.foot.contains(r.x),
+                        "par \(d.hole.par): 테두리 안쪽 \(delta)m에 놓은 공이 컵에서 \(r.x - d.hole.holeX)m(봉우리 위)에 섰다"
+                    )
+                    if delta >= 0.3 {
+                        XCTAssertTrue(r.holed, "par \(d.hole.par): 테두리 안쪽 \(delta)m에 놓은 공은 들어가야 한다")
+                    }
+                    if delta < 0 {
+                        XCTAssertFalse(r.holed, "par \(d.hole.par): 테두리 바깥 \(-delta)m에 놓은 공은 내려가야 한다")
+                    }
+                }
             }
         }
     }
@@ -127,8 +181,8 @@ final class GimmickTests: XCTestCase {
             ] {
                 let r = release(d.hole, at: rim + (foot - rim) * 0.4)
                 XCTAssertFalse(r.holed)
-                XCTAssertGreaterThan((r.x - foot) * out, -1.5, "비탈 위에 섰다: 발치에서 \((r.x - foot) * out)m")
-                XCTAssertLessThan((r.x - edge) * out, Hole.gimmickBlend + 4, "발치를 지나 멀리 달아났다")
+                XCTAssertGreaterThan((r.x - foot) * out, -0.5, "비탈 위에 섰다: 발치에서 \((r.x - foot) * out)m")
+                XCTAssertLessThan((r.x - edge) * out, 0.5, "발치 띠를 지나 달아났다: 띠 끝에서 \((r.x - edge) * out)m")
                 XCTAssertLessThanOrEqual(abs(d.hole.slope(at: r.x)), Ballistics.steepRest)
             }
         }
@@ -172,7 +226,9 @@ final class GimmickTests: XCTestCase {
     func testForcedDressAndPinStaysPut() throws {
         let course = CourseGenerator.makeCourse(seed: 3)
         let all = GimmickKind.dress(course: course, seed: 3, forced: .volcano)
-        XCTAssertGreaterThanOrEqual(all.filter { $0.gimmick == .volcano }.count, 7, "관찰용 강제: 들어가는 홀 전부")
+        XCTAssertGreaterThanOrEqual(all.filter { $0.gimmick == .volcano }.count, 6, "관찰용 강제: 들어가는 홀 전부")
+        let funnels = GimmickKind.dress(course: course, seed: 3, forced: .funnel)
+        XCTAssertFalse(funnels.contains { $0.gimmick == .funnel && $0.par == 3 }, "강제해도 깔때기는 파3에 걸지 않는다")
         let hole = try XCTUnwrap(all.first { $0.gimmick != nil })
         XCTAssertEqual(hole.movingPin(to: hole.holeX + 3).holeX, hole.holeX, "장치 그린의 컵은 분지 바닥에서 못 옮긴다")
         XCTAssertNil(hole.withGimmick(.funnel), "이미 장치가 있는 홀에는 또 얹지 않는다")

@@ -770,7 +770,8 @@ final class GameScene: SKScene {
         // 샷 종류 키(Tab)를 안 써 본 사람도 '로브'라는 답이 있다는 것을 HUD에서 본다. 이후 ←→·Tab으로 자유 변경
         if strokes > 0, hole.gimmick == .volcano, hole.surface(at: ball.x) != .green {
             let k = Hole.gimmickKnots(cup: hole.holeX, shape: .volcano(worldW: hole.worldW))
-            if ball.x > k.collar.lowerBound - 6, ball.x < k.collar.upperBound + 6 {
+            // 평평한 띠 위에서만 — 띠 밖 2m만 나가도 이 조합이 닿지 않는 자리가 3분의 1이고, 비탈 위에선 발사각이 90°를 넘는다 (리뷰 m-1)
+            if k.collar.contains(ball.x), !k.foot.contains(ball.x) {
                 clubIdx = ClubTable.all.firstIndex { $0.id == "SW" } ?? clubIdx
                 shotShape = .lob
             }

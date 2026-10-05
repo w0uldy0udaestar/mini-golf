@@ -86,9 +86,10 @@ final class GimmickProbe: XCTestCase {
         var totalTimeouts = 0
         var medians: [String: (median: Int, min: Int)] = [:]
         var slowest: [GimmickKind: Double] = [:]
+        var collarRate = 0.0
         for kind in GimmickKind.allCases {
             Self.holedTimes = []
-            var eligible = 0, total = 0
+            var eligible = 0, total = 0, rests = 0, inCollar = 0
             var rows: [String: [(Int, Double, Double)]] = [:] // 자리 → (창, 빗나간 거리, 최장 홀인 시간)
             var samples: [String] = []
             for seed: UInt32 in 1 ... 6 {
@@ -111,10 +112,23 @@ final class GimmickProbe: XCTestCase {
                             }
                         }
                     }
-                    if kind == .volcano { // 발치(평평한 띠 가운데)에서 다시 올리기
+                    if kind == .volcano { // 다시 올리기: 티 쪽 비탈 중턱에 놓은 공이 굴러 내려와 실제로 선 자리에서
                         let k = Hole.gimmickKnots(cup: hole.holeX, shape: .volcano(worldW: hole.worldW))
-                        let x = dir > 0 ? k.foot.lowerBound - 2.5 : k.foot.upperBound + 2.5
-                        spots.append(("foot", x, ["SW", "PW", "9I"], [.standard, .lob]))
+                        let (rim, foot) = dir > 0 ? (k.rim.lowerBound, k.foot.lowerBound) : (
+                            k.rim.upperBound,
+                            k.foot.upperBound
+                        )
+                        let from = rim + (foot - rim) * 0.5
+                        var b = BallState(x: from, y: hole.ground(at: from), phase: .roll)
+                        var t = 0.0
+                        while b.phase != .rest, t < 30 {
+                            _ = Ballistics.step(&b, hole: hole)
+                            t += Phys.dt
+                        }
+                        inCollar += k.collar.contains(b.x) && !k.foot.contains(b.x) ? 1 : 0
+                        rests += 1
+                        spots.append(("foot", b.x, ["SW", "PW", "9I"], [.standard, .lob]))
+                        spots.append(("foot SW로브만", b.x, ["SW"], [.lob])) // 발치에서 자동으로 잡히는 조합
                     }
                     for (name, x, clubs, shapes) in spots {
                         let r = Self.scan(
@@ -136,7 +150,11 @@ final class GimmickProbe: XCTestCase {
                 }
             }
             lines.append("\(kind.rawValue): 얹을 수 있는 홀 \(eligible)/\(total)")
-            for name in ["tee1%", "60m", "110m1%", "foot"] {
+            if rests > 0 {
+                lines.append("  굴러 내려온 공이 발치 띠 안에 선 곳: \(inCollar)/\(rests)")
+                collarRate = Double(inCollar) / Double(rests)
+            }
+            for name in ["tee1%", "60m", "110m1%", "foot", "foot SW로브만"] {
                 guard let v = rows[name], !v.isEmpty else { continue }
                 let w = v.map(\.0).sorted()
                 medians["\(kind.rawValue) \(name)"] = (w[w.count / 2], w[0])
@@ -162,13 +180,16 @@ final class GimmickProbe: XCTestCase {
         }
         // 회귀 대역 (2026-10-05 실측 — 칸 = 백스윙 4%, '1%' 자리는 1%): 물리·치수를 바꾸면 여기서 드러난다
         XCTAssertEqual(totalTimeouts, 0, "끝나지 않는 굴림")
-        // 화산 발치에서 다시 올리기: 실측 중앙 6칸·최소 4칸(SW 로브). 한 번의 압박 샷이 되면 안 된다 — 최소 3칸(12%)
+        // 화산에서 빗나간 공은 발치의 평평한 띠 안에 선다 (실측 46/46) — 띠 밖으로 달아나면 자동 로브가 안 잡히고 닿지도 않는다
+        XCTAssertGreaterThanOrEqual(collarRate, 0.95)
+        // 그 자리에서 다시 올리기: 실측 중앙 7칸·최소 5칸, 자동으로 잡히는 SW 로브만으로도 같다. 한 번의 압박 샷이 되면 안 된다 — 최소 3칸(12%)
         XCTAssertGreaterThanOrEqual(medians["volcano foot"]?.min ?? 0, 3)
         XCTAssertGreaterThanOrEqual(medians["volcano foot"]?.median ?? 0, 5)
-        // 화산 파3 티샷 홀인원: 실측 중앙 5% — 노려 볼 만하되 흔하지 않게 (2~9%)
+        XCTAssertGreaterThanOrEqual(medians["volcano foot SW로브만"]?.min ?? 0, 3, "발치에서 자동으로 잡히는 조합이 통해야 한다")
+        // 화산 파3 티샷 홀인원: 실측 중앙 4% — 노려 볼 만하되 흔하지 않게 (2~9%)
         XCTAssertGreaterThanOrEqual(medians["volcano tee1%"]?.median ?? 0, 2)
         XCTAssertLessThanOrEqual(medians["volcano tee1%"]?.median ?? 99, 9)
-        // 깔때기 어프로치: 실측 60m 중앙 7칸(28%)·110m 16% — 넉넉한 홀이다
+        // 깔때기 어프로치: 실측 60m 중앙 7칸(28%)·110m 17% — 넉넉한 홀이다
         XCTAssertGreaterThanOrEqual(medians["funnel 60m"]?.median ?? 0, 4)
         XCTAssertGreaterThanOrEqual(medians["funnel 110m1%"]?.median ?? 0, 8)
         // 홀인까지(비행 포함) 90%가 화산 9초·깔때기 12초 안 — 깔때기 첫 판은 시계추로 15초였다

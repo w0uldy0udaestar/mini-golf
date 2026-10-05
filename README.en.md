@@ -201,7 +201,7 @@ More loft means more spin and less ball speed — wedges fly short and check up 
   Clear three to unlock the **Sun visor**
 - **Hole weather** — the weather changes from hole to hole: clear (about six holes in ten) · **Rain** (the ball rolls less and greens are slower — drives roll about 40% less, carry is unchanged) ·
   **Gale** (4.5–8 m/s). The same bad weather never comes two holes in a row. Rain streaks and wind lines are drawn only just above the ground, so they never cover your work higher up the screen
-- **Trick greens** — about three holes a round swap the green for a contraption (the first one always within holes 1–2). **Volcano**: the cup sits in a crater on top of a cone —
+- **Trick greens** — three holes a round swap the green for a contraption (the first one almost always within holes 1–2). **Volcano**: the cup sits in a crater on top of a cone —
   land it in the crater and it rolls into the cup; miss and it tumbles down the slope to the foot (standing at the foot selects a sand-wedge lob for you).
   **Punchbowl**: the cup is at the bottom of a V-shaped bowl, so anything that gets in rolls into the cup (par 4s and 5s only). Trick holes are always clear weather
 - **Records, badges, hats** — rounds add up: lifetime stats and 15 badges (First birdie · Hole in one · Canyon tamer · Valley walker · Cascade diver · Forest ranger ·
@@ -278,7 +278,7 @@ Clicking another window only releases the keyboard — the game keeps going. Cli
 
 ```sh
 swift build          # debug build
-swift test           # 125 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · trick greens · save-format compatibility)
+swift test           # 126 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · trick greens · save-format compatibility)
 swiftformat --lint . # style check
 ```
 

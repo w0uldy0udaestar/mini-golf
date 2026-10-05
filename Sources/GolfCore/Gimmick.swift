@@ -27,17 +27,17 @@ public enum GimmickKind: String, Sendable, CaseIterable {
 
 public extension GimmickKind {
     /// 이 홀에 걸 수 있는 장치인가. 깔때기는 파3에 걸지 않는다 — 분지에만 넣으면 들어가는 홀이라 티샷 한 번에 홀인원이 흔해진다
-    /// (프로브: 가장 맞는 클럽으로 백스윙 세기의 14%가 들어간다. 화산은 5%)
+    /// (프로브: 가장 맞는 클럽으로 백스윙 세기의 17%가 들어간다. 화산은 4%)
     func fits(_ hole: Hole) -> Bool {
         !(self == .funnel && hole.par == 3) && hole.withGimmick(self) != nil
     }
 
     /// 9홀에 장치를 입힌 코스. 라운드의 앞·가운데·뒤 세 토막에 하나씩 — 첫 장치는 1·2번 홀 안에 둔다(실플레이 기록상 9홀 완주가 드물어
     /// 뒤쪽 홀에만 나오는 것은 못 본 채 끝난다). 종류는 번갈아, 자리가 안 맞으면 다른 종류로. 코스 생성 난수와 별도 해시 — 같은 시드의 지형은 그대로.
-    /// forced: 관찰용 — 들어가는 홀 전부에 그 장치
+    /// forced: 관찰용 — 걸 수 있는 홀 전부에 그 장치 (깔때기는 여기서도 파3 제외)
     static func dress(course: [Hole], seed: UInt32, forced: GimmickKind? = nil) -> [Hole] {
         if let forced {
-            return course.map { $0.withGimmick(forced) ?? $0 }
+            return course.map { forced.fits($0) ? $0.withGimmick(forced) ?? $0 : $0 }
         }
         var rand = SeededRandom(seed: seed ^ 0xC2B2_AE35)
         _ = rand.next()
@@ -75,11 +75,14 @@ public struct GimmickShape: Sendable, Equatable {
     public var coneSlope: Double // 화산 바깥 비탈 경사 (깔때기는 0)
     public var collar: Double // 장치 둘레의 평평한 띠 폭
 
+    /// 화산 비탈은 경사 0.8 — 뾰족하게 솟고, 빗나간 공이 눈에 보이게 굴러 내려온다(0.55에선 러프 잔디에 붙어 기다가 2.5초 뒤 발치로 옮겨졌다).
+    /// 발치 띠는 러프 7m: 굴러 내려온 공(발치에서 8m/s 안팎)이 띠 안에서 선다. 비탈이 짧아져 반대편 발치가 월드 끝에서 26m 이상 —
+    /// 화면 끝 릴리프(46px, 폭 1280pt·620m 월드에서 22m)가 공을 비탈 위에 올려놓지 않는다 (리뷰 M-2)
     public static func volcano(worldW: Double) -> GimmickShape {
         let half = min(7, max(4.5, 0.015 * worldW))
         return GimmickShape(
-            height: min(9, max(4.5, 0.02 * worldW)), bowlHalf: half, bowlSlope: 0.22, greenHalf: half, coneSlope: 0.55,
-            collar: 5
+            height: min(9, max(4.5, 0.02 * worldW)), bowlHalf: half, bowlSlope: 0.22, greenHalf: half, coneSlope: 0.8,
+            collar: 7
         )
     }
 
@@ -125,20 +128,48 @@ public extension Hole {
         )
     }
 
-    /// 장치 그린을 얹은 사본. 얹을 자리가 안 나오면 nil — 물·절벽에 걸치거나 월드 밖으로 나가는 홀
-    func withGimmick(_ kind: GimmickKind, shape custom: GimmickShape? = nil) -> Hole? {
-        let shape = custom ?? (kind == .volcano ? GimmickShape.volcano(worldW: worldW) : .funnel(worldW: worldW))
-        let c = holeX
+    /// 장치가 지형을 고쳐 쓰는 범위 — 꺾이는 자리와, 원래 지형으로 이어 붙이는 바깥 띠의 끝. 얹을 자리가 안 나오면 nil
+    internal func gimmickLayout(
+        _ kind: GimmickKind,
+        shape: GimmickShape
+    ) -> (knots: GimmickKnots, extent: ClosedRange<Double>)? {
+        let c = holeX, z0 = ground(at: c)
         let k = Self.gimmickKnots(cup: c, shape: shape)
-        let lo = k.collar.lowerBound - Self.gimmickBlend, hi = k.collar.upperBound + Self.gimmickBlend
+        /// 바깥 띠 길이는 그 띠 안에서 원래 지형이 바닥(z0)과 벌어지는 최대 낙차에 비례 — 낙차 ÷ 0.2 (smoothstep 정점 경사 0.3).
+        /// 고정 8m는 낙차 4m에서 셀 경사가 0.75~0.92까지 났다 (리뷰 m-3). 띠가 길어지면 더 먼 지형이 들어오므로 길이가 멎을 때까지 다시 잰다
+        func blend(from edge: Double, out: Double) -> Double {
+            var len = Self.gimmickBlend
+            while len < 24 {
+                let drop = stride(from: 1.0, through: len, by: 1)
+                    .map { abs(ground(at: min(max(edge + out * $0, 0), worldW)) - z0) }.max() ?? 0
+                let need = min(24, max(Self.gimmickBlend, (drop / 0.2).rounded(.up)))
+                if need <= len {
+                    break
+                }
+                len = need
+            }
+            return len
+        }
+        let lo = k.collar.lowerBound - blend(from: k.collar.lowerBound, out: -1)
+        let hi = k.collar.upperBound + blend(from: k.collar.upperBound, out: 1)
         // 티 쪽으로는 티샷이 설 자리(40m)를 남기고, 반대쪽은 월드 안에
         let teeSide = teeX < holeX ? lo - teeX : teeX - hi
         guard gimmick == nil, teeSide >= 40, lo >= 1, hi <= worldW - 1 else { return nil }
         guard !segments.contains(where: { $0.type == .water && $0.to > lo && $0.from < hi }) else { return nil }
-        let z0 = ground(at: c)
         // 원래 지형이 장치 자리에서 크게 오르내리면(절벽·사면 위) 얹지 않는다 — 평평한 바닥을 깔 수 없다
         let span = stride(from: lo, through: hi, by: 1).map { abs(ground(at: $0) - z0) }.max() ?? 0
-        guard span <= 4, z0 + shape.height <= CourseGenerator.elevClamp else { return nil }
+        let fitsClamp = kind == .volcano ? z0 + shape.height <= CourseGenerator.elevClamp : z0 - shape
+            .height >= -CourseGenerator.elevClamp
+        guard span <= 4, fitsClamp else { return nil }
+        return (k, lo ... hi)
+    }
+
+    /// 장치 그린을 얹은 사본. 얹을 자리가 안 나오면 nil — 물·절벽에 걸치거나 월드 밖으로 나가는 홀
+    func withGimmick(_ kind: GimmickKind, shape custom: GimmickShape? = nil) -> Hole? {
+        let shape = custom ?? (kind == .volcano ? GimmickShape.volcano(worldW: worldW) : .funnel(worldW: worldW))
+        guard let (k, extent) = gimmickLayout(kind, shape: shape) else { return nil }
+        let c = holeX, z0 = ground(at: c)
+        let lo = extent.lowerBound, hi = extent.upperBound
 
         let bowlDepth = kind == .volcano ? shape.bowlSlope * shape.bowlHalf : shape.height
         let rimZ = kind == .volcano ? shape.height : 0.0
@@ -162,25 +193,33 @@ public extension Hole {
             if k.collar.contains(x) {
                 elev[i] = z0 + profile(x)
             } else { // 바깥 띠: 평평한 바닥에서 원래 지형으로
-                let u = min(1, (x < c ? k.collar.lowerBound - x : x - k.collar.upperBound) / Self.gimmickBlend)
-                elev[i] = z0 + (elevation[i] - z0) * (u * u * (3 - 2 * u))
+                let u = x < c ? (k.collar.lowerBound - x) / (k.collar.lowerBound - lo) : (x - k.collar.upperBound) /
+                    (hi - k.collar.upperBound)
+                let t = min(1, max(0, u))
+                elev[i] = z0 + (elevation[i] - z0) * (t * t * (3 - 2 * t))
             }
         }
-        var segs: [Segment]
-        let (cl, cr) = (k.collar.lowerBound, k.collar.upperBound)
-        switch kind {
-        case .volcano: // 발치는 에이프런 띠, 바깥 비탈은 러프 — 빗나간 공이 멀리 달아나지 않고 발치에 선다
-            segs = CourseGenerator.carve(segments, from: cl, to: cr, type: .apron)
-            segs = CourseGenerator.carve(segs, from: k.foot.lowerBound, to: k.foot.upperBound, type: .rough)
-        case .funnel: // 둘레는 러프 띠 — 짧게 떨어져 굴러오는 공은 여기서 죽는다. 벽은 페어웨이 (GimmickShape.funnel 주석)
-            segs = CourseGenerator.carve(segments, from: cl, to: cr, type: .rough)
+        // 원래 그린·에이프런은 장치가 대신한다 — 장치 밖에 남는 조각까지 페어웨이로 바꾼다. 남겨 두면(원래 그린은 18~28m에 핀이 한쪽으로 치우쳐
+        // 깔때기 홀의 64%에서 띠 밖으로 삐져나왔다) 그 위에서 퍼터가 잡히고 '온그린'·미션 성공 판정이 났다. 장치에 걸친 벙커는 통째로 러프로 —
+        // 0.2m짜리 모래 토막이 남았다 (리뷰 M-1)
+        var segs = segments.map { seg -> Segment in
+            switch seg.type {
+            case .green, .apron: Segment(from: seg.from, to: seg.to, type: .fairway)
+            case .bunker where seg.to > lo && seg.from < hi: Segment(from: seg.from, to: seg.to, type: .rough)
+            default: seg
+            }
+        }
+        // 둘레 띠는 러프 — 화산은 굴러 내려온 공이, 깔때기는 짧게 떨어져 굴러오는 공이 여기서 선다. 화산 비탈도 러프, 깔때기 벽은 페어웨이
+        segs = CourseGenerator.carve(segs, from: k.collar.lowerBound, to: k.collar.upperBound, type: .rough)
+        if kind == .funnel {
             segs = CourseGenerator.carve(segs, from: k.rim.lowerBound, to: k.rim.upperBound, type: .fairway)
         }
         let green = kind == .volcano ? k.rim : (c - shape.greenHalf) ... (c + shape.greenHalf)
         segs = CourseGenerator.carve(segs, from: green.lowerBound, to: green.upperBound, type: .green)
         return Hole(
             par: par, dist: dist, holeX: holeX, worldW: worldW,
-            greenStart: green.lowerBound, greenEnd: green.upperBound, apronStart: teeX < holeX ? cl : cr,
+            greenStart: green.lowerBound, greenEnd: green.upperBound,
+            apronStart: teeX < holeX ? k.collar.lowerBound : k.collar.upperBound,
             segments: segs.sorted { $0.from < $1.from }, elevation: elev,
             waterRange: waterRange, greenSlope: 0,
             teeX: teeX,
