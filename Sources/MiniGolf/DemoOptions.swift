@@ -26,6 +26,9 @@ struct DemoOptions: Equatable {
     var turnForce = false // --demo-turn: 첫 샷을 뒤로 22m 떨어뜨려 걷기 방향 반전(제자리 돌기) 관찰
     var replanForce = false // --demo-replan: 걷는 도중 공을 옮긴다 (1차 12m 앞 → 재계획, 2차 25m 뒤 → 재출발+턴)
     var girForce = false // --demo-gir: 파4·5에서 그린 위 정지면 무조건 원온/투온 연출
+    var hotkeyUI = false // --demo-hotkey-ui: 단축키 기록 대화상자를 1.5s 뒤 띄우고 견본 조합을 넣어 본다 (키 입력 없이)
+    var rangeStart = false // --demo-range: 연습장으로 시작, 샷마다 클럽을 돌려 친다 (눈금·표식·HUD 관찰)
+    var noticeForce = false // --demo-notice: 홀아웃마다 견본 배지 알림을 대기열에 (알림 타이밍 관찰 — 다음 홀 조준 뒤에 뜨는가)
     var trademarkForce = false // --demo-trademark: 풀샷마다 굿샷 판정(트월 강제) + 리그 덤프 로그
     var motionShowcase = false // --demo-motions: 모션 42종 순서 시연 (카탈로그 캡처)
     var motionCursorStart = 0 // --motion-cursor N: 시연을 N번째 모션부터 (부분 재캡처)
@@ -44,6 +47,9 @@ struct DemoOptions: Equatable {
     var shape: ShotShape? // --demo-shape punch|lob: 매 샷 종류 강제 (탄도·폼 관찰, Tab 없이)
     var swingStyle: SwingStyle? // --style: 스윙 스타일 지정 (관찰·캡처용, 저장 안 함)
     var hat: Hat? // --hat: 모자 시각 검증 (저장 안 함)
+    var lang: Lang? // --lang ko|en: 표시 언어 지정 (저장 안 함 — 영어 화면 관찰)
+    var weather: Weather? // --weather clear|rain|gale: 라운드 날씨 강제 (M6 — 실플레이에서도 듣는다: 날씨만 고르고 치는 용도)
+    var mission: MissionKind? // --mission KIND: 모든 홀에 그 미션 (M6 관찰)
 
     init() {}
 
@@ -75,6 +81,9 @@ struct DemoOptions: Equatable {
         turnForce = flag("--demo-turn")
         replanForce = flag("--demo-replan")
         girForce = flag("--demo-gir")
+        noticeForce = flag("--demo-notice")
+        rangeStart = flag("--demo-range")
+        hotkeyUI = flag("--demo-hotkey-ui")
         trademarkForce = flag("--demo-trademark")
         motionShowcase = flag("--demo-motions")
         motionCursorStart = value("--motion-cursor").flatMap { Int($0) }.map { max(0, $0) } ?? 0 // 음수 방어
@@ -92,5 +101,8 @@ struct DemoOptions: Equatable {
         shape = value("--demo-shape").flatMap(ShotShape.init(rawValue:))
         swingStyle = value("--style").flatMap(SwingStyle.init(rawValue:))
         hat = value("--hat").flatMap(Hat.init(rawValue:))
+        lang = value("--lang").flatMap(Lang.init(rawValue:))
+        weather = value("--weather").flatMap(Weather.init(rawValue:))
+        mission = value("--mission").flatMap(MissionKind.init(rawValue:))
     }
 }

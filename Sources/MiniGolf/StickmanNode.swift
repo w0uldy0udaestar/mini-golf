@@ -70,6 +70,7 @@ struct WalkFlavorEvent {
     let t0: Double
     let dur: Double
     var soundFired = false // 휘파람 등 한 번만 나는 소리 (2026-09-29)
+    var notes = 0 // 이미 띄운 음표 수 — 휘파람·콧노래는 소리를 꺼도 보인다 (2026-10-05)
 }
 
 func mix(_ a: CGPoint, _ b: CGPoint, _ u: Double) -> CGPoint {
@@ -356,6 +357,11 @@ final class StickmanNode: SKNode {
     }
 
     /// 해금 모자 착용 — 게임 회색 베이스 유지, 왕관만 포인트 (보상의 특별함)
+    /// 머리 중심 (이 노드 좌표) — 음표·말풍선처럼 머리에서 나오는 연출의 기준점
+    var headPoint: CGPoint {
+        headShape.position
+    }
+
     func setHat(_ hat: Hat) {
         hatNode.removeAllChildren()
         let path = CGMutablePath()
@@ -364,6 +370,14 @@ final class StickmanNode: SKNode {
         case .none:
             hatNode.path = nil
             return
+        case .visor: // 선바이저 — 이마 띠 + 앞으로 길게 뻗은 챙 (머리 꼭대기는 비운다). 미션 보상
+            path.addRect(CGRect(x: -8.5, y: 6.2, width: 17, height: 3))
+            path.move(to: CGPoint(x: 6, y: 6.2))
+            path.addLine(to: CGPoint(x: 17.5, y: 4.4))
+            path.addLine(to: CGPoint(x: 17.5, y: 6.4))
+            path.addLine(to: CGPoint(x: 6, y: 9.2))
+            path.closeSubpath()
+            fill = NSColor(white: 0.9, alpha: 0.95)
         case .straw: // 챙 넓은 밀짚 — 납작 타원 챙 + 낮은 크라운
             path.addEllipse(in: CGRect(x: -14, y: 6.5, width: 28, height: 4.5))
             path.addRect(CGRect(x: -6.5, y: 8, width: 13, height: 5.5))
@@ -448,6 +462,7 @@ final class StickmanNode: SKNode {
         let head = CGPoint(x: shoulder.x + dir * r.headDx, y: shoulder.y + r.headDy)
         headShape.position = head
         headRim.position = head
+        hatNode.xScale = dir < 0 ? -1 : 1 // 선바이저처럼 앞뒤가 있는 모자는 보는 방향을 따른다 (대칭 모자는 영향 없음)
 
         let f1 = m(r.foot1), f2 = m(r.foot2)
         let k1 = m(joints.knee1), k2 = m(joints.knee2)

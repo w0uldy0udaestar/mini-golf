@@ -48,6 +48,25 @@ final class DemoOptionsTests: XCTestCase {
         XCTAssertNil(DemoOptions(arguments: ["MiniGolf"]).shape)
     }
 
+    func testM6FlagsParse() {
+        let d = DemoOptions(arguments: [
+            "MiniGolf", "--weather", "rain", "--mission", "noDriver", "--lang", "en", "--demo-range", "--demo-notice",
+        ])
+        XCTAssertEqual(d.weather, .rain)
+        XCTAssertEqual(d.mission, .noDriver)
+        XCTAssertEqual(d.lang, .en)
+        XCTAssertTrue(d.rangeStart)
+        XCTAssertTrue(d.noticeForce)
+        XCTAssertTrue(d.active, "--demo-* 가 하나라도 있으면 관찰 모드")
+        // 날씨·언어만 고른 실플레이는 관찰 모드가 아니다 (기록이 쌓이고 키보드를 잡는다)
+        let play = DemoOptions(arguments: ["MiniGolf", "--weather", "gale", "--lang", "ko"])
+        XCTAssertFalse(play.active)
+        XCTAssertEqual(play.weather, .gale)
+        XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--weather", "snow"]).weather, "모르는 날씨는 무시 → 시드가 정한다")
+        XCTAssertNil(DemoOptions(arguments: ["MiniGolf", "--lang", "fr"]).lang)
+        XCTAssertNil(DemoOptions(arguments: ["MiniGolf"]).mission)
+    }
+
     func testMalformedOrMissingValuesFallBack() {
         let d = DemoOptions(arguments: ["MiniGolf", "--seed", "abc", "--surprise", "unicorn", "--demo-power"])
         XCTAssertNil(d.seed)

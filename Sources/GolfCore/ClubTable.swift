@@ -16,6 +16,21 @@ public struct Club: Sendable, Equatable {
     public var isPutter: Bool {
         cat == .putter
     }
+
+    /// 표시 이름 (현재 언어). `name`은 한국어 원본 그대로 둔다 — 테이블이 static let이라 언어를 바꿔도 다시 만들어지지 않는다
+    public var displayName: String {
+        L(name, englishName)
+    }
+
+    private var englishName: String {
+        switch id {
+        case "DR": "Driver"
+        case "PW": "Pitching wedge"
+        case "SW": "Sand wedge"
+        case "PT": "Putter"
+        default: id.hasSuffix("W") ? "\(id.dropLast()) wood" : "\(id.dropLast()) iron"
+        }
+    }
 }
 
 public enum ClubTable {

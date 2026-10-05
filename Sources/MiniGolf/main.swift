@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import GolfCore
 import SpriteKit
 
@@ -6,7 +7,7 @@ import SpriteKit
 // MiniGolf — 데스크탑 오버레이 골프
 // 조작: ←→ 클럽 · ↑↓ 백스윙 · Space 스윙 · R 새 라운드 · Esc 종료
 // 활성화: 메뉴바 ⛳️ 좌클릭 = 재개/일시정지 토글 · 우클릭 = 메뉴
-// (전역 단축키는 사용자 설정 기능으로 추후 도입 — IDEAS.md)
+// 불러내기 단축키: ⛳️ 메뉴에서 사용자가 직접 정한다 (기본값 없음 — Hotkey.swift)
 // 다른 창을 클릭해 포커스를 잃어도 게임은 계속 흐른다 — 입력 홀드만 풀린다 (일시정지는 ⛳️ 수동)
 // ═══════════════════════════════════════════════════════════════
 
@@ -23,6 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: NSMenu!
     private var soundMenuItem: NSMenuItem!
     private var contrastMenuItem: NSMenuItem!
+    private var practiceMenuItem: NSMenuItem!
+    private var hotkeyMenuItem: NSMenuItem!
+    private var summonedFrom: NSRunningApplication? // 단축키로 불러내기 직전에 쓰던 앱 — 쉬게 할 때 키보드를 돌려준다
     private var monitorMenu: NSMenu!
     private var hatMenu: NSMenu!
     private var lastResignKey = Date.distantPast
@@ -47,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         let demo = DemoOptions(arguments: ProcessInfo.processInfo.arguments) // 관찰·디버그 플래그 — 실플레이는 전부 기본값
+        L10n.lang = demo.lang ?? LanguagePref.saved.resolved // 표시 언어 — 씬·메뉴가 문구를 만들기 전에
         // --screen N: 실행 시 모니터 지정 (0부터, 검증·프리셋용 — 저장하지 않음)
         var flagScreen: NSScreen?
         if let n = demo.screenIndex, NSScreen.screens.indices.contains(n) {
@@ -97,9 +102,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(scene)
-        NSApp.activate(ignoringOtherApps: true)
+        if demo.active {
+            // 관찰 모드는 자동 플레이라 키보드가 필요 없다 — 포커스를 가져가면 사용자가 치던 글자가 게임으로 샌다(R·Esc·Space가 전부 동작).
+            // 창만 앞에 띄운다 (2026-10-05)
+            panel.orderFrontRegardless()
+        } else {
+            panel.makeKeyAndOrderFront(nil)
+            panel.makeFirstResponder(scene)
+            NSApp.activate(ignoringOtherApps: true)
+        }
 
         // 포커스 상실 → 입력 홀드만 해제 (키는 어차피 아래 앱으로 가고, 게임은 멈추지 않는다)
         NotificationCenter.default.addObserver(
@@ -113,6 +124,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         setupStatusItem()
+
+        if !demo.active { // 관찰 모드는 사용자의 실제 게임과 같은 조합을 두고 다투지 않는다
+            HotkeyCenter.shared.onPress = { [weak self] in self?.hotkeyPressed() }
+            HotkeyCenter.shared.register(HotkeyCombo.saved) // 그사이 다른 앱이 가져갔으면 조용히 실패 — 메뉴 제목이 알려 준다
+            updateHotkeyMenuTitle()
+        }
+        if demo.hotkeyUI { // 기록 대화상자 관찰 (키 입력 없이): 띄우고 → 견본 조합을 처리 함수에 직접 넣어 본다
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.demoHotkeyUI() }
+        }
+    }
+
+    // ── 불러내기 단축키 ──
+
+    private func updateHotkeyMenuTitle() {
+        let saved = HotkeyCombo.saved
+        let title: String = if let saved, HotkeyCenter.shared.current == saved {
+            L("불러내기 단축키: \(saved.display)…", "Summon shortcut: \(saved.display)…")
+        } else if let saved { // 저장은 돼 있는데 등록이 안 됐다 = 다른 앱이 먼저 잡았다
+            L("불러내기 단축키: \(saved.display) (다른 앱이 사용 중)…", "Summon shortcut: \(saved.display) (in use elsewhere)…")
+        } else {
+            L("불러내기 단축키 설정…", "Set summon shortcut…")
+        }
+        hotkeyMenuItem?.title = title
+    }
+
+    @objc private func configureHotkey() {
+        let before = HotkeyCombo.saved
+        HotkeyCenter.shared.unregister() // 기록하는 동안에는 지금 단축키가 게임을 토글하지 않게 (그 조합을 다시 고를 수도 있다)
+        switch HotkeyRecorder(current: before).run() {
+        case let .set(combo): HotkeyCombo.saved = combo // 등록은 대화상자가 이미 했다
+        case .cleared: HotkeyCombo.saved = nil
+        case .cancelled: HotkeyCenter.shared.register(before)
+        }
+        updateHotkeyMenuTitle()
+        panel.makeKeyAndOrderFront(nil) // 대화상자가 가져간 키보드를 게임으로
+        panel.makeFirstResponder(scene)
+    }
+
+    /// 단축키 = ⛳️ 좌클릭과 같은 토글. 손이 키보드에 있으니, 쉬게 할 때는 불러내기 전에 쓰던 앱으로 키보드를 돌려준다
+    /// (⛳️ 클릭은 마우스가 이미 다른 곳을 누를 수 있지만, 단축키는 그대로 두면 일시정지된 게임이 계속 키를 받는다)
+    private func hotkeyPressed() {
+        if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
+            summonedFrom = front
+        }
+        toggleGame()
+        if scene.isGamePaused, let app = summonedFrom, !app.isTerminated {
+            if #available(macOS 14.0, *) {
+                NSApp.yieldActivation(to: app)
+                app.activate()
+            } else {
+                app.activate(options: [])
+            }
+        }
+    }
+
+    /// --demo-hotkey-ui: 대화상자를 포커스 없이 띄우고, 0.8초 뒤 견본 키 입력(⌃⌥⇧F19)을 처리 함수에 직접 넘긴다 — 시스템에 키를 보내지 않는다
+    private func demoHotkeyUI() {
+        let recorder = HotkeyRecorder(current: HotkeyCombo(
+            keyCode: UInt32(kVK_ANSI_G),
+            modifiers: UInt32(controlKey | optionKey),
+            label: "G"
+        ))
+        let timer = Timer(timeInterval: 0.8, repeats: false) { _ in
+            print("HOTKEYUI open window \(recorder.window.windowNumber)")
+            fflush(stdout)
+            let feed = Timer(timeInterval: 1.6, repeats: false) { _ in
+                let plain = NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                    characters: "g", charactersIgnoringModifiers: "g", isARepeat: false, keyCode: UInt16(kVK_ANSI_G)
+                )
+                print("HOTKEYUI plain-key passes through: \(plain.map { recorder.handle($0) != nil } ?? false)")
+                let combo = NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: [.control, .option, .shift], timestamp: 0,
+                    windowNumber: 0,
+                    context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false,
+                    keyCode: UInt16(kVK_F19)
+                )
+                if let combo {
+                    _ = recorder.handle(combo)
+                }
+            }
+            RunLoop.main.add(feed, forMode: .common)
+        }
+        RunLoop.main.add(timer, forMode: .common) // 모달 실행 루프에서도 돈다
+        let outcome = recorder.run(activate: false)
+        print("HOTKEYUI outcome \(outcome) registered \(HotkeyCenter.shared.current?.display ?? "-")")
+        HotkeyCenter.shared.unregister() // 견본 조합은 남기지 않는다 (저장도 하지 않았다)
+        fflush(stdout)
     }
 
     // ── 모니터 전환 ──
@@ -155,44 +254,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "⛳️"
-        statusItem.button?.toolTip = "게임 재개 / 일시정지 — 우클릭: 메뉴"
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        buildStatusMenu()
+    }
 
+    /// 메뉴 본체 — 언어를 바꾸면 통째로 다시 만든다 (항목 제목이 전부 문구)
+    private func buildStatusMenu() {
+        statusItem.button?.toolTip = L("게임 재개 / 일시정지 — 우클릭: 메뉴", "Resume / pause — right-click for the menu")
         statusMenu = NSMenu()
-        statusMenu.addItem(withTitle: "게임 재개 / 일시정지", action: #selector(toggleGame), keyEquivalent: "g").target = self
-        statusMenu.addItem(withTitle: "새 라운드", action: #selector(newRound), keyEquivalent: "r").target = self
-        soundMenuItem = statusMenu.addItem(withTitle: "사운드", action: #selector(toggleSound), keyEquivalent: "")
+        statusMenu.addItem(
+            withTitle: L("게임 재개 / 일시정지", "Resume / Pause"), action: #selector(toggleGame), keyEquivalent: "g"
+        ).target = self
+        statusMenu.addItem(withTitle: L("새 라운드", "New Round"), action: #selector(newRound), keyEquivalent: "r")
+            .target = self
+        practiceMenuItem = statusMenu.addItem(
+            withTitle: L("연습장", "Driving Range"), action: #selector(togglePractice), keyEquivalent: ""
+        )
+        practiceMenuItem.target = self
+        soundMenuItem = statusMenu.addItem(
+            withTitle: L("사운드", "Sound"),
+            action: #selector(toggleSound),
+            keyEquivalent: ""
+        )
         soundMenuItem.target = self
         soundMenuItem.state = SoundKit.shared.enabled ? .on : .off
         contrastMenuItem = statusMenu.addItem(
-            withTitle: "고대비 모드 (밝은 배경용)",
+            withTitle: L("고대비 모드 (밝은 배경용)", "High Contrast (for light backgrounds)"),
             action: #selector(toggleContrast),
             keyEquivalent: ""
         )
         contrastMenuItem.target = self
         contrastMenuItem.state = Theme.highContrast ? .on : .off
-        let hatItem = statusMenu.addItem(withTitle: "모자", action: nil, keyEquivalent: "")
+        let hatItem = statusMenu.addItem(withTitle: L("모자", "Hat"), action: nil, keyEquivalent: "")
         hatMenu = NSMenu()
         hatItem.submenu = hatMenu // 항목은 열 때마다 재구성 (해금 반영)
-        let styleItem = statusMenu.addItem(withTitle: "스윙 스타일", action: nil, keyEquivalent: "")
+        let styleItem = statusMenu.addItem(withTitle: L("스윙 스타일", "Swing Style"), action: nil, keyEquivalent: "")
         styleMenu = NSMenu()
         styleItem.submenu = styleMenu
         rebuildStyleMenu()
-        statusMenu.addItem(withTitle: "기록", action: #selector(showRecords), keyEquivalent: "").target = self
-        let monitorItem = statusMenu.addItem(withTitle: "모니터", action: nil, keyEquivalent: "")
+        statusMenu.addItem(withTitle: L("기록", "Records"), action: #selector(showRecords), keyEquivalent: "")
+            .target = self
+        let monitorItem = statusMenu.addItem(withTitle: L("모니터", "Display"), action: nil, keyEquivalent: "")
         monitorMenu = NSMenu()
         monitorItem.submenu = monitorMenu // 항목은 열 때마다 재구성 (연결 상태 반영)
+        hotkeyMenuItem = statusMenu.addItem(withTitle: "", action: #selector(configureHotkey), keyEquivalent: "")
+        hotkeyMenuItem.target = self
+        updateHotkeyMenuTitle()
+        // 언어 — 제목을 두 언어로 적어 지금 언어를 못 읽어도 찾을 수 있게
+        let languageItem = statusMenu.addItem(withTitle: "언어 · Language", action: nil, keyEquivalent: "")
+        let languageMenu = NSMenu()
+        for pref in LanguagePref.allCases {
+            let item = languageMenu.addItem(
+                withTitle: pref.title,
+                action: #selector(selectLanguage(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = pref.rawValue
+            item.state = LanguagePref.saved == pref ? .on : .off
+        }
+        languageItem.submenu = languageMenu
         statusMenu.addItem(.separator())
-        statusMenu.addItem(withTitle: "종료", action: #selector(quit), keyEquivalent: "q").target = self
+        statusMenu.addItem(withTitle: L("종료", "Quit"), action: #selector(quit), keyEquivalent: "q").target = self
         // statusItem.menu는 비워둔다 — 지정하면 좌클릭이 메뉴를 열어 버튼 동작을 삼킨다
+    }
+
+    @objc private func selectLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let pref = LanguagePref(rawValue: raw) else { return }
+        LanguagePref.saved = pref
+        L10n.lang = pref.resolved
+        buildStatusMenu()
+        scene.languageChanged()
     }
 
     @objc private func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
             rebuildMonitorMenu()
             rebuildHatMenu()
+            practiceMenuItem.state = scene.inPractice ? .on : .off // R로 나갔을 수도 있다 — 열 때마다 맞춘다
             statusItem.menu = statusMenu
             statusItem.button?.performClick(nil) // 메뉴 추적은 이 안에서 동기 실행됨
             statusItem.menu = nil
@@ -230,7 +371,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let unlocked = Records.shared.unlockedHats
         for hat in Hat.allCases {
             let locked = !unlocked.contains(hat)
-            let title = locked ? "\(hat.title) — 잠김 (배지 \(hat.need)개)" : hat.title
+            let title = locked
+                ? L("\(hat.title) — 잠김 (\(hat.lockHint))", "\(hat.title) — locked (\(hat.lockHint))") : hat.title
             let item = hatMenu.addItem(withTitle: title, action: #selector(selectHat(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = hat.rawValue
@@ -282,6 +424,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func newRound() {
         scene.newRound()
         if scene.isGamePaused {
+            toggleGame()
+        }
+    }
+
+    /// 연습장 ↔ 라운드. 연습장에서 다시 누르면 새 라운드로 돌아온다 (진행 중이던 라운드는 접힌다 — R과 같은 무게)
+    @objc private func togglePractice() {
+        if scene.inPractice {
+            scene.newRound()
+        } else {
+            scene.enterPractice()
+        }
+        if scene.isGamePaused { // '새 라운드'와 같은 규칙 — 멈춰 있었으면 재개
             toggleGame()
         }
     }

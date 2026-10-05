@@ -179,8 +179,8 @@ public enum ShotShape: String, CaseIterable, Sendable {
     public var label: String? {
         switch self {
         case .standard: nil
-        case .punch: "펀치"
-        case .lob: "로브"
+        case .punch: L("펀치", "Punch")
+        case .lob: L("로브", "Lob")
         }
     }
 
@@ -188,8 +188,11 @@ public enum ShotShape: String, CaseIterable, Sendable {
     public func cue(for cat: ClubCategory) -> String? {
         switch self {
         case .standard: nil
-        case .punch: cat == .wedge ? "낮게 굴려 붙인다" : "낮게 뚫고 조금 구른다"
-        case .lob: "높이 띄워 바로 세운다"
+        case .punch: cat == .wedge ? L("낮게 굴려 붙인다", "low, runs up to the pin") : L(
+                "낮게 뚫고 조금 구른다",
+                "low and boring, some roll"
+            )
+        case .lob: L("높이 띄워 바로 세운다", "high, stops fast")
         }
     }
 }
@@ -337,9 +340,10 @@ public enum Ballistics {
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다.
     /// wind: 바람 덮어쓰기(m/s) — 돌풍 서프라이즈가 비행 중 잠시 넘긴다 (nil이면 홀 바람)
     /// kind: 공 종류 — 공 바꿔치기 서프라이즈의 고무공·볼링공 (표준은 배율 전부 1)
+    /// weather: 라운드 날씨 — 비는 굴림 감속·바운스 반발 배율 (맑음·강풍은 전부 1, 강풍의 바람은 홀 데이터에 이미 들어 있다)
     public static func step(
         _ b: inout BallState, hole: Hole, dt: Double = Phys.dt, wind: Double? = nil,
-        kind: BallKind = .standard
+        kind: BallKind = .standard, weather: Weather = .clear
     ) -> StepEvent {
         var ev = StepEvent.none
         switch b.phase {
@@ -390,7 +394,13 @@ public enum Ballistics {
                     ev = .bounce(speed: -vn, surface: surfType)
                     var vt = b.vx * tx + b.vy * ty
                     // 속도 의존 반발 — 강한 낙하일수록 잔디에 파묻힌다
-                    let e = min(0.85, surfType.restitution * kind.restitutionScale * (1 - min(0.55, -vn / 60)))
+                    let e = min(
+                        0.85,
+                        surfType.restitution * kind.restitutionScale * weather.restitutionScale * (1 - min(
+                            0.55,
+                            -vn / 60
+                        ))
+                    )
                     // 접지점 상대속도로 구름/미끄러짐 판정. 구름이면 (5/7, 2/7) 각운동량 보존 해 —
                     // 릴리스·체크·백업 세 상태가 추가 튜닝 없이 이 식에서 저절로 나온다 (Biber 2023)
                     var w = Phys.ballRadius * b.spin * .pi / 30 * b.spinSign // 스핀 표면속도 (백스핀 +)
@@ -435,7 +445,10 @@ public enum Ballistics {
             // 잔디 걸림은 라이저(> steepRest)에선 없다 — 43° 잔디에서 느린 공이 멈춰 서면(러프 9 > 중력 7.9) 정착 규칙이 꼬리에 세운다 (협곡 프로브 13/72)
             let grip = surfType == .green || surfType == .apron || abs(s) > steepRest
                 ? 1.0 : 1 + max(0, 1 - abs(b.vx) / Phys.gripSpeed)
-            let dv = surfType.roll * kind.rollScale * grip * dt
+            // 비: 젖은 잔디가 공을 더 빨리 세운다 (정지 조건도 같은 값으로 — 아래). 라이저(> steepRest)는 제외 — 급경사 정지·정착 규칙이
+            // 마른 날과 같아야 협곡 탈출·정착 거리 실측이 날씨와 무관하다 (잔디 걸림 grip과 같은 예외)
+            let rollDecel = surfType.roll * (abs(s) > steepRest ? 1 : weather.rollScale)
+            let dv = rollDecel * kind.rollScale * grip * dt
             if abs(b.vx) <= dv {
                 b.vx = 0
             } else {
@@ -467,7 +480,7 @@ public enum Ballistics {
             // 정지: 정지 마찰(굴림 저항 × staticHoldGain)이 경사 중력을 이길 때만 — 페어웨이 0.34·러프 0.70까지. 라이저(> 0.3)는 정착 규칙이 바닥으로
             let hold = abs(s) > steepRest ? 1.0 : Phys
                 .staticHoldGain // 라이저(> 0.3)는 main과 같은 정지 조건 — 정착 텔레포트 거리 불변 (리뷰 #2)
-            if abs(b.vx) < Phys.stopSpeed, surfType.roll * hold >= Phys.g * abs(s) * 0.85 {
+            if abs(b.vx) < Phys.stopSpeed, rollDecel * hold >= Phys.g * abs(s) * 0.85 {
                 b.vx = 0
                 b.phase = .rest
                 if settleOffSteepSlope(&b, hole: hole) {
@@ -528,15 +541,15 @@ public enum Ballistics {
 /// 스코어 이름 (홀인원·이글·버디…)
 public func scoreName(strokes: Int, par: Int) -> String {
     if strokes == 1 {
-        return "홀인원!"
+        return L("홀인원!", "Hole in one!")
     }
     switch strokes - par {
-    case ...(-3): return "알바트로스"
-    case -2: return "이글"
-    case -1: return "버디"
-    case 0: return "파"
-    case 1: return "보기"
-    case 2: return "더블 보기"
+    case ...(-3): return L("알바트로스", "Albatross")
+    case -2: return L("이글", "Eagle")
+    case -1: return L("버디", "Birdie")
+    case 0: return L("파", "Par")
+    case 1: return L("보기", "Bogey")
+    case 2: return L("더블 보기", "Double bogey")
     default: return "+\(strokes - par)"
     }
 }

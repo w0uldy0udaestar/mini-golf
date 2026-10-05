@@ -91,6 +91,9 @@ extension GameScene {
 
     /// 훅마다 호출 — 발동이면 종류를 돌려주고 라운드 카운트를 올린다. 홀인 직전(그린 위)은 제외 (부당함 방지)
     func rollSurprise(hook: SurpriseHook) -> SurpriseKind? {
+        if inPractice { // 연습장은 거리 재는 자리 — 돌풍·캐디·낮잠이 측정을 흐린다
+            return nil
+        }
         if hook == .ballRest, hole.surface(at: ball.x) == .green {
             return nil
         }
@@ -298,7 +301,7 @@ extension GameScene {
 
         bird.run(.sequence([
             .wait(forDuration: 1.0),
-            .run { [weak self] in self?.toast("새다!", sub: nil) },
+            .run { [weak self] in self?.toast(L("새다!", "A bird!"), sub: nil) },
             swoopIn,
             .run { [weak self] in // 낚아채기 — 공이 새를 따라간다
                 guard let self else { return }
@@ -314,7 +317,7 @@ extension GameScene {
             .wait(forDuration: 0.4),
             .run { [weak self] in
                 self?.react(.shoo)
-                self?.toast("새가 공을 물어갔다!", sub: nil)
+                self?.toast(L("새가 공을 물어갔다!", "The bird took your ball!"), sub: nil)
             },
             SKAction.group([carry, .wait(forDuration: 0.7)]),
             .run { [weak self] in // 드롭
@@ -373,7 +376,7 @@ extension GameScene {
             popUp,
             .run { [weak self] in
                 self?.react(.startled)
-                self?.toast("두더지!", sub: nil)
+                self?.toast(L("두더지!", "A mole!"), sub: nil)
             },
             .wait(forDuration: 0.35),
             .run { [weak self] in // 톡 — 공이 짧게 굴러간다
@@ -400,6 +403,7 @@ extension GameScene {
     private func playFrogRescue() {
         endShotTrail()
         roundHadWater = true // 물에 들어간 건 사실 — 무입수 배지는 안 주고 통계도 센다 (벌타만 면제)
+        missionWater() // 미션도 '물에 빠진 샷'으로 본다 (티샷 미션 실패, 벌타는 없으니 타수 미션은 그대로)
         if !demo.active {
             Records.shared.waterBalls += 1
             Records.shared.save()
@@ -461,7 +465,7 @@ extension GameScene {
                 guard let self else { return }
                 FX.ripple(on: self, at: splashPt)
                 SoundKit.shared.ribbit()
-                toast("개구리?", sub: nil)
+                toast(L("개구리?", "A frog?"), sub: nil)
             },
             SKAction.group([.fadeIn(withDuration: 0.3), .moveBy(x: 0, y: 12, duration: 0.3)]),
             .run { [weak self, weak frog] in // 공을 물고 간다
@@ -481,7 +485,7 @@ extension GameScene {
                 ballNode.removeAllActions()
                 ballNode.position = CGPoint(x: bankPt.x, y: bankPt.y + 5.5)
                 SoundKit.shared.bounce(speed: 1.5, surface: hole.surface(at: bankX))
-                toast("개구리 구조!", sub: "벌타 면제")
+                toast(L("개구리 구조!", "Frog rescue!"), sub: L("벌타 면제", "no penalty"))
                 react(.fistPump)
             },
             .run { [weak frog] in frog?.xScale *= -1 },
@@ -502,7 +506,7 @@ extension GameScene {
         gustWind = sign * strength
         gustUntil = lastTime + 1.3
         SoundKit.shared.gust(dur: 1.3)
-        toast("돌풍!", sub: sign > 0 ? "→ \(Int(strength))m/s" : "← \(Int(strength))m/s")
+        toast(L("돌풍!", "Gust!"), sub: sign > 0 ? "→ \(Int(strength))m/s" : "← \(Int(strength))m/s")
         if !(swingStyle.clubTwirl && lastShotGood) { // 타이거 트월과 리그가 겹치면 트월을 우선 (리뷰 m5)
             react(.startled)
         }
@@ -567,7 +571,7 @@ extension GameScene {
             .run { [weak self] in
                 guard let self else { return }
                 react(.laugh)
-                toast("멀리건!", sub: "직전 샷 무료 · 공이 돌아간다")
+                toast(L("멀리건!", "Mulligan!"), sub: L("직전 샷 무료 · 공이 돌아간다", "last shot is free · the ball comes back"))
                 SoundKit.shared.chime()
             },
             .wait(forDuration: 0.6),
@@ -581,6 +585,7 @@ extension GameScene {
                 ]))
                 ball = BallState(x: restore.x, y: hole.ground(at: restore.x))
                 strokes = restore.strokes
+                missionUndoLastShot() // 무른 샷이 만든 미션 판정도 없던 일로 (M6)
                 updateHUD()
             },
             .wait(forDuration: 0.6),
@@ -623,7 +628,7 @@ extension GameScene {
         napNode = z
         SoundKit.shared.snore()
         z.run(.repeatForever(.sequence([.wait(forDuration: 2.4), .run { SoundKit.shared.snore() }])))
-        toast("쿨쿨…", sub: nil)
+        toast(L("쿨쿨…", "Zzz…"), sub: nil)
         if demo.active {
             print("SURPRISE nap start aim \(String(format: "%.1f", aimTime))")
             fflush(stdout)
@@ -639,7 +644,7 @@ extension GameScene {
         napNode = nil
         react(.startled)
         SoundKit.shared.chirp()
-        toast("앗!", sub: nil)
+        toast(L("앗!", "Whoa!"), sub: nil)
         if demo.active {
             print("SURPRISE nap wake")
             fflush(stdout)
@@ -679,7 +684,7 @@ extension GameScene {
             lastMeow: lastTime
         )
         SoundKit.shared.meow()
-        toast("고양이가 왔다", sub: "커서를 쫓는다…")
+        toast(L("고양이가 왔다", "A cat showed up"), sub: L("커서를 쫓는다…", "chasing your cursor…"))
     }
 
     private func updateCat(_ c: CatState, dt: Double, currentTime: TimeInterval) {
@@ -769,7 +774,7 @@ extension GameScene {
         roll.timingMode = .easeOut
         ballNode.run(roll)
         react(.shoo)
-        toast("툭.", sub: "고양이가 공을 건드렸다")
+        toast(L("툭.", "Tap."), sub: L("고양이가 공을 건드렸다", "the cat nudged your ball"))
         if demo.active {
             print("SURPRISE cat paw → \(Int(newX))")
             fflush(stdout)
@@ -963,7 +968,7 @@ extension GameScene {
         label.verticalAlignmentMode = .center
         label.position = CGPoint(x: 0, y: 6)
         let sub = SKLabelNode(fontNamed: HUDFont.regular)
-        sub.text = "멀리건"
+        sub.text = L("멀리건", "Mulligan")
         sub.fontSize = 8
         sub.fontColor = NSColor(white: 0.4, alpha: 1)
         sub.verticalAlignmentMode = .center

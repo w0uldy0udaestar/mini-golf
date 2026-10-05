@@ -63,14 +63,14 @@ public enum SignatureKind: String, Sendable, CaseIterable {
     /// HUD 홀 이름 (2026-09-29 판정 "뭐가 달라진지 체감이 안 돼" — 실제 골프장처럼 홀에 이름을 붙여 지형에 말을 단다. 수치가 아니라 이름)
     public var displayName: String {
         switch self {
-        case .skyTee: "절벽 티"
-        case .summitGreen: "산정 그린"
-        case .canyon: "협곡"
-        case .terraces: "계단"
-        case .valley: "계곡"
-        case .ridge: "능선"
-        case .cascade: "폭포"
-        case .forest: "숲"
+        case .skyTee: L("절벽 티", "Cliff Tee")
+        case .summitGreen: L("산정 그린", "Summit Green")
+        case .canyon: L("협곡", "Canyon")
+        case .terraces: L("계단", "Terraces")
+        case .valley: L("계곡", "Valley")
+        case .ridge: L("능선", "Ridge")
+        case .cascade: L("폭포", "Cascade")
+        case .forest: L("숲", "Forest")
         }
     }
 }
@@ -201,6 +201,19 @@ public struct Hole: Sendable {
             segments: segments, elevation: elevation,
             waterRange: waterRange, greenSlope: greenSlope,
             teeX: teeX, obstacles: obstacles, signature: signature, wind: w
+        )
+    }
+
+    /// 연습장 (2026-10-05, M6): 평지 페어웨이 한 줄. 컵·그린은 월드 밖(공이 닿을 수 없는 자리)에 둬 홀인·그린 판정이 일어나지 않는다 —
+    /// 화면에도 깃발이 안 보인다. 폭 350m: 드라이버 풀샷(총 ≈ 287m)이 티(30m)에서 쳐도 오른쪽 벽에 안 닿는다
+    public static func range(worldW: Double = 350, teeX: Double = 30) -> Hole {
+        Hole(
+            par: 4, dist: worldW - teeX, holeX: worldW + 40, worldW: worldW,
+            greenStart: worldW + 30, greenEnd: worldW + 50, apronStart: worldW + 25,
+            segments: [Segment(from: 0, to: worldW, type: .fairway)],
+            elevation: [Double](repeating: 0, count: Int(worldW) + 62),
+            waterRange: nil, greenSlope: 0,
+            teeX: teeX
         )
     }
 

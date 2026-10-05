@@ -226,7 +226,7 @@ extension GameScene {
             },
             .repeatForever(.sequence([emit, .wait(forDuration: 0.05)])),
         ]), withKey: "spray")
-        toast("틱틱…?", sub: nil)
+        toast(L("틱틱…?", "Tick tick…?"), sub: nil)
         log3(String(format: "SPRINKLER up x %.1f (ball %.1f vx %.1f)", sx, ball.x, ball.vx))
     }
 
@@ -248,7 +248,7 @@ extension GameScene {
                 }
                 if !s.hit {
                     s.hit = true
-                    toast("물줄기!", sub: "공이 젖었다")
+                    toast(L("물줄기!", "Sprinkler!"), sub: L("공이 젖었다", "the ball got wet"))
                     if !(swingStyle.clubTwirl && lastShotGood) { // 트월 리그와 겹치면 트월 우선 (돌풍과 같은 규칙)
                         react(.startled)
                     }
@@ -301,17 +301,22 @@ extension GameScene {
         if let cloth = flagNode.children.last {
             FX.flagWave(cloth)
         }
-        toast("바람이…?", sub: nil)
+        toast(L("바람이…?", "The wind…?"), sub: nil)
         log3(String(format: "WINDREV warn wind %+.1f", old))
         afterSurprise(0.6) { [weak self] in // 0.9는 낮은 탄도에서 착지 뒤에 떨어졌다 (리뷰 nit 1 — 6회 중 3회)
             guard let self else { return }
             replaceHole(hole.withWind(new))
             SoundKit.shared.gust(dur: 1.1)
             func arrow(_ w: Double) -> String {
-                abs(w) < 0.5 ? "무풍" : "\(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
+                abs(w) < 0.5 ? L("무풍", "calm") : "\(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
             }
             let stillFlying = ball.phase == .fly
-            toast("바람이 돌았다!", sub: "이제 \(arrow(new)) · \(stillFlying ? "이 홀 끝까지" : "다음 샷부터 · 이 홀 끝까지")")
+            let until = stillFlying ? L("이 홀 끝까지", "for the rest of this hole")
+                : L("다음 샷부터 · 이 홀 끝까지", "from the next shot · rest of this hole")
+            toast(
+                L("바람이 돌았다!", "The wind turned!"),
+                sub: L("이제 \(arrow(new)) · \(until)", "now \(arrow(new)) · \(until)")
+            )
             if !(swingStyle.clubTwirl && lastShotGood) {
                 react(.startled)
             }
@@ -375,7 +380,7 @@ extension GameScene {
         addChild(node)
         surprise3.caddie = CaddieState(node: node, side: side, phase: .arriving)
         SoundKit.shared.hmm()
-        toast("캐디가 온다", sub: nil)
+        toast(L("캐디가 온다", "The caddie is coming"), sub: nil)
         let dur = Double(abs(targetX - startX)) / 130
         node.run(.sequence([
             .group([.fadeIn(withDuration: 0.25), groundWalk(from: startX, to: targetX, dur: dur)]),
@@ -423,7 +428,7 @@ extension GameScene {
                     SoundKit.shared.pluck()
                     react(.nod)
                     toast(
-                        "캐디: \(rec.name) 어때요?",
+                        L("캐디: \(rec.displayName) 어때요?", "Caddie: how about the \(rec.displayName.lowercased())?"),
                         sub: "\(Int(remain.rounded()))m" + caddieWindNote(tail: tail, rise: rise)
                     )
                     log3(
@@ -435,7 +440,7 @@ extension GameScene {
         } else {
             let advice = caddieAdvice(lie: lie, tail: tail, rise: rise)
             react(.nod)
-            toast("캐디: \(advice)", sub: nil)
+            toast(L("캐디: \(advice)", "Caddie: \(advice)"), sub: nil)
             log3("CADDIE advice \"\(advice)\" club \(current.id) remain \(Int(remain))")
         }
         afterSurprise(1.8) { [weak self] in self?.caddieLeave(aborted: false) }
@@ -443,10 +448,12 @@ extension GameScene {
 
     private func caddieWindNote(tail: Double, rise: Double) -> String {
         if abs(tail) >= 2 {
-            return tail < 0 ? " · 맞바람 \(Int(abs(tail).rounded()))m/s" : " · 뒷바람 \(Int(tail.rounded()))m/s"
+            return tail < 0 ? L(" · 맞바람 \(Int(abs(tail).rounded()))m/s", " · headwind \(Int(abs(tail).rounded()))m/s")
+                : L(" · 뒷바람 \(Int(tail.rounded()))m/s", " · tailwind \(Int(tail.rounded()))m/s")
         }
         if abs(rise) >= 4 {
-            return rise > 0 ? " · 오르막 \(Int(rise.rounded()))m" : " · 내리막 \(Int((-rise).rounded()))m"
+            return rise > 0 ? L(" · 오르막 \(Int(rise.rounded()))m", " · uphill \(Int(rise.rounded())) m")
+                : L(" · 내리막 \(Int((-rise).rounded()))m", " · downhill \(Int((-rise).rounded())) m")
         }
         return ""
     }
@@ -454,24 +461,30 @@ extension GameScene {
     /// 클럽이 이미 맞을 때의 한 줄 — 가장 결정적인 변수 하나만
     private func caddieAdvice(lie: Surface, tail: Double, rise: Double) -> String {
         if lie == .bunker {
-            return "모래는 파워가 반이에요 — 백스윙 크게"
+            return L("모래는 파워가 반이에요 — 백스윙 크게", "sand halves your power — take a big backswing")
         }
         if tail <= -2 {
-            return "맞바람 \(Int(abs(tail).rounded()))m/s — 넉넉하게요"
+            return L(
+                "맞바람 \(Int(abs(tail).rounded()))m/s — 넉넉하게요",
+                "headwind \(Int(abs(tail).rounded()))m/s — take plenty"
+            )
         }
         if tail >= 2 {
-            return "뒷바람이에요 — 조금 덜 쳐도 돼요"
+            return L("뒷바람이에요 — 조금 덜 쳐도 돼요", "it's downwind — you can ease off a little")
         }
         if rise >= 4 {
-            return "오르막 \(Int(rise.rounded()))m — 한 클럽 더 본다 생각하고"
+            return L(
+                "오르막 \(Int(rise.rounded()))m — 한 클럽 더 본다 생각하고",
+                "uphill \(Int(rise.rounded())) m — think one more club"
+            )
         }
         if rise <= -4 {
-            return "내리막이라 굴러가요 — 살살"
+            return L("내리막이라 굴러가요 — 살살", "it's downhill and will run — go easy")
         }
         if lie == .rough {
-            return "러프예요 — 조금 세게"
+            return L("러프예요 — 조금 세게", "you're in the rough — a bit harder")
         }
-        return "좋은 선택이에요. 믿고 치세요"
+        return L("좋은 선택이에요. 믿고 치세요", "good choice. Trust it")
     }
 
     private func caddieLeave(aborted: Bool) {
@@ -562,7 +575,7 @@ extension GameScene {
                 guard let self else { return }
                 if i == 1 {
                     react(.startled)
-                    toast("\(h12)시 정각", sub: "뻐꾹 × \(h12)")
+                    toast(L("\(h12)시 정각", "\(h12) o'clock"), sub: L("뻐꾹 × \(h12)", "cuckoo × \(h12)"))
                 }
                 log3("CUCKOO call \(i)/\(h12)")
             })
@@ -641,7 +654,7 @@ extension GameScene {
             .run { [weak self] in
                 guard swarm.parent != nil else { return } // 같은 프레임 정리 가드 (리뷰 minor 2)
                 SoundKit.shared.hoot()
-                self?.toast("밤 \(h12)시", sub: "부엉— 반딧불이 날아든다")
+                self?.toast(L("밤 \(h12)시", "\(h12) at night"), sub: L("부엉— 반딧불이 날아든다", "hoot— fireflies drift in"))
                 self?.log3("CUCKOO hoot 1")
             },
             .wait(forDuration: 1.6),
@@ -700,7 +713,7 @@ extension GameScene {
 
         SoundKit.shared.woof()
         afterSurprise(0.35) { SoundKit.shared.woof() }
-        toast("멍멍!", sub: nil)
+        toast(L("멍멍!", "Woof woof!"), sub: nil)
         log3(String(
             format: "DOG enter from %@ drop target %.1f (%+.1fm)",
             fromRight ? "right" : "left",
@@ -722,7 +735,7 @@ extension GameScene {
                 surprise3.dogCarrying = true
                 SoundKit.shared.bounce(speed: 2, surface: hole.surface(at: ball.x))
                 react(.startled)
-                toast("강아지!", sub: "공을 물고 달아난다")
+                toast(L("강아지!", "A puppy!"), sub: L("공을 물고 달아난다", "running off with your ball"))
                 log3(String(format: "DOG grab @%.1f", ball.x))
             },
             .wait(forDuration: 0.35),
@@ -748,7 +761,10 @@ extension GameScene {
                 SoundKit.shared.bounce(speed: 2.5, surface: hole.surface(at: dropX))
                 updateHUD()
                 let d = Int(abs(abs(hole.holeX - dropX) - oldRemain).rounded())
-                toast("여기 놨다!", sub: closer ? "\(d)m 가까워졌다" : "\(d)m 멀어졌다")
+                toast(
+                    L("여기 놨다!", "Dropped it here!"),
+                    sub: closer ? L("\(d)m 가까워졌다", "\(d) m closer") : L("\(d)m 멀어졌다", "\(d) m farther")
+                )
                 react(closer ? .laugh : .slump)
                 log3(String(
                     format: "DOG drop %.1f → %.1f (%@ %dm)",

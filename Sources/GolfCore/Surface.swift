@@ -5,13 +5,13 @@ public enum Surface: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .tee: "티"
-        case .fairway: "페어웨이"
-        case .rough: "러프"
-        case .apron: "에이프런"
-        case .green: "그린"
-        case .bunker: "벙커"
-        case .water: "워터"
+        case .tee: L("티", "Tee")
+        case .fairway: L("페어웨이", "Fairway")
+        case .rough: L("러프", "Rough")
+        case .apron: L("에이프런", "Fringe")
+        case .green: L("그린", "Green")
+        case .bunker: L("벙커", "Bunker")
+        case .water: L("워터", "Water")
         }
     }
 
@@ -108,9 +108,9 @@ public enum RoughLie: String, Sendable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .normal: "러프"
-        case .flier: "플라이어 러프"
-        case .deep: "깊은 러프"
+        case .normal: L("러프", "Rough")
+        case .flier: L("플라이어 러프", "Flier lie")
+        case .deep: L("깊은 러프", "Deep rough")
         }
     }
 }

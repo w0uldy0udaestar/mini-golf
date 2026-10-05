@@ -160,7 +160,7 @@ extension GameScene {
                     FX.flagWave(cloth)
                 }
                 SoundKit.shared.pluck()
-                self?.toast("핀이…?", sub: nil)
+                self?.toast(L("핀이…?", "The pin…?"), sub: nil)
             },
             .wait(forDuration: 0.6),
             .run { [weak self] in
@@ -185,7 +185,13 @@ extension GameScene {
                     guard let self else { return }
                     FX.flagWave(flagNode)
                 }
-                toast("핀 이동!", sub: farther ? "\(delta)m 멀어졌다" : "\(-delta)m 가까워졌다")
+                toast(
+                    L("핀 이동!", "Pin moved!"),
+                    sub: farther ? L("\(delta)m 멀어졌다", "\(delta) m farther") : L(
+                        "\(-delta)m 가까워졌다",
+                        "\(-delta) m closer"
+                    )
+                )
                 react(farther ? .slump : .fistPump)
                 updateHUD()
                 if demo.active {
@@ -230,7 +236,7 @@ extension GameScene {
                     .fadeOut(withDuration: 0.25),
                     .removeFromParent(),
                 ]))
-                self?.toast("택배?", sub: nil)
+                self?.toast(L("택배?", "A delivery?"), sub: nil)
             },
             .wait(forDuration: 0.5),
             .run { [weak self, weak parcel] in // 상자가 열리고 공이 바뀐다 — 헌 공은 상자로, 새 공은 상자에서
@@ -256,7 +262,11 @@ extension GameScene {
                     arcHop(from: landPt, to: ballPt, lift: 30, dur: 0.42),
                 ]))
                 react(kind == .rubber ? .laugh : .startled)
-                toast(kind == .rubber ? "고무공!" : "볼링공!", sub: kind == .rubber ? "다음 한 샷 — 튄다" : "다음 한 샷 — 안 뜬다")
+                toast(
+                    kind == .rubber ? L("고무공!", "Rubber ball!") : L("볼링공!", "Bowling ball!"),
+                    sub: kind == .rubber ? L("다음 한 샷 — 튄다", "next shot only — it bounces")
+                        : L("다음 한 샷 — 안 뜬다", "next shot only — it won't fly")
+                )
                 if demo.active {
                     print("BALLKIND \(kind.rawValue)")
                     fflush(stdout)
@@ -353,7 +363,7 @@ extension GameScene {
         addChild(node)
         galleryState = GalleryState(node: node, targets: targets, phase: .arriving, verdict: nil)
         SoundKit.shared.murmur()
-        toast("갤러리가 모였다", sub: "다음 샷을 지켜본다")
+        toast(L("갤러리가 모였다", "A gallery gathers"), sub: L("다음 샷을 지켜본다", "they're watching your next shot"))
         afterSurprise(2.8) { [weak self] in
             guard let self, var g = galleryState, g.phase == .arriving else { return }
             g.phase = .watching
@@ -424,7 +434,13 @@ extension GameScene {
         case .groan: SoundKit.shared.groan()
         }
         if terminal == .none { // 홀인·입수는 그쪽 토스트가 우선
-            toast(verdict == .cheer ? "와아—!" : verdict == .clap ? "짝짝짝" : "우우…", sub: nil)
+            toast(
+                verdict == .cheer ? L("와아—!", "Yeaah—!") : verdict == .clap ? L("짝짝짝", "Clap clap clap") : L(
+                    "우우…",
+                    "Booo…"
+                ),
+                sub: nil
+            )
         }
         afterSurprise(2.6) { [weak self] in self?.galleryLeave() }
         if demo.active {
@@ -512,7 +528,7 @@ extension GameScene {
         }
         SoundKit.shared.honk()
         afterSurprise(0.6) { SoundKit.shared.honk() }
-        toast("거위?", sub: nil)
+        toast(L("거위?", "Geese?"), sub: nil)
         let sitter = geese[1] // 둘째가 공 자리에 선다 (leadTarget − spacing ≈ 공 + 4px)
         flock.run(.sequence([
             .wait(forDuration: dur),
@@ -524,7 +540,7 @@ extension GameScene {
                 }
                 sitter.run(.group([.scaleY(to: 0.78, duration: 0.25), .moveBy(x: 0, y: -2, duration: 0.25)]))
                 SoundKit.shared.honk()
-                toast("거위 떼!", sub: "한 마리가 공 위에 앉았다")
+                toast(L("거위 떼!", "A gaggle of geese!"), sub: L("한 마리가 공 위에 앉았다", "one sat down on your ball"))
             },
             .wait(forDuration: 0.5),
             .run { [weak self] in
