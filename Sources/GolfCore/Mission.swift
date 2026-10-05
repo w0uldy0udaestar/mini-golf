@@ -36,7 +36,7 @@ public enum MissionKind: String, Sendable, CaseIterable {
         case .noDriver, .fairwayTee: hole.par >= 4
         case .longDrive:
             hole.par >= 4 && hole.dist >= 330 && Self.longDriveReachable(hole, weather: weather)
-        case .greenInReg: Rival.reachesGreenInRegulation(hole, weather: weather)
+        case .greenInReg: MissionBot.reachesGreenInRegulation(hole, weather: weather)
         case .noBunker: hole.segments.contains { $0.type == .bunker }
         default: true
         }
@@ -49,7 +49,7 @@ public enum MissionKind: String, Sendable, CaseIterable {
         var b = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX))
         Ballistics.launch(
             &b, club: driver, heightPct: heightPct, lie: .tee, dir: dir,
-            punch: Rival.treeT(hole, x: b.x, dir: dir) * 0.85, slope: hole.slope(at: b.x) * Phys.stanceSlopeRatio
+            punch: MissionBot.treeT(hole, x: b.x, dir: dir) * 0.85, slope: hole.slope(at: b.x) * Phys.stanceSlopeRatio
         )
         var t = 0.0
         while b.phase != .rest, t < 60 {
@@ -87,13 +87,15 @@ public enum MissionKind: String, Sendable, CaseIterable {
         }
     }
 
-    /// 9홀 미션 편성 — 홀마다 가능한 것 중 가중 추첨, 바로 앞 홀과 같은 미션은 피한다. 코스 생성 난수와 별도 해시
-    public static func plan(course: [Hole], seed: UInt32, weather: Weather = .clear) -> [MissionKind] {
+    /// 9홀 미션 편성 — 홀마다 그 홀의 날씨에서 가능한 것 중 가중 추첨, 바로 앞 홀과 같은 미션은 피한다. 코스 생성 난수와 별도 해시.
+    /// weather: 홀별 날씨 (`Weather.plan`) — 모자란 홀은 맑음
+    public static func plan(course: [Hole], seed: UInt32, weather: [Weather] = []) -> [MissionKind] {
         var rand = SeededRandom(seed: seed ^ 0x5BD1_E995)
         _ = rand.next()
         var out: [MissionKind] = []
-        for hole in course {
-            var pool = allCases.filter { $0 != out.last && $0.eligible(for: hole, weather: weather) }
+        for (i, hole) in course.enumerated() {
+            let w = i < weather.count ? weather[i] : .clear
+            var pool = allCases.filter { $0 != out.last && $0.eligible(for: hole, weather: w) }
             if pool.isEmpty { // 도달 불가 — 조건 없는 미션이 넷(아이언·샷 종류·붙이기·버디)이라 직전 것을 빼도 남는다
                 pool = [.birdie]
             }

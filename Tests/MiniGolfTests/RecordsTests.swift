@@ -16,11 +16,22 @@ final class RecordsTests: XCTestCase {
         XCTAssertEqual(r.badges, [.firstRound, .firstBirdie], "사라진 배지 이름은 건너뛴다")
         XCTAssertEqual(r.hat, .straw)
         XCTAssertEqual(r.missionsCleared, 0)
-        XCTAssertEqual(r.rivalWon + r.rivalLost + r.rivalTied, 0)
-        XCTAssertEqual(r.totalPar, 160, "옛 기록의 파 합은 홀당 4로 추정")
-        XCTAssertTrue(r.recentOver.isEmpty)
-        // 누적 평균 (170 − 160) / 40 = +0.25 → 라이벌은 0.15타 못 치는 +0.40
-        XCTAssertEqual(r.rivalTargetOverPar, 0.40, accuracy: 1e-9)
+    }
+
+    /// 라이벌(2026-10-05 추가 → 같은 날 삭제)이 쓰던 키가 남은 저장본도 나머지 기록은 그대로 읽고, 다시 저장하면 그 키는 사라진다
+    func testIgnoresRemovedRivalKeys() throws {
+        let r = try decode("""
+        {"roundsCompleted":3,"holesPlayed":40,"totalStrokes":170,"birdies":9,"missionsCleared":2,"hat":"none","hatV2":"visor",
+         "rivalWon":5,"rivalLost":3,"rivalTied":1,"totalPar":160,"recentOver":[0,1,-1,4]}
+        """)
+        XCTAssertEqual(r.holesPlayed, 40)
+        XCTAssertEqual(r.totalStrokes, 170)
+        XCTAssertEqual(r.missionsCleared, 2)
+        XCTAssertEqual(r.hat, .visor)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(r)) as? [String: Any])
+        for key in ["rivalWon", "rivalLost", "rivalTied", "totalPar", "recentOver"] {
+            XCTAssertNil(obj[key], "\(key)")
+        }
     }
 
     func testNewHatStaysReadableByOldVersions() throws {
@@ -53,39 +64,5 @@ final class RecordsTests: XCTestCase {
         XCTAssertFalse(r.unlockedHats.contains(.straw), "배지 모자는 여전히 배지 수로")
         r.badges = [.firstRound, .firstBirdie]
         XCTAssertEqual(r.unlockedHats.last, .straw, "배지 모자 자동 착용은 마지막 원소를 본다 — 선바이저가 뒤에 오면 안 된다")
-    }
-
-    func testRivalTargetFollowsRecentForm() {
-        var r = Records()
-        XCTAssertEqual(r.rivalTargetOverPar, 0.9, "처음(9홀 미만)은 보기 플레이어 상대")
-        for _ in 0 ..< 9 {
-            r.holesPlayed += 1
-            r.totalStrokes += 6
-            r.noteHoleOut(strokes: 6, par: 4)
-        }
-        XCTAssertEqual(r.rivalTargetOverPar, 1.8, "+2.0 플레이어 → 상한 +1.8")
-        for _ in 0 ..< 27 { // 실력이 늘면 최근 27홀만 본다
-            r.holesPlayed += 1
-            r.totalStrokes += 3
-            r.noteHoleOut(strokes: 3, par: 4)
-        }
-        XCTAssertEqual(r.recentOver.count, 27)
-        XCTAssertEqual(r.rivalTargetOverPar, -0.1, "−1.0 플레이어 → 하한 −0.1")
-        XCTAssertEqual(r.totalPar, 36 * 4)
-    }
-
-    /// 기권한 홀도 최근 실력에 들어간다 — 빼면 못 치는 플레이어일수록 평균이 좋아 보여 라이벌이 강해진다 (리뷰)
-    func testGiveUpsCountTowardRecentForm() {
-        var r = Records()
-        for _ in 0 ..< 7 { // 파 7홀
-            r.holesPlayed += 1
-            r.totalStrokes += 4
-            r.noteHoleOut(strokes: 4, par: 4)
-        }
-        r.noteGiveUp()
-        r.noteGiveUp()
-        XCTAssertEqual(r.recentOver.count, 9)
-        XCTAssertEqual(r.holesPlayed, 7, "누적 통계는 홀아웃한 홀만")
-        XCTAssertEqual(r.rivalTargetOverPar, 8.0 / 9 + 0.15, accuracy: 1e-9, "기권은 +4로 친다 (파 7홀 + 기권 2홀)")
     }
 }
