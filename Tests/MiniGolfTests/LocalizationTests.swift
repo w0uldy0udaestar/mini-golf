@@ -57,6 +57,7 @@ final class LocalizationTests: XCTestCase {
                 Weather.rain.cue ?? "",
                 Weather.gale.cue ?? "",
             ]
+            + GimmickKind.allCases.flatMap { [$0.displayName, $0.cue] }
             + (1 ... 8).map { scoreName(strokes: $0, par: 4) }
         for s in english {
             XCTAssertNil(s.unicodeScalars.first { (0xAC00 ... 0xD7A3).contains($0.value) }, "영어 문구에 한글: \(s)")

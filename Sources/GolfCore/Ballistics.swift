@@ -346,6 +346,27 @@ public enum Ballistics {
         return .none
     }
 
+    /// 장치 그린(M7): 장치 위에서는 공이 서지 않는다 — 분화구·분지의 그린에 서려는 공은 컵 쪽으로, 화산 봉우리(테두리 밖 비탈)에 서려는 공은
+    /// 바깥으로 굴려 보낸다. 컵으로 기운 면과 비탈은 원래 공이 설 수 없는 경사지만, 분화구 테두리 마루에는 평형 띠가 생긴다(경사를 ±0.5m로
+    /// 재서 꼭짓점이 둥글어진다 — 그린 쪽 0.3m, 러프 쪽 1cm). 거기 걸린 공을 치려면 스틱맨이 바깥 비탈 3m 아래에 서게 된다(캡처로 확인).
+    /// 1.5m/s면 마루의 반대쪽 기울기(최대 1.6m/s² × 0.2m)를 넘는다. 컵 구역은 캡처가 처리한다
+    static func tipOffGimmick(_ b: inout BallState, hole: Hole) -> Bool {
+        guard let kind = hole.gimmick else { return false }
+        let away: Double = b.x >= hole.holeX ? 1 : -1
+        if hole.surface(at: b.x) == .green {
+            guard abs(b.x - hole.holeX) >= Phys.cupHalfWidth else { return false }
+            b.vx = -away * 1.5
+        } else if kind == .volcano,
+                  Hole.gimmickKnots(cup: hole.holeX, shape: .volcano(worldW: hole.worldW)).foot.contains(b.x) {
+            b.vx = away * 1.5
+        } else {
+            return false
+        }
+        b.phase = .roll
+        b.lowSpeedTime = 0
+        return true
+    }
+
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다.
     /// wind: 바람 덮어쓰기(m/s) — 돌풍 서프라이즈가 비행 중 잠시 넘긴다 (nil이면 홀 바람)
     /// kind: 공 종류 — 공 바꿔치기 서프라이즈의 고무공·볼링공 (표준은 배율 전부 1)
@@ -471,13 +492,16 @@ public enum Ballistics {
             // 리뷰 S-2: 컵 주변에 가드 사각 고리를 남기지 않는다)
             if abs(b.vx) < 1.2 {
                 b.lowSpeedTime += dt
-                if b.lowSpeedTime > 2.5 {
+                if b.lowSpeedTime > 2.5, !tipOffGimmick(&b, hole: hole) {
                     b.vx = 0
                     b.phase = .rest
                     if settleOffSteepSlope(&b, hole: hole) { // 라이저 발치의 V자에서 얼어붙던 공 — 트레드로 (2026-09-17)
                         return .water
                     }
                     if abs(b.x - hole.holeX) < Phys.cupHalfWidth + 0.05 {
+                        if hole.gimmick != nil { // 장치 그린: 분지 바닥에서 멈춘 공은 들어간 것 — 밀어내면 컵 옆 급경사 벽에 선다 (리뷰 m-4)
+                            return .holed
+                        }
                         b.x = hole.holeX + (b.x >= hole.holeX ? 1 : -1) * (Phys.cupHalfWidth + 0.05)
                         b.y = hole.ground(at: b.x)
                     }
@@ -489,7 +513,7 @@ public enum Ballistics {
             // 정지: 정지 마찰(굴림 저항 × staticHoldGain)이 경사 중력을 이길 때만 — 페어웨이 0.34·러프 0.70까지. 라이저(> 0.3)는 정착 규칙이 바닥으로
             let hold = abs(s) > steepRest ? 1.0 : Phys
                 .staticHoldGain // 라이저(> 0.3)는 main과 같은 정지 조건 — 정착 텔레포트 거리 불변 (리뷰 #2)
-            if abs(b.vx) < Phys.stopSpeed, rollDecel * hold >= Phys.g * abs(s) * 0.85 {
+            if abs(b.vx) < Phys.stopSpeed, rollDecel * hold >= Phys.g * abs(s) * 0.85, !tipOffGimmick(&b, hole: hole) {
                 b.vx = 0
                 b.phase = .rest
                 if settleOffSteepSlope(&b, hole: hole) {
@@ -522,6 +546,11 @@ public enum Ballistics {
         if b.lipped {
             if abs(b.x - hole.holeX) > Phys.cupHalfWidth + 0.2 {
                 b.lipped = false
+            } else if hole.gimmick != nil, b.phase == .roll, abs(b.vx) <= Phys.captureRoll,
+                      abs(b.x - hole.holeX) < Phys.cupHalfWidth {
+                // 장치 그린(M7): 컵이 분지 바닥이라 턱에 맞고 튄 공도 도로 굴러 들어온다 — 튀어 오른 뒤 내려앉으면 들어간 것으로 친다.
+                // 보통 그린의 규칙(컵 옆에 걸쳐 선다)을 쓰면 깔때기 바닥에서 공이 컵을 깔고 앉은 채 2.5초 떨다가 옆으로 밀려났다 (프로브 실측)
+                return .holed
             }
         } else if abs(b.x - hole.holeX) < Phys.cupHalfWidth {
             let speed = hypot(b.vx, b.vy)

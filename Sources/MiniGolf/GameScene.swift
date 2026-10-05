@@ -766,6 +766,16 @@ final class GameScene: SKScene {
         if strokes > 0 || demo.pickupForce, hole.surface(at: ball.x) == .green, !club.isPutter { // 관찰 모드는 첫 샷도 퍼터
             clubIdx = ClubTable.all.firstIndex { $0.isPutter } ?? clubIdx
         }
+        // 화산 발치에 서면 샌드웨지 로브로 자동 전환 (M7 — 그린의 퍼터 전환과 같은 관례): 띄워서 분화구에 떨어뜨려야 하는 자리고,
+        // 샷 종류 키(Tab)를 안 써 본 사람도 '로브'라는 답이 있다는 것을 HUD에서 본다. 이후 ←→·Tab으로 자유 변경
+        if strokes > 0, hole.gimmick == .volcano, hole.surface(at: ball.x) != .green {
+            let k = Hole.gimmickKnots(cup: hole.holeX, shape: .volcano(worldW: hole.worldW))
+            // 평평한 띠 위에서만 — 띠 밖 2m만 나가도 이 조합이 닿지 않는 자리가 3분의 1이고, 비탈 위에선 발사각이 90°를 넘는다 (리뷰 m-1)
+            if k.collar.contains(ball.x), !k.foot.contains(ball.x) {
+                clubIdx = ClubTable.all.firstIndex { $0.id == "SW" } ?? clubIdx
+                shotShape = .lob
+            }
+        }
         renderBallFwd = profile.ballFwd // 걷기 도착 자리가 이 클럽의 스탠스로 계획됐으므로 스무딩 없이 맞춘다
         presetPutterHeight()
         updateHUD()
@@ -2354,7 +2364,7 @@ final class GameScene: SKScene {
         scoreTitle
             .setText(inPractice ? L("연습장", "Driving range")
                 : L("\(holeIdx + 1)번 홀 · 파 \(hole.par)", "Hole \(holeIdx + 1) · Par \(hole.par)") +
-                (hole.signature.map { " · \($0.displayName)" } ?? "")) // 홀 이름 (M5-④ 판정)
+                (hole.displayName.map { " · \($0)" } ?? "")) // 홀 이름 (M5-④ 판정) — 장치 홀은 장치 이름 (M7)
         // 비탈 라이 단어 (2026-09-28): 발밑이 홀 쪽으로 0.10 이상 기울면 '오르막/내리막' — 수치가 아니라 라이 이름이라 어시스트 금지 원칙 안
         let toward: Double = hole.holeX >= ball.x ? 1 : -1 // 렌더 dir은 걷는 동안 직전 샷 방향일 수 있다 (리뷰) — 홀 방향으로
         let facing = hole.slope(at: ball.x) * toward

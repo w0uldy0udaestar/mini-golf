@@ -91,6 +91,7 @@ public struct Hole: Sendable {
     public let obstacles: [Obstacle]
     public let signature: SignatureKind? // 시그니처 홀이면 아키타입
     public let wind: Double // 바람 (m/s, +x 방향 절대 좌표 — 비행 항력·양력의 상대속도 기준)
+    public let gimmick: GimmickKind? // 장치 그린이면 그 종류 (M7, Gimmick.swift)
 
     public init(
         par: Int, dist: Double, holeX: Double, worldW: Double,
@@ -100,7 +101,8 @@ public struct Hole: Sendable {
         teeX: Double = CourseGenerator.teeX,
         obstacles: [Obstacle] = [],
         signature: SignatureKind? = nil,
-        wind: Double = 0
+        wind: Double = 0,
+        gimmick: GimmickKind? = nil
     ) {
         self.par = par
         self.dist = dist
@@ -117,6 +119,7 @@ public struct Hole: Sendable {
         self.obstacles = obstacles
         self.signature = signature
         self.wind = wind
+        self.gimmick = gimmick
     }
 
     public func surface(at x: Double) -> Surface {
@@ -136,6 +139,11 @@ public struct Hole: Sendable {
     /// 지형 경사 (dz/dx)
     public func slope(at x: Double) -> Double {
         ground(at: x + 0.5) - ground(at: x - 0.5)
+    }
+
+    /// 홀 이름 — 장치 그린이 있으면 그 이름이 앞선다 (그 홀에서 해야 할 일이 그것이다)
+    public var displayName: String? {
+        gimmick?.displayName ?? signature?.displayName
     }
 
     /// 러프 라이 (RoughLie): 평탄한 러프(|경사| < 0.12)를 3m 셀마다 결정론적 해시로 60/20/20 — 같은 자리는 늘 같은 라이라 HUD가 샷 전에 보여줄 수 있고
@@ -183,13 +191,14 @@ public struct Hole: Sendable {
     /// 핀 이동 서프라이즈 — 컵만 그린 안 다른 자리로 옮긴 사본. 지형·세그먼트·파·거리는 그대로
     /// (par는 홀 전장 기준이라 안 바뀐다). 그린 밖으로는 못 옮긴다 (클램프)
     public func movingPin(to x: Double) -> Hole {
+        guard gimmick == nil else { return self } // 장치 그린의 컵은 분지 바닥에 있어야 한다
         let nx = min(max(x, greenStart + 1.5), greenEnd - 1.5)
         return Hole(
             par: par, dist: dist, holeX: nx, worldW: worldW,
             greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
             segments: segments, elevation: elevation,
             waterRange: waterRange, greenSlope: greenSlope,
-            teeX: teeX, obstacles: obstacles, signature: signature, wind: wind
+            teeX: teeX, obstacles: obstacles, signature: signature, wind: wind, gimmick: gimmick
         )
     }
 
@@ -200,7 +209,7 @@ public struct Hole: Sendable {
             greenStart: greenStart, greenEnd: greenEnd, apronStart: apronStart,
             segments: segments, elevation: elevation,
             waterRange: waterRange, greenSlope: greenSlope,
-            teeX: teeX, obstacles: obstacles, signature: signature, wind: w
+            teeX: teeX, obstacles: obstacles, signature: signature, wind: w, gimmick: gimmick
         )
     }
 
@@ -1339,7 +1348,8 @@ public enum CourseGenerator {
             teeX: w - h.teeX, // 인스턴스 teeX (static 상수 아님 — 리뷰 S-1)
             obstacles: h.obstacles.map { Obstacle(kind: $0.kind, x: w - $0.x, size: $0.size) },
             signature: h.signature,
-            wind: h.wind // 바람은 세계 절대 좌표 — 미러와 무관
+            wind: h.wind, // 바람은 세계 절대 좌표 — 미러와 무관
+            gimmick: h.gimmick
         )
     }
 }
