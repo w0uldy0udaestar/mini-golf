@@ -2003,7 +2003,8 @@ final class GameScene: SKScene {
                 : L("합계 \(totalStr)  —  R로 새 라운드", "Total \(totalStr)  —  R for a new round")
             scorecard.show(
                 results: results, title: L("라운드 종료", "Round complete"), footer: footer,
-                rival: extras.rival, summary: roundExtrasSummary
+                rival: Array(extras.rival.suffix(results.count)), // 관찰 모드가 N번 홀부터 시작해도 같은 홀끼리 맞춘다
+                summary: roundExtrasSummary
             )
             extras.cardShown = true // 카드가 뜨면 하단 미션·라이벌 띠는 숨긴다 (새 라운드가 extras를 새로 만들며 풀린다)
             updateRoundStrip()
