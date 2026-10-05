@@ -190,7 +190,7 @@ public enum ShotShape: String, CaseIterable, Sendable {
         case .standard: nil
         case .punch: cat == .wedge ? L("낮게 굴려 붙인다", "low, runs up to the pin") : L(
                 "낮게 뚫고 조금 구른다",
-                "low and boring, some roll"
+                "low and piercing, some roll"
             )
         case .lob: L("높이 띄워 바로 세운다", "high, stops fast")
         }

@@ -117,7 +117,7 @@ extension GameScene {
     /// 연습장 HUD 오른쪽 아랫줄: 직전 샷 결과 (없으면 안내)
     var practiceResultLine: String {
         guard let l = practice?.last, let c = ClubTable.all.first(where: { $0.id == l.club }) else {
-            return L("클럽을 바꿔 가며 쳐 보세요 · R = 라운드로", "Try each club · R = back to the round")
+            return L("클럽을 바꿔 가며 쳐 보세요 · R = 새 라운드", "Try each club · R = new round")
         }
         let carry = l.carry.map { L("캐리 \(Int($0.rounded()))m · ", "carry \(Int($0.rounded())) m · ") } ?? ""
         let best = practice?.best[l.club] ?? l.total

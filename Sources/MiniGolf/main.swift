@@ -26,7 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var contrastMenuItem: NSMenuItem!
     private var practiceMenuItem: NSMenuItem!
     private var hotkeyMenuItem: NSMenuItem!
-    private var summonedFrom: NSRunningApplication? // 단축키로 불러내기 직전에 쓰던 앱 — 쉬게 할 때 키보드를 돌려준다
+    /// 내가 아닌 앱 중 마지막으로 활성이던 앱 — 단축키로 쉬게 하거나 설정 대화상자를 닫을 때 키보드를 돌려줄 곳.
+    /// 불러낸 순간에만 기억하면 (a) 실행 직후 플레이하다 쉬는 첫 사용에 값이 없고 (b) 그사이 다른 앱으로 옮겼으면 낡는다 (리뷰) —
+    /// 활성 앱 알림으로 계속 따라간다
+    private var lastOtherApp: NSRunningApplication?
+    private var demoActive = false
+    private var hotkeyTried = false // 저장된 단축키의 등록을 시도했는가 (관찰 모드는 시도하지 않는다)
+    private var configuringHotkey = false
+    private var menuOpenedWithKeyboard = false // ⛳️ 메뉴를 연 순간 게임이 키보드를 갖고 있었나
     private var monitorMenu: NSMenu!
     private var hatMenu: NSMenu!
     private var lastResignKey = Date.distantPast
@@ -52,6 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         let demo = DemoOptions(arguments: ProcessInfo.processInfo.arguments) // 관찰·디버그 플래그 — 실플레이는 전부 기본값
         L10n.lang = demo.lang ?? LanguagePref.saved.resolved // 표시 언어 — 씬·메뉴가 문구를 만들기 전에
+        demoActive = demo.active
+        noteOtherApp(NSWorkspace.shared.frontmostApplication) // 게임이 키보드를 잡기 전에 쓰던 앱
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(appActivated(_:)), name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
         // --screen N: 실행 시 모니터 지정 (0부터, 검증·프리셋용 — 저장하지 않음)
         var flagScreen: NSScreen?
         if let n = demo.screenIndex, NSScreen.screens.indices.contains(n) {
@@ -127,7 +140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !demo.active { // 관찰 모드는 사용자의 실제 게임과 같은 조합을 두고 다투지 않는다
             HotkeyCenter.shared.onPress = { [weak self] in self?.hotkeyPressed() }
-            HotkeyCenter.shared.register(HotkeyCombo.saved) // 그사이 다른 앱이 가져갔으면 조용히 실패 — 메뉴 제목이 알려 준다
+            HotkeyCenter.shared.register(HotkeyCombo.saved) // 실패하면(시스템 단축키로 바뀌었다 등) 메뉴 제목이 알려 준다
+            hotkeyTried = true
             updateHotkeyMenuTitle()
         }
         if demo.hotkeyUI { // 기록 대화상자 관찰 (키 입력 없이): 띄우고 → 견본 조합을 처리 함수에 직접 넣어 본다
@@ -139,17 +153,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateHotkeyMenuTitle() {
         let saved = HotkeyCombo.saved
-        let title: String = if let saved, HotkeyCenter.shared.current == saved {
+        let title: String = if let saved, hotkeyTried, HotkeyCenter.shared.current != saved {
+            // 저장은 돼 있는데 등록이 안 됐다 — 그 조합이 그사이 macOS 시스템 단축키가 됐거나 시스템이 거절했다.
+            // (다른 앱이 같은 조합을 쓰는지는 알 수 없다 — Hotkey.swift 머리말)
+            L("불러내기 단축키: \(saved.display) (등록 실패)…", "Summon shortcut: \(saved.display) (not registered)…")
+        } else if let saved {
             L("불러내기 단축키: \(saved.display)…", "Summon shortcut: \(saved.display)…")
-        } else if let saved { // 저장은 돼 있는데 등록이 안 됐다 = 다른 앱이 먼저 잡았다
-            L("불러내기 단축키: \(saved.display) (다른 앱이 사용 중)…", "Summon shortcut: \(saved.display) (in use elsewhere)…")
         } else {
             L("불러내기 단축키 설정…", "Set summon shortcut…")
         }
         hotkeyMenuItem?.title = title
     }
 
+    @objc private func appActivated(_ note: Notification) {
+        noteOtherApp(note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)
+    }
+
+    private func noteOtherApp(_ app: NSRunningApplication?) {
+        if let app, app != NSRunningApplication.current {
+            lastOtherApp = app
+        }
+    }
+
+    /// 키보드를 직전에 쓰던 앱으로 돌려준다 (없거나 종료됐으면 그대로 둔다)
+    private func returnKeyboard() {
+        guard let app = lastOtherApp, !app.isTerminated else { return }
+        if #available(macOS 14.0, *) {
+            NSApp.yieldActivation(to: app)
+            app.activate()
+        } else {
+            app.activate(options: [])
+        }
+    }
+
     @objc private func configureHotkey() {
+        guard !configuringHotkey else { return }
+        configuringHotkey = true
+        defer { configuringHotkey = false }
+        let gameHadKeyboard = menuOpenedWithKeyboard && !scene.isGamePaused
         let before = HotkeyCombo.saved
         HotkeyCenter.shared.unregister() // 기록하는 동안에는 지금 단축키가 게임을 토글하지 않게 (그 조합을 다시 고를 수도 있다)
         switch HotkeyRecorder(current: before).run() {
@@ -157,25 +198,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .cleared: HotkeyCombo.saved = nil
         case .cancelled: HotkeyCenter.shared.register(before)
         }
+        hotkeyTried = true
         updateHotkeyMenuTitle()
-        panel.makeKeyAndOrderFront(nil) // 대화상자가 가져간 키보드를 게임으로
-        panel.makeFirstResponder(scene)
+        // 대화상자가 가져간 키보드를 원래 자리로 — 게임을 치던 중이었으면 게임으로, 다른 앱에서 설정만 하러 왔으면 그 앱으로 (리뷰)
+        if gameHadKeyboard {
+            panel.makeKeyAndOrderFront(nil)
+            panel.makeFirstResponder(scene)
+        } else {
+            returnKeyboard()
+        }
     }
 
-    /// 단축키 = ⛳️ 좌클릭과 같은 토글. 손이 키보드에 있으니, 쉬게 할 때는 불러내기 전에 쓰던 앱으로 키보드를 돌려준다
-    /// (⛳️ 클릭은 마우스가 이미 다른 곳을 누를 수 있지만, 단축키는 그대로 두면 일시정지된 게임이 계속 키를 받는다)
+    /// 단축키 = ⛳️ 좌클릭과 같은 토글. 손이 키보드에 있으니, 쉬게 할 때는 쓰던 앱으로 키보드를 돌려준다
+    /// (⛳️ 클릭은 마우스가 이미 다른 곳을 누를 수 있지만, 단축키는 그대로 두면 일시정지된 게임이 계속 키를 받는다 —
+    /// R·Esc는 일시정지 중에도 동작한다)
     private func hotkeyPressed() {
-        if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
-            summonedFrom = front
-        }
         toggleGame()
-        if scene.isGamePaused, let app = summonedFrom, !app.isTerminated {
-            if #available(macOS 14.0, *) {
-                NSApp.yieldActivation(to: app)
-                app.activate()
-            } else {
-                app.activate(options: [])
-            }
+        if scene.isGamePaused {
+            returnKeyboard()
         }
     }
 
@@ -195,6 +235,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     characters: "g", charactersIgnoringModifiers: "g", isARepeat: false, keyCode: UInt16(kVK_ANSI_G)
                 )
                 print("HOTKEYUI plain-key passes through: \(plain.map { recorder.handle($0) != nil } ?? false)")
+                let single = NSEvent.keyEvent( // ⌘Q — 수식키 하나짜리는 받지 않고 이유를 알린다
+                    with: .keyDown, location: .zero, modifierFlags: [.command], timestamp: 0, windowNumber: 0,
+                    context: nil,
+                    characters: "q", charactersIgnoringModifiers: "q", isARepeat: false, keyCode: UInt16(kVK_ANSI_Q)
+                )
+                if let single {
+                    let consumed = recorder.handle(single) == nil
+                    print(
+                        "HOTKEYUI ⌘Q consumed \(consumed) picked \(recorder.picked?.display ?? "-") note \(recorder.lastNote ?? "-")"
+                    )
+                }
                 let combo = NSEvent.keyEvent(
                     with: .keyDown, location: .zero, modifierFlags: [.control, .option, .shift], timestamp: 0,
                     windowNumber: 0,
@@ -219,6 +270,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func move(to screen: NSScreen) {
         guard panel.frame != screen.frame else { return }
         panel.setFrame(screen.frame, display: true) // contentView(SKView)가 따라 리사이즈 → 씬 didChangeSize
+        guard !demoActive else { // 관찰 모드는 키보드를 가져가지 않는다 (--demo-switch)
+            panel.orderFrontRegardless()
+            return
+        }
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(scene)
     }
@@ -331,6 +386,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func statusClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
+            // 메뉴 추적이 키 상태를 바꾸기 전에 — toggleGame과 같은 판정(방금 놓쳤으면 갖고 있던 것으로 본다)
+            menuOpenedWithKeyboard = panel.isKeyWindow || Date().timeIntervalSince(lastResignKey) < 0.4
             rebuildMonitorMenu()
             rebuildHatMenu()
             practiceMenuItem.state = scene.inPractice ? .on : .off // R로 나갔을 수도 있다 — 열 때마다 맞춘다

@@ -139,13 +139,17 @@ enum FX {
         stroke.lineJoin = .round
         stroke.fillColor = .clear
         node.addChild(stroke)
-        if Theme.highContrast { // 밝은 배경: 어두운 받침 획
+        if Theme.highContrast { // 밝은 배경: 어두운 받침 획 — 줄기와 머리 모두
             let under = SKShapeNode(path: lines)
             under.strokeColor = NSColor(white: 0, alpha: 0.4)
             under.lineWidth = 3.4
             under.lineCap = .round
             under.zPosition = -1
             node.addChild(under)
+            for h in node.children.compactMap({ $0 as? SKShapeNode }) where h.fillColor == color {
+                h.strokeColor = NSColor(white: 0, alpha: 0.4)
+                h.lineWidth = 1.2
+            }
         }
         let d = CGFloat(dir)
         node.position = CGPoint(x: p.x + d * (12 + CGFloat(index % 3) * 5), y: p.y + 10)

@@ -15,7 +15,8 @@ enum LanguagePref: String, CaseIterable {
 
     /// 시스템 선호 언어 목록 → 표시 언어
     static func systemLanguage(_ preferred: [String] = Locale.preferredLanguages) -> Lang {
-        (preferred.first ?? "en").lowercased().hasPrefix("ko") ? .ko : .en
+        let first = (preferred.first ?? "en").lowercased() // "ko"·"ko-KR"·"ko_KR" — "kok"(콘칸어)처럼 ko로 시작하는 다른 언어는 제외
+        return first == "ko" || first.hasPrefix("ko-") || first.hasPrefix("ko_") ? .ko : .en
     }
 
     var resolved: Lang {

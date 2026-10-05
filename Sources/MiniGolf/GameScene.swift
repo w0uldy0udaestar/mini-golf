@@ -60,6 +60,8 @@ final class GameScene: SKScene {
     var extras = RoundExtras() // M6 라운드 변주 (RoundExtras.swift) — 날씨·미션·라이벌
     /// 대기 중인 알림(배지·해금) — 다음 조준이 시작된 뒤에 띄운다 (RoundExtras.flushNotices)
     var pendingNotices: [(title: String, sub: String)] = []
+    var scheduledNotices: [(id: Int, title: String, sub: String)] = [] // 타이머가 걸렸지만 아직 안 뜬 알림
+    var noticeSerial = 0
     var practice: PracticeState? // 연습장 모드 (Practice.swift) — nil이면 라운드
     var inPractice: Bool {
         practice != nil
@@ -405,8 +407,7 @@ final class GameScene: SKScene {
     /// ⛳️ 메뉴 → 언어: 화면에 이미 떠 있는 문구를 새 언어로 (토스트는 다음 것부터)
     func languageChanged() {
         setStaticTexts()
-        rebuildTerrain() // 연습장 눈금·표식 글자
-        updateHUD()
+        updateHUD() // 지형은 그대로 둔다 — 눈금·표식은 숫자와 클럽 약어뿐이고, 다시 그리면 디봇 자국이 지워진다 (리뷰)
     }
 
     /// HUD는 지면 아래 스트립(0~96px 빈 띠) — 시선이 플레이 지점을 떠나지 않는다 (2026-08-14 사용자 결정)
@@ -487,6 +488,7 @@ final class GameScene: SKScene {
     }
 
     private func startHole() {
+        requeueScheduledNotices() // 아직 안 뜬 배지 알림은 이 홀의 인트로 뒤로 미룬다 (인트로와 같은 자리를 쓴다)
         cancelSurprises() // R 새 라운드·홀 전환 중 진행 중이던 서프라이즈 정리 (리뷰 M2)
         cancelHoleFlow() // 홀아웃·기권 뒤 '줍기/다음 홀' 타이머 — R이 끼어들면 새 라운드의 1번 홀을 건너뛰었다 (2026-09-23 재현)
         strokes = 0
@@ -543,8 +545,8 @@ final class GameScene: SKScene {
                 toast(
                     L("연습장", "Driving range"),
                     sub: L(
-                        "클럽을 바꿔 가며 쳐 보세요 — 캐리와 총거리가 표시됩니다\nR 또는 ⛳️ 메뉴로 라운드에 돌아갑니다",
-                        "Try each club — carry and total distance are shown\nPress R or use the ⛳️ menu to go back to the round"
+                        "클럽을 바꿔 가며 쳐 보세요 — 캐리와 총거리가 표시됩니다\nR 또는 ⛳️ 메뉴 → 새 라운드로 나갑니다",
+                        "Try each club — carry and total distance are shown\nPress R (or ⛳️ menu → New Round) to leave and start a new round"
                     ),
                     titleScale: 0.8, hold: 2.8
                 )
@@ -775,7 +777,8 @@ final class GameScene: SKScene {
     /// 퍼터를 잡으면 남은 거리에 맞는 백스윙에서 시작한다 — 평지 기준 계산이라
     /// 그린 경사 읽기는 여전히 플레이어의 몫 (어시스트가 아니라 합리적 시작점)
     private func presetPutterHeight() {
-        guard club.isPutter, mode == .aim else { return }
+        // 연습장은 컵이 월드 밖(남은 거리 ≈ 360m)이라 프리셋이 매번 상한 0.92로 덮는다 — 재려고 맞춘 백스윙을 그대로 둔다 (리뷰)
+        guard club.isPutter, mode == .aim, !inPractice else { return }
         let d = abs(hole.holeX - ball.x)
         // 2단 그린 턱은 눈에 보이는 계단이라 프리셋에도 오르막 표고를 더한다(내리막은 무시 — 브레이크 읽기는 플레이어 몫, 리뷰 m4)
         let up = max(0, hole.ground(at: hole.holeX) - hole.ground(at: ball.x))
@@ -1575,17 +1578,20 @@ final class GameScene: SKScene {
                 intensity: 0.6 + 0.4 * heightPct
             )
         }
-        PlayLog.note(String(
-            format: "SHOT %d %@ h%.2f%@ from %.1f lie %@",
-            strokes,
-            club.id,
-            heightPct,
-            club.isPutter || shotShape == .standard ? "" : " \(shotShape.rawValue)", // 샷 종류 (기본은 생략)
-            preShot.x,
-            lie == .rough && hole
-                .roughLie(at: preShot.x) != .normal ? "rough-\(hole.roughLie(at: preShot.x).rawValue)" : "\(lie)" // 러프
-            // 라이
-        ))
+        if !inPractice { // 연습장 샷은 RANGE 줄로만 — SHOT에 섞이면 라운드의 클럽 사용 통계가 흐려진다 (리뷰)
+            PlayLog.note(String(
+                format: "SHOT %d %@ h%.2f%@ from %.1f lie %@",
+                strokes,
+                club.id,
+                heightPct,
+                club.isPutter || shotShape == .standard ? "" : " \(shotShape.rawValue)", // 샷 종류 (기본은 생략)
+                preShot.x,
+                lie == .rough && hole
+                    .roughLie(at: preShot.x) != .normal ? "rough-\(hole.roughLie(at: preShot.x).rawValue)" :
+                    "\(lie)" // 러프
+                // 라이
+            ))
+        }
         if club.isPutter { // 퍼팅 타격감 (2026-09-24 판정): 작은 스쿼시 + 접촉 링 — 헤드보다 느리게 굴러 나가는 공을 '출발'로 읽히게
             let ks = ballKind.renderScale
             ballNode.xScale = 1.22 * ks
@@ -1735,9 +1741,11 @@ final class GameScene: SKScene {
     private func announceBadges(_ earned: [Badge]) {
         guard !earned.isEmpty else { return }
         pendingNotices.append((L("배지 획득", "Badge earned"), earned.map(\.title).joined(separator: " · ")))
-        let hats = Records.shared.unlockedHats
-        if let newest = hats.last, newest != .none, Records.shared.hat == .none {
-            // 첫 해금은 자동 착용 — 메뉴를 몰라도 보상이 눈에 보인다
+        // 이번 배지로 새 모자가 풀렸고 맨머리면 자동 착용 — 메뉴를 몰라도 보상이 눈에 보인다. 구 조건("맨머리면 배지를 받을 때마다")은
+        // 일부러 고른 맨머리를 다음 배지가 덮었다 — 선바이저가 생겨 그 경로에 더 일찍 닿는다 (리뷰)
+        let now = Records.shared.badges.count, before = now - earned.count
+        let fresh = Hat.allCases.filter { $0 != .visor && $0.need > before && $0.need <= now }
+        if let newest = fresh.last, Records.shared.hat == .none {
             Records.shared.hat = newest
             Records.shared.save()
             stickman.setHat(newest)
@@ -2839,7 +2847,8 @@ final class GameScene: SKScene {
                     PlayLog.note(String(
                         format: "REST strokes %d x %.1f lie %@ label %@ slope %+.2f", strokes, ball.x,
                         "\(hole.surface(at: ball.x))",
-                        greenChanceLabel() ?? "-", hole.slope(at: ball.x)
+                        // 로그는 표시 언어와 무관한 고정 값 — 영어 화면에서 "On in one!"처럼 공백 낀 값이 되면 줄 파싱이 깨진다 (리뷰)
+                        greenChanceLabel() == nil ? "-" : hole.par == 4 ? "원온!" : "투온!", hole.slope(at: ball.x)
                     ))
                     if strokes >= Phys.maxStrokes {
                         giveUp()

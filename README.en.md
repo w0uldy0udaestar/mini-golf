@@ -245,8 +245,10 @@ Set summon shortcut… · 언어 · Language · Quit)
 **Driving Range**: right-click ⛳️ → **Driving Range**. Hit from a single flat line, switching clubs as you go: a club marker stays where each ball stops, carry and total distance are shown,
 and then the ball returns to the tee. Records, missions, weather, and surprises are off. Press <kbd>R</kbd> or use the menu to go back to the round.
 
-**Summon shortcut**: right-click ⛳️ → **Set summon shortcut…**, then press the key combination you want (it must include at least one of ⌘ · ⌥ · ⌃).
-From any app, that combination brings the game up; press it again to send the game back to rest and return to the app you were using. There is no default — combinations that clash with other apps are rejected when you register them.
+**Summon shortcut**: right-click ⛳️ → **Set summon shortcut…**, then press the key combination you want — two or more modifiers including ⌃ or ⌥
+(e.g. ⌃⌥G). From any app, that combination brings the game up; press it again to send the game back to rest and return to the app you were using. There is no default.
+The game receives a registered combination **ahead of every other app** — macOS does not report clashes with other apps' shortcuts, so pick one you don't otherwise use.
+Single-modifier combinations such as ⌘C and macOS system shortcuts (Spotlight, input-source switching, and so on) are not accepted.
 
 **Language**: right-click ⛳️ → **언어 · Language**. By default it follows your system setting (한국어 / English).
 

@@ -169,7 +169,9 @@ extension GameScene {
     /// "라이벌 · 이 홀 버디(3타)"
     var rivalTargetLine: String {
         let s = extras.rival[holeIdx]
-        let name = s >= Phys.maxStrokes ? L("기권", "gave up") : scoreName(strokes: s, par: hole.par)
+        // 홀인원은 scoreName이 "홀인원!"(환호)이라 목표 줄에는 느낌표 없는 이름으로
+        let name = s >= Phys.maxStrokes ? L("기권", "gave up") : s == 1 ? L("홀인원", "a hole in one")
+            : scoreName(strokes: s, par: hole.par)
         return L("라이벌 · 이 홀 \(name)(\(s)타)", "Rival · \(name) here (\(s))")
     }
 
@@ -180,10 +182,10 @@ extension GameScene {
         let word: String
         if mine < theirs {
             extras.won += 1
-            word = L("승", "won")
+            word = L("승", "you won") // 영어는 주어를 붙인다 — "Rival 4 — won"은 라이벌이 이긴 것으로도 읽힌다 (리뷰)
         } else if mine > theirs {
             extras.lost += 1
-            word = L("패", "lost")
+            word = L("패", "you lost")
         } else {
             extras.tied += 1
             word = L("비김", "halved")
@@ -371,8 +373,12 @@ extension GameScene {
         pendingNotices = []
         var t = delay
         for n in notices {
+            noticeSerial += 1
+            let id = noticeSerial
+            scheduledNotices.append((id, n.title, n.sub))
             afterNotice(t) { [weak self] in
-                guard let self else { return }
+                guard let self, let i = scheduledNotices.firstIndex(where: { $0.id == id }) else { return }
+                scheduledNotices.remove(at: i)
                 toast(n.title, sub: n.sub, titleScale: 1.0, hold: 2.6, y: aboveCard ? size.height * 0.5 + 190 : nil)
                 SoundKit.shared.chime()
                 if demo.active {
@@ -384,9 +390,22 @@ extension GameScene {
         }
     }
 
-    /// 알림 타이머는 전용 노드에 건다 — 새 라운드(R)가 지우지 않는다(이미 얻은 배지 알림은 라운드를 넘어서도 보여야 한다)
+    /// 새 홀이 시작되면(홀 전환·R 새 라운드·연습장 진입) 아직 안 뜬 알림을 대기열 앞으로 되돌린다 — 타이머를 그대로 두면 홀 인트로
+    /// 도중에 터져 인트로를 덮거나, 카드가 사라졌는데 카드 위 자리에 뜬다 (리뷰). 다음 조준 시작이 인트로 뒤에 다시 꺼낸다
+    func requeueScheduledNotices() {
+        guard !scheduledNotices.isEmpty else { return }
+        enumerateChildNodes(withName: Self.noticeTimerName) { node, _ in node.removeFromParent() }
+        pendingNotices = scheduledNotices.map { ($0.title, $0.sub) } + pendingNotices
+        scheduledNotices = []
+    }
+
+    static let noticeTimerName = "noticeTimer"
+
+    /// 알림 타이머는 전용 노드에 건다 — 서프라이즈·홀 전환 정리가 지우지 않는다(이미 얻은 배지 알림은 라운드를 넘어서도 보여야 한다).
+    /// 새 홀이 시작되면 `requeueScheduledNotices`가 걷어 대기열로 되돌린다
     private func afterNotice(_ delay: Double, _ block: @escaping () -> Void) {
         let timer = SKNode()
+        timer.name = Self.noticeTimerName
         addChild(timer)
         timer.run(.sequence([.wait(forDuration: delay), .run(block), .removeFromParent()]))
     }
