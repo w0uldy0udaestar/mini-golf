@@ -117,10 +117,10 @@ final class ScorecardNode: SKNode {
         }
     }
 
-    /// rival: 라이벌의 홀별 타수(있으면 넷째 행) · summary: 승부·미션 한 줄 (M6 라운드 변주)
+    /// summary: 미션 한 줄 (M6 라운드 변주)
     func show(
         results: [(par: Int, strokes: Int, gaveUp: Bool)], title: String, footer: String,
-        rival: [Int]? = nil, summary: String? = nil
+        summary: String? = nil
     ) {
         for c in content {
             c.removeFromParent()
@@ -132,9 +132,6 @@ final class ScorecardNode: SKNode {
         let firstColX: CGFloat = -170 // 1번 홀 컬럼 중심
         let totalX: CGFloat = 214 // 합계 컬럼 (실카드의 OUT 자리)
         let headerY: CGFloat = 30, parY: CGFloat = 2, scoreY: CGFloat = -28
-        let rivalRow = rival.map { Array($0.prefix(results.count)) } ?? []
-        let rivalY: CGFloat = -60 // 라이벌 행 — 있을 때만 카드가 아래로 30 늘어난다
-        let drop: CGFloat = rivalRow.isEmpty ? 0 : 30
         let extra: CGFloat = summary == nil ? 0 : 22
 
         func put(
@@ -164,18 +161,10 @@ final class ScorecardNode: SKNode {
         put(L("계", "Tot"), x: totalX, y: headerY, size: 11, alpha: 0.6)
         put("\(results.reduce(0) { $0 + $1.par })", x: totalX, y: parY, size: 12, alpha: 0.75)
         put("\(results.reduce(0) { $0 + $1.strokes })", x: totalX, y: scoreY, font: HUDFont.medium, size: 15)
-        if !rivalRow.isEmpty {
-            put(L("라이벌", "Rival"), x: labelX, y: rivalY, size: 12, alpha: 0.6, align: .left)
-            for (i, s) in rivalRow.enumerated() { // 내가 이긴 홀의 라이벌 타수는 흐리게 — 진 홀이 눈에 남는다
-                let won = !results[i].gaveUp && results[i].strokes < s
-                put("\(s)", x: firstColX + CGFloat(i) * colW, y: rivalY, size: 13, alpha: won ? 0.45 : 0.85)
-            }
-            put("\(rivalRow.reduce(0, +))", x: totalX, y: rivalY, size: 13, alpha: 0.75)
-        }
         if let summary {
-            put(summary, x: 0, y: -60 - drop, font: HUDFont.regular, size: 12.5, alpha: 0.85)
+            put(summary, x: 0, y: -60, font: HUDFont.regular, size: 12.5, alpha: 0.85)
         }
-        put(footer, x: 0, y: -60 - drop - extra, font: HUDFont.medium, size: 13)
+        put(footer, x: 0, y: -60 - extra, font: HUDFont.medium, size: 13)
 
         // 행 구분 헤어라인 + 합계 컬럼 구분선 (상자 없는 디자인 안에서 최소한의 격자)
         let grid = CGMutablePath()
@@ -183,12 +172,8 @@ final class ScorecardNode: SKNode {
         grid.addLine(to: CGPoint(x: 248, y: headerY - 18))
         grid.move(to: CGPoint(x: -248, y: parY - 19))
         grid.addLine(to: CGPoint(x: 248, y: parY - 19))
-        if !rivalRow.isEmpty {
-            grid.move(to: CGPoint(x: -248, y: scoreY - 24))
-            grid.addLine(to: CGPoint(x: 248, y: scoreY - 24))
-        }
         grid.move(to: CGPoint(x: totalX - 25, y: headerY + 1))
-        grid.addLine(to: CGPoint(x: totalX - 25, y: (rivalRow.isEmpty ? scoreY : rivalY) - 21))
+        grid.addLine(to: CGPoint(x: totalX - 25, y: scoreY - 21))
         let gridNode = SKShapeNode(path: grid)
         gridNode.strokeColor = NSColor(white: 1, alpha: 0.22)
         gridNode.lineWidth = 1
@@ -196,7 +181,7 @@ final class ScorecardNode: SKNode {
         content.append(gridNode)
 
         scrim.path = CGPath(
-            roundedRect: CGRect(x: -266, y: -92 - drop - extra, width: 532, height: 192 + drop + extra),
+            roundedRect: CGRect(x: -266, y: -92 - extra, width: 532, height: 192 + extra),
             cornerWidth: 22, cornerHeight: 22, transform: nil
         )
         isHidden = false

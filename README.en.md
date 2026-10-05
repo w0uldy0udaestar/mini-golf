@@ -186,7 +186,7 @@ More loft means more spin and less ball speed — wedges fly short and check up 
 
 - **Dynamic terrain** — one archetype per hole (Cliff Tee · Summit Green · Canyon · Terraces · Valley · Ridge · Cascade · Forest). Elevations are set
   against real ball flight (one riser ≤ 14 m, a canyon is escapable with a single wedge), so you can carry the climbs, and descents make the hole play that much longer
-- **Wind** — every hole has wind (up to 7 m/s; light breezes are common, strong wind is rare). Drag and lift are computed
+- **Wind** — every hole has wind (usually up to 7 m/s with light breezes most common; Gale holes blow 4.5–8 m/s). Drag and lift are computed
   against airspeed, so a headwind cuts carry and a tailwind adds to it — read it from the flag and the
   HUD (`Wind → 3m/s` next to the club) and pick your club. Putts are unaffected. The `↑6m` next to the remaining distance is the elevation change to the cup
 - **Surprises** — once in a while (up to five times a round) something happens. A bird makes off with your ball, a mole nudges it, a gust
@@ -199,10 +199,8 @@ More loft means more spin and less ball speed — wedges fly short and check up 
   "Hit the green with a punch or lob", "From 40 m+, stop it inside 5 m"… 9 kinds. Most are decided within a shot or two, and progress shows in the middle of the strip at the bottom of the screen.
   Missions that hinge on distance or stroke count are simulated on that hole in that weather before they are assigned (no "Drive it past 250 m" on an uphill hole into the wind).
   Clear three to unlock the **Sun visor**
-- **Weather rounds** — each round rolls its weather: clear · **Rain** (the ball rolls less and greens are slower — drives roll about 40% less, carry is unchanged) ·
-  **Gale** (4.5–8 m/s on every hole). Rain streaks and wind lines are drawn only just above the ground, so they never cover your work higher up the screen
-- **Ghost rival** — someone has already played the same course in the same weather. Each hole shows the rival's score as a target ("Rival · Par here (4)"),
-  and holing out settles that hole as won, lost, or halved. The rival's skill tracks your average over your last 27 holes (you win about half and lose now and then). There is no second stickman on screen
+- **Hole weather** — the weather changes from hole to hole: clear (about six holes in ten) · **Rain** (the ball rolls less and greens are slower — drives roll about 40% less, carry is unchanged) ·
+  **Gale** (4.5–8 m/s). The same bad weather never comes two holes in a row. Rain streaks and wind lines are drawn only just above the ground, so they never cover your work higher up the screen
 - **Records, badges, hats** — rounds add up: lifetime stats and 15 badges (First birdie · Hole in one · Canyon tamer · Valley walker · Cascade diver · Forest ranger ·
   Summiteer…), with your badge count **unlocking hats for the stickman** (Straw hat → Propeller cap → Top hat → Crown), and missions unlocking the Sun visor.
   New badges are announced after you start aiming on the next hole. ⛳️ menu → Records · Hat
@@ -277,7 +275,7 @@ Clicking another window only releases the keyboard — the game keeps going. Cli
 
 ```sh
 swift build          # debug build
-swift test           # 123 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · save-format compatibility)
+swift test           # 118 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · save-format compatibility)
 swiftformat --lint . # style check
 ```
 
@@ -313,7 +311,7 @@ docs/                motion catalog · QA report · research notes
 | `--demo-replan` | Moves the ball mid-walk (first 12 m ahead → continuous replan `REPLAN`; then 25 m behind → restart after arriving `REWALK` + turn in place) |
 | `--demo-memes` | Cycles through all 12 meme showpieces |
 | `--seed N` | Fix the course seed |
-| `--weather W` | Set the round's weather (`clear` / `rain` / `gale`) — works outside observation modes too |
+| `--weather W` | Force one weather on all nine holes (`clear` / `rain` / `gale`) — works outside observation modes too |
 | `--lang L` | Set the display language (`ko` / `en`, not saved) |
 | `--mission KIND` | Put that mission on every hole (`noDriver` · `fairwayTee` · `longDrive` · `greenInReg` · `midIronGreen` · `shapeShot` · `closeApproach` · `noBunker` · `birdie`) |
 | `--demo-range` | Start in the driving range, cycling clubs every shot (watch the scale ticks and markers) |
@@ -342,7 +340,7 @@ Instrumentation logs: `AIM` · `FLAVOR[epoch]` · `MOTION` · `HOLED` · `OUTBOU
 - [x] 3 pro swing styles (Rory · Tiger · Bryson, keypoints measured from face-on video) — ⛳️ menu → Swing Style
 - [x] Player trademark touches — Tiger's club twirl and uppercut, Bryson's straight arms and arm-lock putting, Rory's impact jump and finish recoil
 - [x] Multiple displays — pick and remember from ⛳️ menu → Display
-- [x] 9 hole missions · weather rounds (Rain · Gale) · ghost rival (hole-by-hole match)
+- [x] 9 hole missions · hole-by-hole weather (Rain · Gale)
 - [x] Driving range — carry and total distance per club
 - [x] Custom summon shortcut — set it yourself from the ⛳️ menu
 - [x] English UI — ⛳️ menu → Language

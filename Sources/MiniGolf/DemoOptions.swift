@@ -48,7 +48,7 @@ struct DemoOptions: Equatable {
     var swingStyle: SwingStyle? // --style: 스윙 스타일 지정 (관찰·캡처용, 저장 안 함)
     var hat: Hat? // --hat: 모자 시각 검증 (저장 안 함)
     var lang: Lang? // --lang ko|en: 표시 언어 지정 (저장 안 함 — 영어 화면 관찰)
-    var weather: Weather? // --weather clear|rain|gale: 라운드 날씨 강제 (M6 — 실플레이에서도 듣는다: 날씨만 고르고 치는 용도)
+    var weather: Weather? // --weather clear|rain|gale: 9홀 전부 그 날씨로 강제 (M6 — 실플레이에서도 듣는다: 날씨만 고르고 치는 용도)
     var mission: MissionKind? // --mission KIND: 모든 홀에 그 미션 (M6 관찰)
 
     init() {}

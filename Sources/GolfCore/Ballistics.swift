@@ -349,7 +349,7 @@ public enum Ballistics {
     /// 결정론적 물리 스텝. 경사면 바운스는 법선 반사, 굴림에는 중력의 경사 성분이 더해진다.
     /// wind: 바람 덮어쓰기(m/s) — 돌풍 서프라이즈가 비행 중 잠시 넘긴다 (nil이면 홀 바람)
     /// kind: 공 종류 — 공 바꿔치기 서프라이즈의 고무공·볼링공 (표준은 배율 전부 1)
-    /// weather: 라운드 날씨 — 비는 굴림 감속·바운스 반발 배율 (맑음·강풍은 전부 1, 강풍의 바람은 홀 데이터에 이미 들어 있다)
+    /// weather: 그 홀의 날씨 — 비는 굴림 감속·바운스 반발 배율 (맑음·강풍은 전부 1, 강풍의 바람은 홀 데이터에 이미 들어 있다)
     public static func step(
         _ b: inout BallState, hole: Hole, dt: Double = Phys.dt, wind: Double? = nil,
         kind: BallKind = .standard, weather: Weather = .clear

@@ -1,7 +1,7 @@
 @testable import GolfCore
 import XCTest
 
-/// M6 라운드 변주 (2026-10-05): 날씨 물리·미션 판정·라이벌 결정론
+/// M6 라운드 변주 (2026-10-05): 날씨 물리·홀별 날씨 편성·미션 판정
 final class RoundVarietyTests: XCTestCase {
     private func club(_ id: String) throws -> Club {
         try XCTUnwrap(ClubTable.all.first { $0.id == id })
@@ -132,22 +132,34 @@ final class RoundVarietyTests: XCTestCase {
         }
     }
 
-    func testWeatherPickIsDeterministicAndMixed() {
+    func testWeatherPlanIsDeterministicAndMixed() {
         var counts: [Weather: Int] = [:]
+        var repeats = 0, mixedRounds = 0
         for seed: UInt32 in 1 ... 2000 {
-            let w = Weather.pick(seed: seed)
-            XCTAssertEqual(w, Weather.pick(seed: seed))
-            counts[w, default: 0] += 1
+            let plan = Weather.plan(seed: seed, holes: 9)
+            XCTAssertEqual(plan, Weather.plan(seed: seed, holes: 9))
+            XCTAssertEqual(plan.count, 9)
+            for (i, w) in plan.enumerated() {
+                counts[w, default: 0] += 1
+                if i > 0, w != .clear, w == plan[i - 1] {
+                    repeats += 1
+                }
+            }
+            mixedRounds += Set(plan).count >= 2 ? 1 : 0
         }
-        // 맑음 50%·비 25%·강풍 25% — 인접 시드에서도 고르게
-        XCTAssertEqual(Double(counts[.clear] ?? 0) / 2000, 0.5, accuracy: 0.05)
-        XCTAssertEqual(Double(counts[.rain] ?? 0) / 2000, 0.25, accuracy: 0.05)
-        XCTAssertEqual(Double(counts[.gale] ?? 0) / 2000, 0.25, accuracy: 0.05)
-        // 연속 시드(실플레이 시드는 초 단위 시각)가 같은 날씨로 뭉치지 않는다
+        // 같은 궂은 날씨가 두 홀 연달아 가지 않는다 — 첫 실플레이 판정 "왜 주구장창 비만 내리냐"(라운드 내내 같은 날씨였다)
+        XCTAssertEqual(repeats, 0)
+        // 홀 기준 맑음 60%·비 20%·강풍 20%쯤 (뽑기는 50/25/25, 연달아 나온 궂은 날씨가 맑음으로 바뀐 몫)
+        let n = Double(2000 * 9)
+        XCTAssertEqual(Double(counts[.clear] ?? 0) / n, 0.6, accuracy: 0.03)
+        XCTAssertEqual(Double(counts[.rain] ?? 0) / n, 0.2, accuracy: 0.03)
+        XCTAssertEqual(Double(counts[.gale] ?? 0) / n, 0.2, accuracy: 0.03)
+        XCTAssertGreaterThan(Double(mixedRounds) / 2000, 0.98, "9홀 내내 한 날씨인 라운드는 전부 맑음(0.2%)뿐")
+        // 연속 시드(실플레이 시드는 초 단위 시각)의 1번 홀 날씨가 같은 것으로 뭉치지 않는다
         var runs = 0, longest = 0
         var prev: Weather?
         for seed: UInt32 in 1_790_000_000 ... 1_790_000_300 {
-            let w = Weather.pick(seed: seed)
+            let w = Weather.plan(seed: seed, holes: 1)[0]
             runs = w == prev ? runs + 1 : 1
             longest = max(longest, runs)
             prev = w
@@ -167,7 +179,7 @@ final class RoundVarietyTests: XCTestCase {
                 seed: seed,
                 weather: w,
                 holes: holes,
-                plan: MissionKind.plan(course: holes, seed: seed, weather: w)
+                plan: MissionKind.plan(course: holes, seed: seed, weather: Array(repeating: w, count: holes.count))
             )
         }
     }
@@ -189,8 +201,43 @@ final class RoundVarietyTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(Set(p.plan).count, 4, "seed \(p.seed) \(p.weather): 한 라운드 미션 종류가 너무 적다")
         }
         for p in Self.planned.prefix(6) { // 결정론: 다시 편성해도 같다
-            XCTAssertEqual(p.plan, MissionKind.plan(course: p.holes, seed: p.seed, weather: p.weather))
+            XCTAssertEqual(
+                p.plan,
+                MissionKind.plan(
+                    course: p.holes,
+                    seed: p.seed,
+                    weather: Array(repeating: p.weather, count: p.holes.count)
+                )
+            )
         }
+    }
+
+    /// 앱과 같은 순서(홀별 날씨 → 바람 → 편성)로 짠 라운드: 걸린 미션은 **그 홀의** 날씨에서 가능하다.
+    /// 편성이 홀별 날씨를 안 읽으면(전부 맑음으로 보면) 비·강풍 홀에 불가능한 장타·레귤레이션 미션이 걸린다
+    /// (일부러 그렇게 고장 내면 seed 17·26의 1번 홀에서 실패한다)
+    func testMissionPlanFollowsEachHolesWeather() {
+        var stormy = 0, blindBad = 0
+        for seed: UInt32 in 1 ... 40 {
+            let weather = Weather.plan(seed: seed, holes: 9)
+            let holes = zip(CourseGenerator.makeCourse(seed: seed), weather).map { $0.withWind($1.wind(base: $0.wind)) }
+            let plan = MissionKind.plan(course: holes, seed: seed, weather: weather)
+            let blind = MissionKind.plan(course: holes, seed: seed) // 날씨를 안 보고 짠 편성
+            blindBad += blind.indices.filter { weather[$0] != .clear && !blind[$0].eligible(
+                for: holes[$0],
+                weather: weather[$0]
+            ) }
+            .count
+            for (i, k) in plan.enumerated() where weather[i] != .clear {
+                stormy += 1
+                XCTAssertTrue(
+                    k.eligible(for: holes[i], weather: weather[i]),
+                    "seed \(seed) hole \(i + 1) \(weather[i]): \(k)"
+                )
+            }
+        }
+        XCTAssertGreaterThan(stormy, 100, "궂은 날씨 홀 표본이 충분하다")
+        // 이 표본에 '날씨를 봐야만 걸러지는 홀'이 실제로 있다 — 0이 되면 위 단언은 아무것도 감시하지 않는다 (리뷰: 140홀 중 2홀)
+        XCTAssertGreaterThan(blindBad, 0, "날씨를 무시한 편성도 전부 가능하다 — 표본(시드 범위)을 넓혀야 한다")
     }
 
     func testMissionKindsAllAppear() {
@@ -236,7 +283,7 @@ final class RoundVarietyTests: XCTestCase {
             for (i, k) in p.plan.enumerated() where k == .greenInReg {
                 count += 1
                 XCTAssertTrue(
-                    Rival.reachesGreenInRegulation(p.holes[i], weather: p.weather),
+                    MissionBot.reachesGreenInRegulation(p.holes[i], weather: p.weather),
                     "seed \(p.seed) \(p.weather) hole \(i + 1)"
                 )
             }
@@ -388,33 +435,5 @@ final class RoundVarietyTests: XCTestCase {
         var quit = MissionTracker(kind: .birdie, par: 4)
         quit.gaveUp()
         XCTAssertEqual(quit.state, .failed)
-    }
-
-    // ── 라이벌 ──
-
-    func testRivalIsDeterministicAndBounded() {
-        let course = CourseGenerator.makeCourse(seed: 7)
-        let a = Rival.playRound(course, seed: 7, weather: .rain, skill: 1.5)
-        XCTAssertEqual(a, Rival.playRound(course, seed: 7, weather: .rain, skill: 1.5))
-        XCTAssertEqual(a.count, 9)
-        for s in a {
-            XCTAssertGreaterThanOrEqual(s, 1)
-            XCTAssertLessThanOrEqual(s, Phys.maxStrokes)
-        }
-        XCTAssertNotEqual(a, Rival.playRound(course, seed: 8, weather: .rain, skill: 1.5), "시드가 다르면 다른 라운드")
-    }
-
-    func testRivalSkillLookup() {
-        XCTAssertEqual(Rival.skill(forOverPar: -5), Rival.calibration[0].skill, "표 아래는 가장 잘 치는 쪽으로 클램프")
-        XCTAssertEqual(Rival.skill(forOverPar: 9), Rival.calibration[Rival.calibration.count - 1].skill)
-        var prev = -Double.infinity
-        for t in stride(from: -0.3, through: 2.0, by: 0.1) {
-            let s = Rival.skill(forOverPar: t)
-            XCTAssertGreaterThanOrEqual(s, prev, "목표가 높을수록(못 칠수록) 오차 배율이 커야 한다")
-            prev = s
-        }
-        for row in Rival.calibration {
-            XCTAssertEqual(Rival.skill(forOverPar: row.overPar), row.skill, accuracy: 1e-6)
-        }
     }
 }

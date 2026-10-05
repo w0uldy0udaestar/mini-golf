@@ -103,17 +103,14 @@ struct Records: Codable {
     var showpiecesSeen = 0
     var badges: Set<Badge> = []
     var hat: Hat = .none
-    // ── M6 (2026-10-05): 미션·라이벌. 전부 없는 키는 기본값이라 옛 기록과 호환 ──
+    /// 미션 성공 누적 (M6, 2026-10-05). 없는 키는 기본값이라 옛 기록과 호환 — 같은 날 삭제한 라이벌의 키가 남은 저장본은 그 키만 무시한다
     var missionsCleared = 0
-    var rivalWon = 0, rivalLost = 0, rivalTied = 0 // 홀별 승부 누적
-    var totalPar = 0 // 홀아웃한 홀의 파 합 — 평균 실력(파 대비) 계산용. 옛 기록은 홀당 4로 추정해 채운다
-    var recentOver: [Int] = [] // 최근 홀아웃의 타수−파 (최대 27홀) — 라이벌 실력이 지금 실력을 따라온다
 
     private static let key = "records"
 
     enum CodingKeys: String, CodingKey {
         case roundsCompleted, holesPlayed, totalStrokes, bestRound, holeInOnes, eagles, birdies, waterBalls
-        case showpiecesSeen, badges, hat, hatV2, missionsCleared, rivalWon, rivalLost, rivalTied, totalPar, recentOver
+        case showpiecesSeen, badges, hat, hatV2, missionsCleared
     }
 
     init() {}
@@ -137,11 +134,6 @@ struct Records: Codable {
         let hatName = try c.decodeIfPresent(String.self, forKey: .hatV2) ?? c.decodeIfPresent(String.self, forKey: .hat)
         hat = hatName.flatMap(Hat.init(rawValue:)) ?? .none
         missionsCleared = try c.decodeIfPresent(Int.self, forKey: .missionsCleared) ?? 0
-        rivalWon = try c.decodeIfPresent(Int.self, forKey: .rivalWon) ?? 0
-        rivalLost = try c.decodeIfPresent(Int.self, forKey: .rivalLost) ?? 0
-        rivalTied = try c.decodeIfPresent(Int.self, forKey: .rivalTied) ?? 0
-        totalPar = try c.decodeIfPresent(Int.self, forKey: .totalPar) ?? holesPlayed * 4 // 9홀 파 36 = 홀당 4
-        recentOver = try c.decodeIfPresent([Int].self, forKey: .recentOver) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -159,43 +151,6 @@ struct Records: Codable {
         try c.encode(hat.legacy, forKey: .hat)
         try c.encode(hat.rawValue, forKey: .hatV2)
         try c.encode(missionsCleared, forKey: .missionsCleared)
-        try c.encode(rivalWon, forKey: .rivalWon)
-        try c.encode(rivalLost, forKey: .rivalLost)
-        try c.encode(rivalTied, forKey: .rivalTied)
-        try c.encode(totalPar, forKey: .totalPar)
-        try c.encode(recentOver, forKey: .recentOver)
-    }
-
-    /// 홀아웃 한 번을 실력 통계에 반영
-    mutating func noteHoleOut(strokes: Int, par: Int) {
-        totalPar += par
-        recentOver.append(strokes - par)
-        if recentOver.count > 27 {
-            recentOver.removeFirst(recentOver.count - 27)
-        }
-    }
-
-    /// 기권(12타 초과)한 홀도 최근 실력에 넣는다 — 빼면 못 치는 플레이어일수록 평균이 좋아 보여 라이벌이 강해진다 (리뷰).
-    /// 한 홀이 평균을 삼키지 않게 +4로 친다. 누적 통계(홀·타수)는 홀아웃한 홀만 세던 그대로
-    mutating func noteGiveUp() {
-        recentOver.append(4)
-        if recentOver.count > 27 {
-            recentOver.removeFirst(recentOver.count - 27)
-        }
-    }
-
-    /// 라이벌의 목표 실력 (홀당 평균 파 대비): 내 최근 실력보다 0.15타 못 치는 상대 — 반쯤 이기고 가끔 진다.
-    /// 최근 9홀 이상이면 최근 평균, 아니면 누적 평균, 그것도 9홀 미만(처음)이면 보기 플레이어(+0.9)
-    var rivalTargetOverPar: Double {
-        let mine: Double
-        if recentOver.count >= 9 {
-            mine = Double(recentOver.reduce(0, +)) / Double(recentOver.count)
-        } else if holesPlayed >= 9 {
-            mine = Double(totalStrokes - totalPar) / Double(holesPlayed)
-        } else {
-            return 0.9
-        }
-        return min(1.8, max(-0.1, mine + 0.15))
     }
 
     static var shared: Records = {
@@ -243,11 +198,7 @@ struct Records: Codable {
                 "입수 \(waterBalls)회 · 밈 목격 \(showpiecesSeen)회",
                 "Water balls \(waterBalls) · Memes seen \(showpiecesSeen)"
             ),
-            L("미션 성공 \(missionsCleared)회", "Missions cleared \(missionsCleared)")
-                + " · " + L(
-                    "라이벌 상대 \(rivalWon)승 \(rivalLost)패 \(rivalTied)무",
-                    "vs rival \(rivalWon)W \(rivalLost)L \(rivalTied)T"
-                ),
+            L("미션 성공 \(missionsCleared)회", "Missions cleared \(missionsCleared)"),
             "",
             L("배지 \(badges.count)/\(Badge.allCases.count)", "Badges \(badges.count)/\(Badge.allCases.count)"),
         ]

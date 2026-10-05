@@ -57,7 +57,7 @@ final class GameScene: SKScene {
     private var renderSlipRot = 0.0 // 발을 축으로 한 몸 전체 회전 (zRotation에 더한다)
     var galleryState: GalleryState?
     var surprise3 = Surprise3State() // 서프라이즈 3차 (Surprises3.swift) — 스프링클러·캐디·뻐꾸기·강아지 상태
-    var extras = RoundExtras() // M6 라운드 변주 (RoundExtras.swift) — 날씨·미션·라이벌
+    var extras = RoundExtras() // M6 라운드 변주 (RoundExtras.swift) — 날씨·미션
     /// 대기 중인 알림(배지·해금) — 다음 조준이 시작된 뒤에 띄운다 (RoundExtras.flushNotices)
     var pendingNotices: [(title: String, sub: String)] = []
     /// 지금 떠 있는 토스트가 걷히는 시각(CACurrentMediaTime) — 홀 인트로와 알림이 앞 토스트를 덮지 않고 그 뒤에 선다
@@ -272,10 +272,9 @@ final class GameScene: SKScene {
     private let toastSub = GlassLabel(font: HUDFont.regular, size: 13, alpha: 0.8)
     private let powerLabel = GlassLabel(font: HUDFont.medium, size: 11, alpha: 0.85)
     private let scorecard = ScorecardNode()
-    // 하단 띠 가운데: 미션 한 줄 + 라이벌 한 줄 (M6). 시작 8초는 조작 힌트 자리라 그 뒤에 나타난다
+    // 하단 띠 가운데: 미션 한 줄 (M6). 시작 8초는 조작 힌트 자리라 그 뒤에 나타난다
     let roundStrip = SKNode()
     let missionLabel = GlassLabel(font: HUDFont.medium, size: 12.5, alpha: 0.92)
-    let rivalLabel = GlassLabel(font: HUDFont.regular, size: 11.5, alpha: 0.7)
     let weatherNode = SKNode() // 비·강풍 줄기 — 지면 위 띠에만 (RoundExtras.rebuildWeatherFX)
 
     func px(_ m: Double) -> CGFloat {
@@ -354,7 +353,6 @@ final class GameScene: SKScene {
             addChild(n)
         }
         roundStrip.addChild(missionLabel)
-        roundStrip.addChild(rivalLabel)
         for n in [
             scoreTitle,
             scoreSub,
@@ -371,7 +369,7 @@ final class GameScene: SKScene {
             addChild(n)
         }
 
-        // 힌트는 잠시 후 조용히 사라진다 (화면을 어지르지 않기) — 그 자리에 미션·라이벌 띠가 들어온다
+        // 힌트는 잠시 후 조용히 사라진다 (화면을 어지르지 않기) — 그 자리에 미션 띠가 들어온다
         hintLabel.run(.sequence([.wait(forDuration: 8), .fadeOut(withDuration: 1.2)]))
         roundStrip.alpha = 0
         roundStrip.run(.sequence([.wait(forDuration: 9.2), .fadeIn(withDuration: 0.6)]))
@@ -383,7 +381,7 @@ final class GameScene: SKScene {
         }
         didSetUp = true
         if demo.cardPreview { // 스코어카드 레이아웃 검증용 고정 샘플 (이글·버디·파·보기·더블·기권 포함)
-            extras.cardShown = true // 실제 라운드 종료와 같게 — 하단 미션·라이벌 띠를 숨긴다
+            extras.cardShown = true // 실제 라운드 종료와 같게 — 하단 미션 띠를 숨긴다
             updateRoundStrip()
             let sample: [(par: Int, strokes: Int, gaveUp: Bool)] = [
                 (4, 4, false), (3, 2, false), (4, 5, false), (5, 3, false), (4, 4, false),
@@ -392,10 +390,7 @@ final class GameScene: SKScene {
             scorecard.show(
                 results: sample, title: L("라운드 종료", "Round complete"),
                 footer: L("합계 +7 · 흐린 숫자 = 기권  —  R로 새 라운드", "Total +7 · dim = picked up  —  R for a new round"),
-                rival: [4, 3, 5, 4, 5, 4, 6, 5, 4], summary: L("라이벌에 2홀 차 승", "Beat the rival by 2") + " · " + L(
-                    "미션 4/9",
-                    "Missions 4/9"
-                )
+                summary: L("미션 4/9", "Missions 4/9")
             )
         }
     }
@@ -423,7 +418,6 @@ final class GameScene: SKScene {
         clubSub.position = CGPoint(x: 24, y: 40)
         hintLabel.position = CGPoint(x: size.width / 2, y: 60)
         missionLabel.position = CGPoint(x: size.width / 2, y: 66)
-        rivalLabel.position = CGPoint(x: size.width / 2, y: 40)
         pauseLabel.position = CGPoint(x: size.width / 2, y: size.height - 46) // 일시정지 배너만 상단(⛳️ 버튼 곁)
         toastTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.64)
         toastSub.position = CGPoint(x: size.width / 2, y: size.height * 0.64 - 42)
@@ -454,7 +448,7 @@ final class GameScene: SKScene {
         scorecard.applyContrast()
         for l in [
             scoreTitle, scoreSub, clubTitle, clubSub, hintLabel,
-            pauseLabel, toastTitle, toastSub, powerLabel, missionLabel, rivalLabel,
+            pauseLabel, toastTitle, toastSub, powerLabel, missionLabel,
         ] {
             l.applyContrast()
         }
@@ -467,7 +461,7 @@ final class GameScene: SKScene {
             seed: roundSeed
         )
         practice = nil // R·메뉴 '새 라운드'는 연습장에서 나온다
-        beginRoundExtras(seed: roundSeed, course: &course) // 날씨(바람 반영)·미션 편성·라이벌 선행 플레이 (M6)
+        beginRoundExtras(seed: roundSeed, course: &course) // 홀별 날씨(바람 반영)·미션 편성 (M6)
         holeIdx = demo.active ? min(8, max(0, demo.startHole - 1)) : 0
         results = []
         roundHadWater = false
@@ -483,7 +477,7 @@ final class GameScene: SKScene {
     /// 연습장으로 (⛳️ 메뉴): 진행 중인 라운드는 접는다 — 돌아올 때는 새 라운드(R·메뉴)
     func enterPractice() {
         practice = PracticeState()
-        extras = RoundExtras() // 날씨 맑음·미션·라이벌 없음
+        extras = RoundExtras() // 날씨 맑음·미션 없음
         course = [Hole.range()]
         holeIdx = 0
         results = []
@@ -541,6 +535,8 @@ final class GameScene: SKScene {
             )
             beginHoleExtras() // 이 홀의 미션 (M6)
         }
+        // 티 의식(1.35초) 동안에도 HUD가 새 홀의 것이게 — 날씨가 홀마다 바뀌면서 '비 — 덜 구른다'가 맑은 홀 첫머리에 남았다 (리뷰)
+        updateHUD()
         if demo.active, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
             print("SIGNATURE \(sig.rawValue)")
             fflush(stdout)
@@ -557,7 +553,7 @@ final class GameScene: SKScene {
                     titleScale: 0.8, hold: 2.8
                 )
             } else {
-                // 홀 이름·미션·라이벌 목표 — 티 꽂는 동안 읽힌다. 단 앞 홀의 홀아웃·기권 안내(둘째 줄에 승부·미션 결과)가 아직 떠 있으면
+                // 홀 이름·날씨·미션 — 티 꽂는 동안 읽힌다. 단 앞 홀의 홀아웃·기권 안내(둘째 줄에 미션 결과)가 아직 떠 있으면
                 // 그게 걷힌 뒤에 — 바로 띄우면 컵에서 먼 홀아웃(1.7초 뒤 전환)·기권(1.4초)의 안내가 반쯤 읽히다 잘렸다 (리뷰)
                 let wait = toastEndsAt - CACurrentMediaTime()
                 if wait > 0.05 {
@@ -797,7 +793,7 @@ final class GameScene: SKScene {
         let d = abs(hole.holeX - ball.x)
         // 2단 그린 턱은 눈에 보이는 계단이라 프리셋에도 오르막 표고를 더한다(내리막은 무시 — 브레이크 읽기는 플레이어 몫, 리뷰 m4)
         let up = max(0, hole.ground(at: hole.holeX) - hole.ground(at: ball.x))
-        heightPct = Ballistics.putterPreset(distance: d, rise: up, weather: extras.weather) // 비 오는 날은 느린 그린 기준
+        heightPct = Ballistics.putterPreset(distance: d, rise: up, weather: holeWeather) // 비 오는 홀은 느린 그린 기준
     }
 
     /// ── 벽 스탠스: 화면 끝 = 벽. 몸 뒤 공간이 좁으면 백스윙이 제한되고(펀치샷),
@@ -1714,16 +1710,15 @@ final class GameScene: SKScene {
                 }, .removeFromParent()]))
             }
         }
-        // 둘째 줄: 라이벌과의 홀 승부 + 미션 결과 (M6)
-        let extrasLine = ([settleRivalHole(gaveUp: false)] + [missionFinish(gaveUp: false)].compactMap(\.self))
-            .joined(separator: " · ")
+        // 둘째 줄: 미션 결과 (M6)
+        let extrasLine = missionFinish(gaveUp: false).map { "\n" + $0 } ?? ""
         toast(
             scoreName(strokes: strokes, par: hole.par),
             sub: L(
                 "\(strokes)타 · 파 \(hole.par) · \(Int(hole.dist))m",
                 "\(strokes) on a par \(hole.par) · \(Int(hole.dist)) m"
             ) +
-                (birdieStreak >= 2 ? L(" · 버디 스트릭 ×\(birdieStreak)", " · birdie streak ×\(birdieStreak)") : "") + "\n" +
+                (birdieStreak >= 2 ? L(" · 버디 스트릭 ×\(birdieStreak)", " · birdie streak ×\(birdieStreak)") : "") +
                 extrasLine,
             overFlag: true,
             titleScale: diff <= -2 ? 1.3 : diff == -1 ? 1.12 : diff <= 0 ? 1.0 : 0.88,
@@ -1770,7 +1765,6 @@ final class GameScene: SKScene {
         var earned: [Badge] = []
         r.holesPlayed += 1
         r.totalStrokes += strokes
-        r.noteHoleOut(strokes: strokes, par: hole.par) // 라이벌 실력 기준 (M6)
         if strokes == 1 {
             r.holeInOnes += 1
             if r.award(.holeInOne) {
@@ -1992,20 +1986,15 @@ final class GameScene: SKScene {
     private func giveUp() {
         mode = .holed
         results.append((hole.par, Phys.maxStrokes, true))
-        if !demo.active {
-            Records.shared.noteGiveUp() // 라이벌 실력 기준에 기권 홀도 (M6 리뷰)
-            Records.shared.save()
-        }
         endShotTrail()
         reactionKind = .dejected
         reactionAt = lastTime
         walkMood = .sad
         walkMoodLeft = 2
-        let extrasLine = ([settleRivalHole(gaveUp: true)] + [missionFinish(gaveUp: true)].compactMap(\.self))
-            .joined(separator: " · ")
+        let extrasLine = missionFinish(gaveUp: true).map { "\n" + $0 } ?? ""
         toast(
             L("기권", "Picked up"),
-            sub: L("\(Phys.maxStrokes)타 초과", "over \(Phys.maxStrokes) strokes") + "\n" + extrasLine, titleScale: 0.88,
+            sub: L("\(Phys.maxStrokes)타 초과", "over \(Phys.maxStrokes) strokes") + extrasLine, titleScale: 0.88,
             hold: 1.9
         )
         afterHoleFlow(1.4) { [weak self] in self?.advanceHole() }
@@ -2027,10 +2016,9 @@ final class GameScene: SKScene {
                 : L("합계 \(totalStr)  —  R로 새 라운드", "Total \(totalStr)  —  R for a new round")
             scorecard.show(
                 results: results, title: L("라운드 종료", "Round complete"), footer: footer,
-                rival: Array(extras.rival.suffix(results.count)), // 관찰 모드가 N번 홀부터 시작해도 같은 홀끼리 맞춘다
                 summary: roundExtrasSummary
             )
-            extras.cardShown = true // 카드가 뜨면 하단 미션·라이벌 띠는 숨긴다 (새 라운드가 extras를 새로 만들며 풀린다)
+            extras.cardShown = true // 카드가 뜨면 하단 미션 띠는 숨긴다 (새 라운드가 extras를 새로 만들며 풀린다)
             updateRoundStrip()
             SoundKit.shared.chime()
             recordRoundEnd(total: total)
@@ -2354,7 +2342,7 @@ final class GameScene: SKScene {
     }
 
     func updateHUD() {
-        updateRoundStrip() // 미션·라이벌 띠 (M6)
+        updateRoundStrip() // 미션 띠 (M6)
         let total = results.reduce(0) { $0 + ($1.strokes - $1.par) }
         let totalStr = total > 0 ? "+\(total)" : total == 0 ? "E" : "\(total)"
         let remain = abs(hole.holeX - ball.x)
@@ -2394,10 +2382,10 @@ final class GameScene: SKScene {
         let cat = catName + ((shape.cue(for: club.cat) ?? (club.isPutter ? nil : lieCue)).map { " · \($0)" } ?? "")
         // 바람: 화살표는 부는 방향 (→ = 오른쪽으로 밀어줌), 0.5m/s 미만은 무풍 취급
         let w = hole.wind
-        // 날씨 단어 (M6): 강풍 라운드는 '바람' 자리에 '강풍', 비는 결과의 말을 붙인다 — 수치가 아니라 이름
-        let windWord = extras.weather == .gale ? L("강풍", "Gale") : L("바람", "Wind")
+        // 날씨 단어 (M6): 강풍 홀은 '바람' 자리에 '강풍', 비는 결과의 말을 붙인다 — 수치가 아니라 이름
+        let windWord = holeWeather == .gale ? L("강풍", "Gale") : L("바람", "Wind")
         let windStr = abs(w) < 0.5 ? "" : " · \(windWord) \(w > 0 ? "→" : "←") \(Int(abs(w).rounded()))m/s"
-        let rainStr = extras.weather == .rain ? " · " + L("비 — 덜 구른다", "Rain — less roll") : ""
+        let rainStr = holeWeather == .rain ? " · " + L("비 — 덜 구른다", "Rain — less roll") : ""
         clubSub.setText(cat + windStr + rainStr)
     }
 
@@ -2739,7 +2727,7 @@ final class GameScene: SKScene {
                 let prevX = ball.x
                 let vxBefore = ball.vx
                 let event = Ballistics.step( // 돌풍 덮어쓰기 · 공 바꿔치기 · 날씨(비)
-                    &ball, hole: hole, wind: gustWind, kind: ballKind, weather: extras.weather
+                    &ball, hole: hole, wind: gustWind, kind: ballKind, weather: holeWeather
                 )
                 if inPractice, case .bounce = event, practice?.carryX == nil { // 연습장: 첫 착지 = 캐리
                     practice?.carryX = ball.x
