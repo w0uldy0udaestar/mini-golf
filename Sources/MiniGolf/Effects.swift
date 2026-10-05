@@ -105,6 +105,73 @@ enum FX {
         ]))
     }
 
+    /// 음표 — 휘파람·콧노래의 '소리'를 그림으로 (2026-10-05 M6: 사용자가 사운드를 끄고 플레이해 소리 기반 잔동작이 전달되지 않았다).
+    /// 머리 옆에서 떠올라 흔들리며 사라진다(1.3s). index 홀수는 8분음표 하나, 짝수는 이어진 두 개 — 굵고 둥근 선 규칙, 색은 스틱맨과 같은 밝은 회백
+    static func note(on parent: SKNode, at p: CGPoint, index: Int, dir: Double) {
+        let node = SKNode()
+        let color = NSColor(white: 0.96, alpha: 0.95)
+        func head(_ x: CGFloat, _ y: CGFloat) -> SKShapeNode {
+            let h = SKShapeNode(ellipseOf: CGSize(width: 6.4, height: 4.6))
+            h.fillColor = color
+            h.strokeColor = .clear
+            h.zRotation = 0.35
+            h.position = CGPoint(x: x, y: y)
+            return h
+        }
+        let lines = CGMutablePath()
+        if index % 2 == 1 { // ♪
+            node.addChild(head(0, 0))
+            lines.move(to: CGPoint(x: 2.7, y: 0.8))
+            lines.addLine(to: CGPoint(x: 2.7, y: 14))
+            lines.addQuadCurve(to: CGPoint(x: 8, y: 8), control: CGPoint(x: 8.5, y: 12.5))
+        } else { // ♫
+            node.addChild(head(0, 0))
+            node.addChild(head(10, 2))
+            lines.move(to: CGPoint(x: 2.7, y: 0.8))
+            lines.addLine(to: CGPoint(x: 2.7, y: 13))
+            lines.addLine(to: CGPoint(x: 12.7, y: 15))
+            lines.addLine(to: CGPoint(x: 12.7, y: 2.8))
+        }
+        let stroke = SKShapeNode(path: lines)
+        stroke.strokeColor = color
+        stroke.lineWidth = 1.6
+        stroke.lineCap = .round
+        stroke.lineJoin = .round
+        stroke.fillColor = .clear
+        node.addChild(stroke)
+        if Theme.highContrast { // 밝은 배경: 어두운 받침 획 — 줄기와 머리 모두
+            let under = SKShapeNode(path: lines)
+            under.strokeColor = NSColor(white: 0, alpha: 0.4)
+            under.lineWidth = 3.4
+            under.lineCap = .round
+            under.zPosition = -1
+            node.addChild(under)
+            for h in node.children.compactMap({ $0 as? SKShapeNode }) where h.fillColor == color {
+                h.strokeColor = NSColor(white: 0, alpha: 0.4)
+                h.lineWidth = 1.2
+            }
+        }
+        let d = CGFloat(dir)
+        node.position = CGPoint(x: p.x + d * (12 + CGFloat(index % 3) * 5), y: p.y + 10)
+        node.alpha = 0
+        node.setScale(0.75)
+        node.zPosition = 8
+        parent.addChild(node)
+        let sway = SKAction.sequence([
+            .moveBy(x: d * 7, y: 11, duration: 0.42),
+            .moveBy(x: -d * 3, y: 11, duration: 0.42),
+            .moveBy(x: d * 6, y: 10, duration: 0.46),
+        ])
+        node.run(.sequence([
+            .group([
+                sway,
+                .scale(to: 1.15, duration: 1.3),
+                .sequence([.fadeIn(withDuration: 0.12), .wait(forDuration: 0.75), .fadeOut(withDuration: 0.43)]),
+            ]),
+            .removeFromParent(),
+        ]))
+    }
+
     /// 릴리스 착지 — 앞으로 낮게 쓸리는 먼지 줄기 3개 (스핀이 남지 않고 굴러간다)
     static func skid(on parent: SKNode, at p: CGPoint, dir: Double, surface: Surface, intensity: Double) {
         let color = surface == .rough ? Palette.roughGray.withAlphaComponent(0.55) : Palette.hairline

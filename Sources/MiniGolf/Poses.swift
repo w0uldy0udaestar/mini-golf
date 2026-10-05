@@ -88,9 +88,9 @@ enum SwingStyle: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .rory: "로리 매킬로이"
-        case .tiger: "타이거 우즈"
-        case .bryson: "브라이슨 디섐보"
+        case .rory: L("로리 매킬로이", "Rory McIlroy")
+        case .tiger: L("타이거 우즈", "Tiger Woods")
+        case .bryson: L("브라이슨 디섐보", "Bryson DeChambeau")
         }
     }
 
