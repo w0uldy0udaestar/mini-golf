@@ -45,7 +45,7 @@ final class LocalizationTests: XCTestCase {
             for m in MissionKind.allCases {
                 XCTAssertFalse(m.title(par: 4).isEmpty)
             }
-            XCTAssertNil(Weather.clear.label)
+            XCTAssertNil(Weather.clear.cue)
             XCTAssertNotNil(Weather.rain.cue)
         }
         // 영어 화면에 한글이 섞여 나오지 않는다 (열거형 문구 전체)

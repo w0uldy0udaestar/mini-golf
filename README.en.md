@@ -197,6 +197,7 @@ More loft means more spin and less ball speed — wedges fly short and check up 
   with your ball — 16 in all, catalog in `docs/surprises.md`
 - **Hole missions** — each hole carries a one-line goal: "Par or better without the driver", "Tee shot on the fairway", "Hit the green with a 5–8 iron",
   "Hit the green with a punch or lob", "From 40 m+, stop it inside 5 m"… 9 kinds. Most are decided within a shot or two, and progress shows in the middle of the strip at the bottom of the screen.
+  Missions that hinge on distance or stroke count are simulated on that hole in that weather before they are assigned (no "Drive it past 250 m" on an uphill hole into the wind).
   Clear three to unlock the **Sun visor**
 - **Weather rounds** — each round rolls its weather: clear · **Rain** (the ball rolls less and greens are slower — drives roll about 40% less, carry is unchanged) ·
   **Gale** (4.5–8 m/s on every hole). Rain streaks and wind lines are drawn only just above the ground, so they never cover your work higher up the screen
@@ -276,7 +277,7 @@ Clicking another window only releases the keyboard — the game keeps going. Cli
 
 ```sh
 swift build          # debug build
-swift test           # 110 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · save-format compatibility)
+swift test           # 123 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · save-format compatibility)
 swiftformat --lint . # style check
 ```
 

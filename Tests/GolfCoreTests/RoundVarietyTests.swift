@@ -47,7 +47,7 @@ final class RoundVarietyTests: XCTestCase {
             _ = Ballistics.step(&b, hole: hole) // 인자 없는 구 호출
             t += Phys.dt
         }
-        XCTAssertEqual(b.x - 50, base.total, accuracy: 1e-9, "맑음은 기본 인자와 같아야 한다 (회귀 없음)")
+        XCTAssertEqual(b.x - 50, base.total, accuracy: 1e-9, "명시한 .clear는 인자 없는 호출과 같다 (기본값이 맑음)")
         XCTAssertEqual(
             try flatShot("DR", weather: .gale).total,
             base.total,
@@ -56,19 +56,67 @@ final class RoundVarietyTests: XCTestCase {
         )
     }
 
-    func testRainSlowsPutts() throws {
-        func putt(_ weather: Weather) throws -> Double {
-            let hole = Hole.flatTest()
-            var b = BallState(x: 50, y: 0)
-            try Ballistics.launch(&b, club: club("PT"), heightPct: 0.4, lie: .fairway, dir: 1)
-            var t = 0.0
-            while b.phase != .rest, t < 60 {
-                _ = Ballistics.step(&b, hole: hole, weather: weather)
-                t += Phys.dt
+    /// 전 구간 그린인 평지 홀 — 컵은 공에서 d만큼 앞
+    private func greenHole(cupAt holeX: Double) -> Hole {
+        Hole(
+            par: 3, dist: holeX, holeX: holeX, worldW: 200, greenStart: 0, greenEnd: 200, apronStart: 0,
+            segments: [Segment(from: 0, to: 200, type: .green)], elevation: [Double](repeating: 0, count: 202),
+            waterRange: nil, greenSlope: 0
+        )
+    }
+
+    /// 그린 위 퍼트 한 번: (홀인 여부, 멈춘 자리)
+    private func putt(from x: Double, height: Double, hole: Hole, weather: Weather) throws -> (holed: Bool, x: Double) {
+        var b = BallState(x: x, y: 0)
+        try Ballistics.launch(&b, club: club("PT"), heightPct: height, lie: .green, dir: 1)
+        var t = 0.0
+        while b.phase != .rest, t < 60 {
+            if Ballistics.step(&b, hole: hole, weather: weather) == .holed {
+                return (true, hole.holeX)
             }
-            return b.x - 50
+            t += Phys.dt
         }
-        XCTAssertLessThan(try putt(.rain), try putt(.clear) * 0.85)
+        return (false, b.x)
+    }
+
+    func testRainSlowsPuttsOnTheGreen() throws {
+        let far = greenHole(cupAt: 190) // 컵은 멀리 — 굴림 거리만 본다
+        let dry = try putt(from: 20, height: 0.4, hole: far, weather: .clear).x - 20
+        let wet = try putt(from: 20, height: 0.4, hole: far, weather: .rain).x - 20
+        XCTAssertLessThan(wet, dry * 0.7, "그린에서 같은 스트로크가 비에 훨씬 덜 구른다 (\(dry) → \(wet))")
+    }
+
+    /// 퍼터 거리 프리셋: 맑은 날도 비 오는 날도 컵에 닿는다. 비 보정이 없으면(맑은 날 프리셋을 비에 쓰면) 매 퍼트가 짧다
+    func testPutterPresetReachesTheCupInAnyWeather() throws {
+        for d in [3.0, 6.0, 10.0, 15.0, 22.0] {
+            let hole = greenHole(cupAt: 40 + d)
+            for w in [Weather.clear, .rain] {
+                let h = Ballistics.putterPreset(distance: d, rise: 0, weather: w)
+                let r = try putt(from: 40, height: h, hole: hole, weather: w)
+                XCTAssertTrue(
+                    r.holed || abs(r.x - hole.holeX) < 1.5,
+                    "\(w) \(d)m: 프리셋 퍼트가 컵에서 \(abs(r.x - hole.holeX))m"
+                )
+            }
+            XCTAssertGreaterThan(
+                Ballistics.putterPreset(distance: d, rise: 0, weather: .rain), Ballistics.putterPreset(
+                    distance: d,
+                    rise: 0
+                ),
+                "비 오는 날은 같은 거리에 더 든다"
+            )
+            if d >= 6 {
+                let dryPreset = Ballistics.putterPreset(distance: d, rise: 0)
+                let r = try putt(from: 40, height: dryPreset, hole: hole, weather: .rain)
+                XCTAssertFalse(r.holed, "\(d)m: 맑은 날 프리셋으로는 젖은 그린에서 못 넣는다")
+                XCTAssertLessThan(r.x, hole.holeX - 1.0, "\(d)m: 맑은 날 프리셋은 비에 짧다 (보정이 일하는 증거)")
+            }
+        }
+        XCTAssertGreaterThan(
+            Ballistics.putterPreset(distance: 8, rise: 0.8),
+            Ballistics.putterPreset(distance: 8, rise: 0),
+            "오르막(2단 그린 턱)은 더 든다"
+        )
     }
 
     func testGaleWindRange() {
@@ -109,28 +157,95 @@ final class RoundVarietyTests: XCTestCase {
 
     // ── 미션 ──
 
+    /// 편성 표본: 시드 1~40 × 날씨 3종 = 120라운드. 편성은 홀마다 물리 시뮬을 돌려(장타 5샷·레귤레이션 봇 1회) 한 번에 수십 ms —
+    /// 테스트마다 다시 만들지 않고 한 번만 만든다. 코스는 날씨가 정한 바람까지 반영 (앱의 beginRoundExtras와 같은 순서)
+    private struct Planned { let seed: UInt32; let weather: Weather; let holes: [Hole]; let plan: [MissionKind] }
+    private static let planned: [Planned] = Weather.allCases.flatMap { w in
+        (1 ... 40).map { (seed: UInt32) in
+            let holes = CourseGenerator.makeCourse(seed: seed).map { $0.withWind(w.wind(base: $0.wind)) }
+            return Planned(
+                seed: seed,
+                weather: w,
+                holes: holes,
+                plan: MissionKind.plan(course: holes, seed: seed, weather: w)
+            )
+        }
+    }
+
     func testMissionPlanIsEligibleAndVaried() {
-        for seed: UInt32 in 1 ... 60 {
-            let course = CourseGenerator.makeCourse(seed: seed)
-            let plan = MissionKind.plan(course: course, seed: seed)
-            XCTAssertEqual(plan, MissionKind.plan(course: course, seed: seed), "결정론")
-            XCTAssertEqual(plan.count, course.count)
-            for (i, k) in plan.enumerated() {
-                XCTAssertTrue(k.eligible(for: course[i]), "seed \(seed) hole \(i + 1): \(k)")
+        for p in Self.planned {
+            XCTAssertEqual(p.plan.count, p.holes.count)
+            for (i, k) in p.plan.enumerated() {
+                if k != .longDrive, k != .greenInReg { // 물리로 갈리는 둘은 아래 전용 테스트가 본다 (시뮬을 두 번 돌리지 않는다)
+                    XCTAssertTrue(
+                        k.eligible(for: p.holes[i], weather: p.weather),
+                        "seed \(p.seed) \(p.weather) hole \(i + 1): \(k)"
+                    )
+                }
                 if i > 0 {
-                    XCTAssertNotEqual(k, plan[i - 1], "seed \(seed): 같은 미션이 연달아")
+                    XCTAssertNotEqual(k, p.plan[i - 1], "seed \(p.seed): 같은 미션이 연달아")
                 }
             }
-            XCTAssertGreaterThanOrEqual(Set(plan).count, 4, "seed \(seed): 한 라운드 미션 종류가 너무 적다")
+            XCTAssertGreaterThanOrEqual(Set(p.plan).count, 4, "seed \(p.seed) \(p.weather): 한 라운드 미션 종류가 너무 적다")
+        }
+        for p in Self.planned.prefix(6) { // 결정론: 다시 편성해도 같다
+            XCTAssertEqual(p.plan, MissionKind.plan(course: p.holes, seed: p.seed, weather: p.weather))
         }
     }
 
     func testMissionKindsAllAppear() {
-        var seen = Set<MissionKind>()
-        for seed: UInt32 in 1 ... 60 {
-            seen.formUnion(MissionKind.plan(course: CourseGenerator.makeCourse(seed: seed), seed: seed))
+        for w in Weather.allCases {
+            let seen = Set(Self.planned.filter { $0.weather == w }.flatMap(\.plan))
+            XCTAssertEqual(seen, Set(MissionKind.allCases), "\(w): 가능성 판정이 어떤 미션을 통째로 없애지 않았다")
         }
-        XCTAssertEqual(seen, Set(MissionKind.allCases))
+    }
+
+    /// 걸린 미션은 깰 수 있어야 한다. 장타: 그 홀·그 날씨에서 깨끗한 드라이버 샷이 백스윙 90~100% 대부분에서 250m를 넘긴다.
+    /// 첫 판은 파·홀 길이만 봐서 26%(맑음)~43%(강풍)가 불가능했다 (리뷰 전수 탐색)
+    func testPlannedLongDriveIsAchievable() {
+        var count = 0
+        for p in Self.planned {
+            for (i, k) in p.plan.enumerated() where k == .longDrive {
+                count += 1
+                // 판정이 본 다섯 점 사이를 더 촘촘히(17점) 봐도 성공 구간이 넓다 — 한 점에만 걸친 '이론상 가능'이 아니다
+                let powers = stride(from: 0.9, through: 1.0001, by: 0.00625)
+                let ok = powers
+                    .filter {
+                        MissionKind.cleanDrive(p.holes[i], weather: p.weather, heightPct: $0) >= MissionKind
+                            .longDriveMeters
+                    }
+                    .count
+                XCTAssertGreaterThanOrEqual(
+                    ok,
+                    11,
+                    "seed \(p.seed) \(p.weather) hole \(i + 1): 백스윙 90~100% 17점 중 \(ok)점만 250m"
+                )
+            }
+        }
+        XCTAssertGreaterThan(count, 12, "장타 미션이 사라지지 않았다 (120라운드에 \(count)회)")
+        // 리뷰가 든 불가능 사례: seed 7의 2번 홀(파5 능선, 맞바람) — 어떤 샷으로도 201m
+        let hole = CourseGenerator.makeCourse(seed: 7)[1]
+        XCTAssertLessThan(MissionKind.cleanDrive(hole, weather: .clear), MissionKind.longDriveMeters)
+        XCTAssertFalse(MissionKind.longDrive.eligible(for: hole, weather: .clear))
+    }
+
+    /// 레귤레이션 미션은 오차 없는 봇이 실제로 해낸 홀에만 건다
+    func testGreenInRegulationOnlyWhereReachable() {
+        var count = 0, refused = 0
+        for p in Self.planned {
+            for (i, k) in p.plan.enumerated() where k == .greenInReg {
+                count += 1
+                XCTAssertTrue(
+                    Rival.reachesGreenInRegulation(p.holes[i], weather: p.weather),
+                    "seed \(p.seed) \(p.weather) hole \(i + 1)"
+                )
+            }
+        }
+        for p in Self.planned.prefix(10) {
+            refused += p.holes.filter { !MissionKind.greenInReg.eligible(for: $0, weather: p.weather) }.count
+        }
+        XCTAssertGreaterThan(count, 12, "레귤레이션 미션이 사라지지 않았다 (\(count)회)")
+        XCTAssertGreaterThan(refused, 0, "판정이 실제로 걸러내는 홀이 있다")
     }
 
     func testNoDriver() throws {

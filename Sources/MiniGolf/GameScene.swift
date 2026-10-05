@@ -60,6 +60,9 @@ final class GameScene: SKScene {
     var extras = RoundExtras() // M6 라운드 변주 (RoundExtras.swift) — 날씨·미션·라이벌
     /// 대기 중인 알림(배지·해금) — 다음 조준이 시작된 뒤에 띄운다 (RoundExtras.flushNotices)
     var pendingNotices: [(title: String, sub: String)] = []
+    /// 지금 떠 있는 토스트가 걷히는 시각(CACurrentMediaTime) — 홀 인트로와 알림이 앞 토스트를 덮지 않고 그 뒤에 선다
+    var toastEndsAt: CFTimeInterval = 0
+    var introShownThisHole = false
     var scheduledNotices: [(id: Int, title: String, sub: String)] = [] // 타이머가 걸렸지만 아직 안 뜬 알림
     var noticeSerial = 0
     var practice: PracticeState? // 연습장 모드 (Practice.swift) — nil이면 라운드
@@ -380,6 +383,8 @@ final class GameScene: SKScene {
         }
         didSetUp = true
         if demo.cardPreview { // 스코어카드 레이아웃 검증용 고정 샘플 (이글·버디·파·보기·더블·기권 포함)
+            extras.cardShown = true // 실제 라운드 종료와 같게 — 하단 미션·라이벌 띠를 숨긴다
+            updateRoundStrip()
             let sample: [(par: Int, strokes: Int, gaveUp: Bool)] = [
                 (4, 4, false), (3, 2, false), (4, 5, false), (5, 3, false), (4, 4, false),
                 (3, 6, false), (4, 12, true), (5, 5, false), (4, 3, false),
@@ -489,6 +494,7 @@ final class GameScene: SKScene {
 
     private func startHole() {
         requeueScheduledNotices() // 아직 안 뜬 배지 알림은 이 홀의 인트로 뒤로 미룬다 (인트로와 같은 자리를 쓴다)
+        introShownThisHole = false
         cancelSurprises() // R 새 라운드·홀 전환 중 진행 중이던 서프라이즈 정리 (리뷰 M2)
         cancelHoleFlow() // 홀아웃·기권 뒤 '줍기/다음 홀' 타이머 — R이 끼어들면 새 라운드의 1번 홀을 건너뛰었다 (2026-09-23 재현)
         strokes = 0
@@ -551,7 +557,14 @@ final class GameScene: SKScene {
                     titleScale: 0.8, hold: 2.8
                 )
             } else {
-                showHoleIntro() // 홀 이름·미션·라이벌 목표 — 티 꽂는 동안 읽힌다
+                // 홀 이름·미션·라이벌 목표 — 티 꽂는 동안 읽힌다. 단 앞 홀의 홀아웃·기권 안내(둘째 줄에 승부·미션 결과)가 아직 떠 있으면
+                // 그게 걷힌 뒤에 — 바로 띄우면 컵에서 먼 홀아웃(1.7초 뒤 전환)·기권(1.4초)의 안내가 반쯤 읽히다 잘렸다 (리뷰)
+                let wait = toastEndsAt - CACurrentMediaTime()
+                if wait > 0.05 {
+                    afterHoleFlow(wait) { [weak self] in self?.showHoleIntro() }
+                } else {
+                    showHoleIntro()
+                }
             }
             startRitual(.teePlace)
         } else {
@@ -760,8 +773,10 @@ final class GameScene: SKScene {
         renderBallFwd = profile.ballFwd // 걷기 도착 자리가 이 클럽의 스탠스로 계획됐으므로 스무딩 없이 맞춘다
         presetPutterHeight()
         updateHUD()
-        // 배지·해금 알림은 조준이 시작된 뒤에 — 홀 첫 조준이면 홀 인트로가 걷힐 때까지 기다린다 (C7)
-        flushNotices(after: strokes == 0 ? 1.6 : 0.4)
+        // 배지·해금 알림은 조준이 시작된 뒤에 — 떠 있는 토스트(홀 인트로·미션 성공)가 걷힐 때까지 기다린다 (C7).
+        // 인트로가 아직 예약만 된 상태(앞 홀 안내가 떠 있는 중)면 그 인트로 길이만큼 더
+        let introPending = strokes == 0 && toastEndsAt - CACurrentMediaTime() > 0.05 && !introShownThisHole
+        flushNotices(after: max(0.4, toastEndsAt - CACurrentMediaTime() + 0.2) + (introPending ? 2.9 : 0))
         if demo.active { // 프레임 캡처와 대조할 스탠스 계측 (관찰용): 경사·라이·근처 장애물
             let s = hole.slope(at: ball.x)
             print(String(
@@ -782,10 +797,7 @@ final class GameScene: SKScene {
         let d = abs(hole.holeX - ball.x)
         // 2단 그린 턱은 눈에 보이는 계단이라 프리셋에도 오르막 표고를 더한다(내리막은 무시 — 브레이크 읽기는 플레이어 몫, 리뷰 m4)
         let up = max(0, hole.ground(at: hole.holeX) - hole.ground(at: ball.x))
-        // 비 오는 날은 그린이 느리다 — 프리셋도 같은 굴림 감속으로 (안 그러면 매 퍼트가 짧다)
-        let roll = Surface.green.roll * extras.weather.rollScale
-        let v0 = min(13.0, (2 * roll * d + 4 + 2 * Phys.g * 0.85 * up).squareRoot()) // 도착 속도 ~2m/s 목표
-        heightPct = min(0.92, max(0.03, (v0 / 13.0 - Phys.putterMinRatio) / (1 - Phys.putterMinRatio)))
+        heightPct = Ballistics.putterPreset(distance: d, rise: up, weather: extras.weather) // 비 오는 날은 느린 그린 기준
     }
 
     /// ── 벽 스탠스: 화면 끝 = 벽. 몸 뒤 공간이 좁으면 백스윙이 제한되고(펀치샷),
@@ -1980,6 +1992,10 @@ final class GameScene: SKScene {
     private func giveUp() {
         mode = .holed
         results.append((hole.par, Phys.maxStrokes, true))
+        if !demo.active {
+            Records.shared.noteGiveUp() // 라이벌 실력 기준에 기권 홀도 (M6 리뷰)
+            Records.shared.save()
+        }
         endShotTrail()
         reactionKind = .dejected
         reactionAt = lastTime
@@ -2044,6 +2060,7 @@ final class GameScene: SKScene {
         toastTitle.setScale(titleScale) // 스코어 무게 = 크기 (이글 1.3 ~ 보기 0.88)
         toastTitle.setText(main)
         toastSub.setText(sub ?? "", centered: true)
+        toastEndsAt = CACurrentMediaTime() + 0.18 + hold + 0.45
         for node in [toastTitle, toastSub] as [SKNode] {
             node.removeAllActions()
             node.run(.sequence([.fadeIn(withDuration: 0.18), .wait(forDuration: hold), .fadeOut(withDuration: 0.45)]))

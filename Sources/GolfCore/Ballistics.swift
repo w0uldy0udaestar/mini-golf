@@ -198,6 +198,15 @@ public enum ShotShape: String, CaseIterable, Sendable {
 }
 
 public enum Ballistics {
+    /// 퍼터 거리 프리셋: 남은 거리 d(m)·오르막 표고 up(m)에 맞는 백스윙 높이 — 컵에 2m/s쯤으로 닿는 속도(평지 기준이라 브레이크 읽기는
+    /// 플레이어 몫, 어시스트가 아니라 합리적 시작점). 비 오는 날은 그린이 느려 같은 거리에 더 든다(안 그러면 매 퍼트가 짧다).
+    /// GameScene.presetPutterHeight에서 옮겨 왔다 — 화면 없이 날씨별로 검증하려고 (2026-10-05 리뷰)
+    public static func putterPreset(distance d: Double, rise up: Double, weather: Weather = .clear) -> Double {
+        let roll = Surface.green.roll * weather.rollScale
+        let v0 = min(13.0, (2 * roll * d + 4 + 2 * Phys.g * 0.85 * up).squareRoot()) // 13 = 퍼터 최대 볼스피드
+        return min(0.92, max(0.03, (v0 / 13.0 - Phys.putterMinRatio) / (1 - Phys.putterMinRatio)))
+    }
+
     /// 샷 발사: 클럽·백스윙 높이·라이를 반영해 공 상태를 설정
     /// mishit: 미스샷 정도 [-1, 1] — 발사각 ±4°, 파워 -12%, 스핀 -30%까지 (풀파워 리스크는 호출측)
     /// punch: 펀치샷 정도 [0, 1] — 로프트 -8°·스핀 -40% (벽 등 백스윙 제한 상황의 낮은 탈출샷)

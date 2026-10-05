@@ -73,4 +73,19 @@ final class RecordsTests: XCTestCase {
         XCTAssertEqual(r.rivalTargetOverPar, -0.1, "−1.0 플레이어 → 하한 −0.1")
         XCTAssertEqual(r.totalPar, 36 * 4)
     }
+
+    /// 기권한 홀도 최근 실력에 들어간다 — 빼면 못 치는 플레이어일수록 평균이 좋아 보여 라이벌이 강해진다 (리뷰)
+    func testGiveUpsCountTowardRecentForm() {
+        var r = Records()
+        for _ in 0 ..< 7 { // 파 7홀
+            r.holesPlayed += 1
+            r.totalStrokes += 4
+            r.noteHoleOut(strokes: 4, par: 4)
+        }
+        r.noteGiveUp()
+        r.noteGiveUp()
+        XCTAssertEqual(r.recentOver.count, 9)
+        XCTAssertEqual(r.holesPlayed, 7, "누적 통계는 홀아웃한 홀만")
+        XCTAssertEqual(r.rivalTargetOverPar, 8.0 / 9 + 0.15, accuracy: 1e-9, "기권은 +4로 친다 (파 7홀 + 기권 2홀)")
+    }
 }

@@ -16,11 +16,11 @@ struct RoundExtras {
     var mission: MissionTracker?
     var preShotMission: MissionTracker? // 멀리건이 직전 샷을 무르면 미션 진행도 함께 되돌린다
     var missionsCleared = 0 // 이번 라운드
-    var missionsDone = 0 // 끝난 홀 수 (성공 + 실패)
     var rival: [Int] = [] // 라이벌의 홀별 타수 (라운드 시작에 봇이 미리 돈다)
     var rivalSkill = 1.0
     var won = 0, lost = 0, tied = 0 // 홀별 승부
     var cardShown = false // 라운드 종료 카드가 떠 있다 — 하단 띠를 숨긴다
+    var shownMission = "", shownRival = "" // 하단 띠에 지금 적힌 문구 (같으면 다시 그리지 않는다)
 }
 
 extension GameScene {
@@ -31,7 +31,7 @@ extension GameScene {
         extras = RoundExtras()
         extras.weather = demo.weather ?? Weather.pick(seed: seed)
         course = course.map { $0.withWind(extras.weather.wind(base: $0.wind)) }
-        extras.missionPlan = MissionKind.plan(course: course, seed: seed)
+        extras.missionPlan = MissionKind.plan(course: course, seed: seed, weather: extras.weather) // 이 날씨에 깰 수 있는 것만
         extras.rivalSkill = Rival.skill(forOverPar: Records.shared.rivalTargetOverPar)
         extras.rival = Rival.playRound(course, seed: seed, weather: extras.weather, skill: extras.rivalSkill)
         PlayLog.note(String(
@@ -42,7 +42,7 @@ extension GameScene {
 
     /// 홀 시작: 이 홀의 미션을 걸고 인트로를 띄운다
     func beginHoleExtras() {
-        let kind = demo.mission ?? extras.missionPlan[holeIdx]
+        let kind = (demo.active ? demo.mission : nil) ?? extras.missionPlan[holeIdx] // --mission은 관찰 모드에서만 (기록에 안 쌓이게)
         extras.mission = MissionTracker(kind: kind, par: hole.par)
         extras.preShotMission = nil
         PlayLog.note("MISSION \(kind.rawValue) start · rival \(extras.rival[holeIdx])")
@@ -60,6 +60,7 @@ extension GameScene {
         }
         lines.append(rivalTargetLine)
         let name = hole.signature.map { " · \($0.displayName)" } ?? ""
+        introShownThisHole = true
         toast(
             L("\(holeIdx + 1)번 홀 · 파 \(hole.par)", "Hole \(holeIdx + 1) · Par \(hole.par)") + name,
             sub: lines.joined(separator: "\n"), titleScale: 0.72, hold: 2.2
@@ -73,7 +74,6 @@ extension GameScene {
     private func missionChanged(from before: MissionTracker.State?) -> Bool {
         guard let m = extras.mission, m.state != before, m.state != .active else { return false }
         PlayLog.note("MISSION \(m.kind.rawValue) \(m.state.rawValue) strokes \(strokes)")
-        extras.missionsDone += 1
         updateRoundStrip()
         guard m.state == .cleared else { return false }
         extras.missionsCleared += 1
@@ -124,16 +124,11 @@ extension GameScene {
         }
     }
 
-    /// 멀리건: 직전 샷이 없던 일이 되면 그 샷이 만든 미션 판정도 되돌린다 (성공 카운트 포함)
+    /// 멀리건: 직전 샷이 없던 일이 되면 그 샷이 만든 미션 판정도 되돌린다. 되돌릴 것은 '실패'뿐이다 — 미션을 성공시킨 샷에는
+    /// 서프라이즈를 굴리지 않아(정지 분기에서 성공 안내가 먼저) 멀리건이 나오지 않는다. 성공이 되돌려지는 경로가 생기면 여기서 카운트도 되돌려야 한다
     func missionUndoLastShot() {
-        guard let snap = extras.preShotMission, let now = extras.mission, snap != now else { return }
-        if now.state != .active, snap.state == .active {
-            extras.missionsDone -= 1
-            if now.state == .cleared {
-                extras.missionsCleared -= 1
-                recordMissionCleared(undo: true)
-            }
-        }
+        guard let snap = extras.preShotMission, let now = extras.mission, snap != now,
+              now.state != .cleared else { return }
         extras.mission = snap
         updateRoundStrip()
     }
@@ -145,13 +140,13 @@ extension GameScene {
     }
 
     /// 기록: 누적 성공 수 + 선바이저 해금 (실플레이 전용)
-    private func recordMissionCleared(undo: Bool = false) {
+    private func recordMissionCleared() {
         guard !demo.active else { return }
         var r = Records.shared
-        r.missionsCleared = max(0, r.missionsCleared + (undo ? -1 : 1))
+        r.missionsCleared += 1
         Records.shared = r
         r.save()
-        if !undo, r.missionsCleared == Hat.visorMissions {
+        if r.missionsCleared == Hat.visorMissions {
             pendingNotices.append((
                 L("선바이저 해금", "Sun visor unlocked"),
                 L("미션 \(Hat.visorMissions)개 성공 — ⛳️ 메뉴 → 모자", "\(Hat.visorMissions) missions cleared — ⛳️ menu → Hat")
@@ -229,17 +224,26 @@ extension GameScene {
     func updateRoundStrip() {
         roundStrip.isHidden = inPractice || extras.cardShown
         guard !roundStrip.isHidden, holeIdx < extras.rival.count else { return }
+        // updateHUD가 공이 움직이는 매 프레임 부른다 — 문구가 바뀔 때만 라벨을 다시 만든다
         if let m = extras.mission {
             let head = switch m.state {
             case .active: L("미션", "Mission")
             case .cleared: L("미션 성공", "Mission cleared")
             case .failed: L("미션 실패", "Mission failed")
             }
-            missionLabel.setText(head + " · " + m.kind.title(par: m.par))
+            let text = head + " · " + m.kind.title(par: m.par)
+            if text != extras.shownMission {
+                extras.shownMission = text
+                missionLabel.setText(text)
+            }
             missionLabel.alpha = m.state == .failed ? 0.45 : 1
         }
         let played = extras.won + extras.lost + extras.tied
-        rivalLabel.setText(rivalTargetLine + (played > 0 ? " · " + rivalTally : ""))
+        let rival = rivalTargetLine + (played > 0 ? " · " + rivalTally : "")
+        if rival != extras.shownRival {
+            extras.shownRival = rival
+            rivalLabel.setText(rival)
+        }
     }
 
     // ── 날씨 그림: 지면 위 띠에만 — 화면 위쪽(사용자 데스크탑)은 건드리지 않는다 ──

@@ -175,6 +175,15 @@ struct Records: Codable {
         }
     }
 
+    /// 기권(12타 초과)한 홀도 최근 실력에 넣는다 — 빼면 못 치는 플레이어일수록 평균이 좋아 보여 라이벌이 강해진다 (리뷰).
+    /// 한 홀이 평균을 삼키지 않게 +4로 친다. 누적 통계(홀·타수)는 홀아웃한 홀만 세던 그대로
+    mutating func noteGiveUp() {
+        recentOver.append(4)
+        if recentOver.count > 27 {
+            recentOver.removeFirst(recentOver.count - 27)
+        }
+    }
+
     /// 라이벌의 목표 실력 (홀당 평균 파 대비): 내 최근 실력보다 0.15타 못 치는 상대 — 반쯤 이기고 가끔 진다.
     /// 최근 9홀 이상이면 최근 평균, 아니면 누적 평균, 그것도 9홀 미만(처음)이면 보기 플레이어(+0.9)
     var rivalTargetOverPar: Double {

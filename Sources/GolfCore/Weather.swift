@@ -31,15 +31,6 @@ public enum Weather: String, Sendable, CaseIterable {
         return sign * (4.5 + 3.5 * min(1, abs(base) / 7).squareRoot())
     }
 
-    /// HUD 단어 (맑음은 표시 없음)
-    public var label: String? {
-        switch self {
-        case .clear: nil
-        case .rain: L("비", "Rain")
-        case .gale: L("강풍", "Gale")
-        }
-    }
-
     /// 라운드 시작 안내 한 줄 — 수치가 아니라 결과의 말
     public var cue: String? {
         switch self {

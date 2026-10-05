@@ -20,14 +20,45 @@ public enum MissionKind: String, Sendable, CaseIterable {
     public static let approachMinMeters = 40.0
     static let midIrons: Set<String> = ["5I", "6I", "7I", "8I"]
 
-    /// 이 홀에 낼 수 있는 미션인가
-    public func eligible(for hole: Hole) -> Bool {
+    /// 장타 미션을 걸려면 깨끗한 드라이버 샷이 백스윙 90~100% 구간의 다섯 점 중 **넷 이상**에서 250m를 넘겨야 한다.
+    /// 풀샷 한 점만 보면 "100%에선 연못을 넘기고 90%에선 빠지는" 홀이 걸린다(60시드 실측 7건) — 풀파워는 미스힛 위험이 가장 큰
+    /// 자리라 사실상 운이 된다. 다섯 다가 아닌 이유: 지형(벙커·단차) 때문에 거리가 파워에 단조롭지 않아 한 점이 주머니에 빠질 수 있다
+    static let longDrivePowers = [0.9, 0.925, 0.95, 0.975, 1.0]
+
+    static func longDriveReachable(_ hole: Hole, weather: Weather) -> Bool {
+        longDrivePowers.filter { cleanDrive(hole, weather: weather, heightPct: $0) >= longDriveMeters }.count >= 4
+    }
+
+    /// 이 홀·이 날씨에 낼 수 있는 미션인가. "깰 수 있는" 미션만 건다 — 파·홀 길이만 보던 첫 판은 장타 미션의 26%(맑음)~43%(강풍)가
+    /// 오르막·캐노피·맞바람 때문에 어떤 샷으로도 불가능했다(리뷰 전수 탐색, 2026-10-05). 물리로 갈리는 둘은 그 홀에서 실제로 쳐 보고 정한다
+    public func eligible(for hole: Hole, weather: Weather = .clear) -> Bool {
         switch self {
         case .noDriver, .fairwayTee: hole.par >= 4
-        case .longDrive: hole.par >= 4 && hole.dist >= 330
+        case .longDrive:
+            hole.par >= 4 && hole.dist >= 330 && Self.longDriveReachable(hole, weather: weather)
+        case .greenInReg: Rival.reachesGreenInRegulation(hole, weather: weather)
         case .noBunker: hole.segments.contains { $0.type == .bunker }
         default: true
         }
+    }
+
+    /// 미스힛 없는 드라이버 풀샷이 티에서 멈춘 자리까지의 거리(m). 물에 빠지면 0. 경사 라이·캐노피 자동 펀치는 게임과 같은 규칙
+    static func cleanDrive(_ hole: Hole, weather: Weather, heightPct: Double = 1) -> Double {
+        guard let driver = ClubTable.all.first(where: { $0.id == "DR" }) else { return 0 }
+        let dir: Double = hole.holeX >= hole.teeX ? 1 : -1
+        var b = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX))
+        Ballistics.launch(
+            &b, club: driver, heightPct: heightPct, lie: .tee, dir: dir,
+            punch: Rival.treeT(hole, x: b.x, dir: dir) * 0.85, slope: hole.slope(at: b.x) * Phys.stanceSlopeRatio
+        )
+        var t = 0.0
+        while b.phase != .rest, t < 60 {
+            if Ballistics.step(&b, hole: hole, weather: weather) == .water {
+                return 0
+            }
+            t += Phys.dt
+        }
+        return abs(b.x - hole.teeX)
     }
 
     /// 추첨 가중치 — 버디는 스코어 미션이라 드물게
@@ -57,13 +88,13 @@ public enum MissionKind: String, Sendable, CaseIterable {
     }
 
     /// 9홀 미션 편성 — 홀마다 가능한 것 중 가중 추첨, 바로 앞 홀과 같은 미션은 피한다. 코스 생성 난수와 별도 해시
-    public static func plan(course: [Hole], seed: UInt32) -> [MissionKind] {
+    public static func plan(course: [Hole], seed: UInt32, weather: Weather = .clear) -> [MissionKind] {
         var rand = SeededRandom(seed: seed ^ 0x5BD1_E995)
         _ = rand.next()
         var out: [MissionKind] = []
         for hole in course {
-            var pool = allCases.filter { $0.eligible(for: hole) && $0 != out.last }
-            if pool.isEmpty { // 도달 불가 — 조건 없는 미션이 다섯이라 직전 것을 빼도 남는다
+            var pool = allCases.filter { $0 != out.last && $0.eligible(for: hole, weather: weather) }
+            if pool.isEmpty { // 도달 불가 — 조건 없는 미션이 넷(아이언·샷 종류·붙이기·버디)이라 직전 것을 빼도 남는다
                 pool = [.birdie]
             }
             var r = rand.next() * pool.reduce(0) { $0 + $1.weight }
