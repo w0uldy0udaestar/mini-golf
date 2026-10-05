@@ -535,6 +535,8 @@ final class GameScene: SKScene {
             )
             beginHoleExtras() // 이 홀의 미션 (M6)
         }
+        // 티 의식(1.35초) 동안에도 HUD가 새 홀의 것이게 — 날씨가 홀마다 바뀌면서 '비 — 덜 구른다'가 맑은 홀 첫머리에 남았다 (리뷰)
+        updateHUD()
         if demo.active, let sig = hole.signature { // 캡처 대조용 계측 (관찰용)
             print("SIGNATURE \(sig.rawValue)")
             fflush(stdout)

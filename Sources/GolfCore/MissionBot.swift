@@ -104,8 +104,8 @@ enum MissionBot {
             if onGreenAt == nil, !wet, hole.surface(at: b.x) == .green {
                 onGreenAt = strokes
             }
-            // 입수로 같은 둑에 되돌아온 것은 "벽에 막힘"이 아니다 — 0m로 읽으면 풀 PW가 발동해 같은 물에 다시 빠지고, 그린 앞뒤가
-            // 물인 홀에서 12타까지 반복했다(리뷰 실측: seed 1 8번 홀 `PW 162→162(W)` × 9). 드롭 뒤에는 보통 정책으로 다시 고른다
+            // 입수로 같은 둑에 되돌아온 것은 "벽에 막힘"이 아니다 — 드롭 뒤에는 보통 정책으로 다시 고른다. 라이벌 시절(끝까지 친 타수를 썼다)의
+            // 규칙이고, 레귤레이션 판정에는 영향이 없다(리뷰 실측: 이 줄을 빼도 1,620홀 판정 동일)
             lastMoved = wet ? 999 : abs(b.x - fromX)
         }
         return (Phys.maxStrokes, onGreenAt)

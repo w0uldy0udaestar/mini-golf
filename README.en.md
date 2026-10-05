@@ -186,7 +186,7 @@ More loft means more spin and less ball speed — wedges fly short and check up 
 
 - **Dynamic terrain** — one archetype per hole (Cliff Tee · Summit Green · Canyon · Terraces · Valley · Ridge · Cascade · Forest). Elevations are set
   against real ball flight (one riser ≤ 14 m, a canyon is escapable with a single wedge), so you can carry the climbs, and descents make the hole play that much longer
-- **Wind** — every hole has wind (up to 7 m/s; light breezes are common, strong wind is rare). Drag and lift are computed
+- **Wind** — every hole has wind (usually up to 7 m/s with light breezes most common; Gale holes blow 4.5–8 m/s). Drag and lift are computed
   against airspeed, so a headwind cuts carry and a tailwind adds to it — read it from the flag and the
   HUD (`Wind → 3m/s` next to the club) and pick your club. Putts are unaffected. The `↑6m` next to the remaining distance is the elevation change to the cup
 - **Surprises** — once in a while (up to five times a round) something happens. A bird makes off with your ball, a mole nudges it, a gust

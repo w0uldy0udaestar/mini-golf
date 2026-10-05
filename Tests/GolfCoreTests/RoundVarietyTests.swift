@@ -216,11 +216,17 @@ final class RoundVarietyTests: XCTestCase {
     /// 편성이 홀별 날씨를 안 읽으면(전부 맑음으로 보면) 비·강풍 홀에 불가능한 장타·레귤레이션 미션이 걸린다
     /// (일부러 그렇게 고장 내면 seed 17·26의 1번 홀에서 실패한다)
     func testMissionPlanFollowsEachHolesWeather() {
-        var stormy = 0
+        var stormy = 0, blindBad = 0
         for seed: UInt32 in 1 ... 40 {
             let weather = Weather.plan(seed: seed, holes: 9)
             let holes = zip(CourseGenerator.makeCourse(seed: seed), weather).map { $0.withWind($1.wind(base: $0.wind)) }
             let plan = MissionKind.plan(course: holes, seed: seed, weather: weather)
+            let blind = MissionKind.plan(course: holes, seed: seed) // 날씨를 안 보고 짠 편성
+            blindBad += blind.indices.filter { weather[$0] != .clear && !blind[$0].eligible(
+                for: holes[$0],
+                weather: weather[$0]
+            ) }
+            .count
             for (i, k) in plan.enumerated() where weather[i] != .clear {
                 stormy += 1
                 XCTAssertTrue(
@@ -230,6 +236,8 @@ final class RoundVarietyTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(stormy, 100, "궂은 날씨 홀 표본이 충분하다")
+        // 이 표본에 '날씨를 봐야만 걸러지는 홀'이 실제로 있다 — 0이 되면 위 단언은 아무것도 감시하지 않는다 (리뷰: 140홀 중 2홀)
+        XCTAssertGreaterThan(blindBad, 0, "날씨를 무시한 편성도 전부 가능하다 — 표본(시드 범위)을 넓혀야 한다")
     }
 
     func testMissionKindsAllAppear() {
