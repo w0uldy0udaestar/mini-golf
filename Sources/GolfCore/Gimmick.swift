@@ -26,15 +26,21 @@ public enum GimmickKind: String, Sendable, CaseIterable {
 }
 
 public extension GimmickKind {
+    /// 라운드 편성에 들어가는 장치. 깔때기는 빠져 있다 — 사용자 판정(2026-10-06, 그림 목록을 보고) "너무 홀이 쉬워질 것 같다":
+    /// 어프로치의 17%가 자동으로 들어가는 '쉬운 홀'이 본질이라 조여도 성격이 안 바뀐다. 코드는 남긴다(`--gimmick funnel`로 관찰 가능) —
+    /// 같은 V자 구덩이를 그린이 아니라 페어웨이에 두면 TGL식 거대 항아리 벙커·싱크홀 해저드가 되어 2차(지형 장애물) 후보로 재활용한다
+    static let inRotation: [GimmickKind] = [.volcano]
+
     /// 이 홀에 걸 수 있는 장치인가. 깔때기는 파3에 걸지 않는다 — 분지에만 넣으면 들어가는 홀이라 티샷 한 번에 홀인원이 흔해진다
     /// (프로브: 가장 맞는 클럽으로 백스윙 세기의 17%가 들어간다. 화산은 4%)
     func fits(_ hole: Hole) -> Bool {
         !(self == .funnel && hole.par == 3) && hole.withGimmick(self) != nil
     }
 
-    /// 9홀에 장치를 입힌 코스. 라운드의 앞·가운데·뒤 세 토막에 하나씩 — 첫 장치는 1·2번 홀 안에 둔다(실플레이 기록상 9홀 완주가 드물어
-    /// 뒤쪽 홀에만 나오는 것은 못 본 채 끝난다). 종류는 번갈아, 자리가 안 맞으면 다른 종류로. 코스 생성 난수와 별도 해시 — 같은 시드의 지형은 그대로.
-    /// forced: 관찰용 — 걸 수 있는 홀 전부에 그 장치 (깔때기는 여기서도 파3 제외)
+    /// 9홀에 장치를 입힌 코스. 종류가 둘 이상이면 라운드의 앞·가운데·뒤 세 토막에 하나씩, 하나뿐이면 앞·뒤 두 토막에만(같은 장치가 세 번이면
+    /// 질린다) — 첫 장치는 1·2번 홀 안에 둔다(실플레이 기록상 9홀 완주가 드물어 뒤쪽 홀에만 나오는 것은 못 본 채 끝난다). 종류는 번갈아,
+    /// 자리가 안 맞으면 다른 종류로. 코스 생성 난수와 별도 해시 — 같은 시드의 지형은 그대로.
+    /// forced: 관찰용 — 걸 수 있는 홀 전부에 그 장치 (편성에서 뺀 종류도 볼 수 있다, 깔때기는 여기서도 파3 제외)
     static func dress(course: [Hole], seed: UInt32, forced: GimmickKind? = nil) -> [Hole] {
         if let forced {
             return course.map { forced.fits($0) ? $0.withGimmick(forced) ?? $0 : $0 }
@@ -43,10 +49,13 @@ public extension GimmickKind {
         _ = rand.next()
         var out = course
         let n = course.count
-        let groups = [Array(0 ..< min(2, n)), Array(min(3, n) ..< min(6, n)), Array(min(6, n) ..< n)]
-        var kinds = allCases
+        var groups = [Array(0 ..< min(2, n)), Array(min(3, n) ..< min(6, n)), Array(min(6, n) ..< n)]
+        var kinds = inRotation
         if rand.next() < 0.5 {
             kinds.reverse()
+        }
+        if kinds.count == 1 {
+            groups.remove(at: 1)
         }
         for (g, group) in groups.enumerated() where !group.isEmpty {
             var order = group
