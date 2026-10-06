@@ -75,7 +75,10 @@ gl = max(band, key=lambda i: rowsum[i]) / 2 - UP
 bg = [int(v) for v in np.median(a[:20, :20].reshape(-1, 3), axis=0)]
 os.makedirs(HERE + "/assets/cap", exist_ok=True)
 # 위·아래 12% 알파 페더를 PNG에 굽는다(CSS mask는 합성 레이어를 만들어 렌더가 비결정적이었다 — qa 결정론 실측)
-rgba = np.dstack([np.asarray(crop), np.full(crop.size[::-1], 255, np.uint8)]).astype(np.float32)
+# 3차(컬러): 회색 바탕을 버리고 선만 남긴다 — 알파 = 밝기(배경 rgb 40 → 0, 흰 선 → 1), 색은 흰색. 칸 색 위에 실캡처 선화가 그대로 얹힌다
+lum = np.asarray(crop.convert("L")).astype(np.float32)
+alpha = np.clip((lum - 46) / (225 - 46), 0, 1) * 255
+rgba = np.dstack([np.full(lum.shape, 255, np.float32)] * 3 + [alpha])
 hh = rgba.shape[0]; ramp = np.clip(np.minimum(np.arange(hh), hh - 1 - np.arange(hh)) / (0.12 * hh), 0, 1)
 rgba[..., 3] *= (ramp * ramp * (3 - 2 * ramp))[:, None]
 # 전체 화면 배율로 미리 Lanczos 확대 → 정지 구간에서 브라우저가 1:1로 그린다(실시간 리샘플 품질이 렌더마다 달라졌다 — 결정론 실측)

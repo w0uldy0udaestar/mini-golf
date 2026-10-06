@@ -24,14 +24,37 @@ os.makedirs(GEN, exist_ok=True)
 P = lambda v: int(round(v * 2))
 SW, Y0 = 745, 600            # 조각 폭(pt), 띠 위쪽(pt)
 
-def whiten(a):
-    """채도 낮고 밝은 선화 화소 → 흰색 100%, 알파 ×1.35. 깃발 빨강·왕관·어두운 채움은 그대로."""
-    a = a.astype(np.int32)
+NAVY = np.array([11, 30, 107], np.float32)   # 선화 테두리(케이싱): 흰 창·파스텔 타일 위에서도 흰 선이 읽히게
+
+def _dil(m, r):
+    """분리형 최대 필터(반경 r px) — 선을 굵게/케이싱 만들기"""
+    o = m.copy()
+    for d in range(1, r + 1):
+        o[:, d:] = np.maximum(o[:, d:], m[:, :-d]); o[:, :-d] = np.maximum(o[:, :-d], m[:, d:])
+    m2 = o.copy()
+    for d in range(1, r + 1):
+        o[d:, :] = np.maximum(o[d:, :], m2[:-d, :]); o[:-d, :] = np.maximum(o[:-d, :], m2[d:, :])
+    return o
+
+def whiten(a, keep_red_x=None):
+    """3차: 띠의 선화 전부를 흰색 100% 굵은 선(+1px)으로, 남색 케이싱(+3px)을 깐다.
+    어두운 채움(나무 속·연못)은 흰색 30% 알파. 빨강은 keep_red_x(px) 오른쪽의 깃발만 남기고 나머지(왕관·모자)는 흰색."""
+    a = a.astype(np.float32)
     r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
-    m = (np.abs(r - g) < 14) & (np.abs(g - b) < 14) & (r > 120) & (al > 0)
-    a[..., 0][m] = 255; a[..., 1][m] = 255; a[..., 2][m] = 255
-    a[..., 3][m] = np.minimum(255, (al[m] * 1.35).astype(np.int32))
-    return a.astype(np.uint8)
+    lum = np.maximum(np.maximum(r, g), b)
+    gray = (np.abs(r - g) < 14) & (np.abs(g - b) < 14)
+    red = (r > 150) & (g < 120) & (b < 120) & (al > 40)
+    keep = np.zeros_like(red)
+    if keep_red_x is not None: keep[:, keep_red_x:] = red[:, keep_red_x:]
+    w = np.where(gray & (lum <= 120), 0.3, 1.0)
+    wa = np.clip(al * w * 1.35, 0, 255); wa[keep] = 0
+    wa = _dil(wa, 1)
+    ca = _dil(wa, 3) * 0.9
+    A = wa / 255 + (ca / 255) * (1 - wa / 255)
+    col = (255 * (wa / 255)[..., None] + NAVY * ((ca / 255) * (1 - wa / 255))[..., None]) / np.maximum(A, 1e-6)[..., None]
+    out = np.zeros(a.shape, np.float32); out[..., :3] = col; out[..., 3] = A * 255
+    out[keep] = a[keep]   # 깃발 빨강은 원본 그대로
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 HOLES = [  # (번호, 원본, 미러, 지울 사각형 pt(x0,y0,x1,y1) 또는 None, 채울 기둥 x, HUD 실제 문구)
     (1, "terrain-terraces", False, (60, 700, 236, 842.6), 30, "1번 홀 · 파 5 · 계단"),
@@ -73,7 +96,7 @@ for n, src, mirror, erase, fill_x, hud in HOLES:
 for n, (scene, sx, s0, cnt, f0, top) in SEQ.items():
     for k in range(cnt):
         a = np.array(Image.open(f"{CAP}/30s/{scene}/f{s0 + k:05d}.png").convert("RGBA"))
-        c = whiten(a[P(Y0 - top):P(1080 - top), P(sx):P(sx + SW)])
+        c = whiten(a[P(Y0 - top):P(1080 - top), P(sx):P(sx + SW)], keep_red_x=P(1655 - sx) if scene == "holeout" else None)
         Image.fromarray(c, "RGBA").resize((1118, 720), Image.LANCZOS).save(f"{GEN}/seq-{n}-{k}.png", optimize=True)
     out[n]["seq"] = {"scene": scene, "sx": sx, "s0": s0, "n": cnt, "f0": f0}
     print("seq", n, scene, cnt, "frames from", s0)

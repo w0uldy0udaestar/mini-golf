@@ -5,9 +5,9 @@
 
 효과음 레시피는 ads/mini-golf-15s/scripts/make-audio.py(= 게임 SoundKit.swift 이식)에서 그대로 가져왔다: 드라이버 타격음·착지 탭·차임·스윙 바람.
 타이밍은 src/main.js 비트와 같다(소리는 화면 타점보다 1프레임 먼저):
-  f0–14 세 스윙 바람 → f14 동시 임팩트(타격음 3겹 + 낮은 쿵) → 정지한 시간 패드
-  단어 f30·f88·f144 로즈 음(코드 톤 상행) · 점프 착지 f70 탭 · 트월 f170–204 느린 바람
-  3칸 확장 f206 상승 바람 · 관절 점 f240–260 작은 틱 6개 · 마무리 f338 로즈 화음 · 엔드 f385 차임, 15.0초에 무음
+  f0–14 세 스윙 바람 → f14 동시 임팩트(타격음 3겹 + 낮은 쿵, 히트스톱) → 슬로모 패드
+  단어 f26·f86·f142 날아드는 쉭 + 착지 로즈 음 · 점프 착지 f60 탭 · 트월 f160 바람 · 줌 펀치 f210 쉭+쿵
+  관절 점 f234–244 틱 6개 · 트립틱 복귀 f276–284 쉭 3개 · 퇴장 f326 · 마무리 f346 로즈 화음 · 엔드 f387 차임, 15.0초에 무음
 라우드니스: 정적 게인으로 통합 -14 LUFS, 트루피크 ≤ -2.5 dBFS (15초 광고와 같은 기준).
 """
 import json, os, re, subprocess, wave
@@ -101,17 +101,20 @@ for k, (pt, sd) in enumerate([(1.0, 0x9E3779B9), (0.93, 1234567), (1.08, 7654321
 add(thump(), 14, 0.9, "thump")
 # 정지한 시간: 패드 세 코드가 세 주인공을 따라간다 (Fmaj9 → Dm9 → Bbmaj7 → 엔드 F 해결)
 CH = [[53, 57, 60, 64, 67], [50, 57, 60, 64, 65], [46, 57, 62, 65, 69], [41, 53, 57, 60, 64]]
-for (f0, f1), c in zip([(14, 92), (84, 148), (140, 300), (296, 450)], CH):
+for (f0, f1), c in zip([(16, 92), (84, 148), (140, 300), (296, 450)], CH):
     add(pad([note(m) for m in c], (f1 - f0) / FPS, 0.16, att=0.9, rel=0.9), f0, 1.0, "pad")
-# 단어: 코드 톤 상행
-for f, m in [(30, 69), (88, 72), (144, 76)]: add(rhodes(note(m), 1.6, 0.22), f, 1.0, f"word-{m}")
-add(bounce(6, 900), 70, 0.8, "jump-land")
-add(whoosh(1.1, 0.6, 180, 260, seed=91), 170, 0.9, "twirl-swish")
-add(whoosh(0.8, 0.5, 250, 700, seed=93), 206, 0.7, "expand-rise")
-for f in [240, 250, 254, 256, 258, 260]: add(tick(2400 + 120 * (f - 240)), f, 0.8, "joint")
-for m in [65, 69, 72]: add(rhodes(note(m), 2.0, 0.12), 338, 1.0, "closing")
-add(tick(1800), 348, 0.6, "menu")
-add(chime(), 385, 0.9, "end-chime")
+# 단어: 날아드는 쉭 + 착지 로즈 음(코드 톤 상행)
+for f, m in [(26, 69), (86, 72), (142, 76)]:
+    add(whoosh(0.22, 0.7, 500, 900, seed=101 + m), f, 0.55, f"word-swish-{m}"); add(rhodes(note(m), 1.6, 0.22), f + 6, 1.0, f"word-{m}")
+add(bounce(6, 900), 60, 0.8, "jump-land")
+add(whoosh(1.1, 0.6, 180, 260, seed=91), 160, 0.9, "twirl-swish")
+add(whoosh(0.4, 1.0, 300, 900, seed=93), 210, 0.8, "zoom-punch"); add(thump(), 212, 0.6, "zoom-thump")
+for f in [234, 236, 238, 240, 242, 244]: add(tick(2400 + 160 * (f - 234)), f, 0.8, "joint")
+add(whoosh(0.35, 0.8, 260, 700, seed=95), 276, 0.6, "recap-p3"); add(whoosh(0.3, 0.8, 320, 800, seed=96), 280, 0.6, "recap-p1"); add(whoosh(0.3, 0.8, 360, 900, seed=97), 284, 0.6, "recap-p2")
+add(whoosh(0.4, 0.9, 300, 900, seed=98), 326, 0.7, "slide-out")
+for m in [65, 69, 72]: add(rhodes(note(m), 2.0, 0.12), 346, 1.0, "closing")
+add(tick(1800), 356, 0.6, "menu")
+add(chime(), 387, 0.9, "end-chime")
 # 15.0초에 무음: 마지막 0.5초 페이드
 fade = np.ones(N); k0 = int((DUR - 0.5) * SR); fade[k0:] = np.linspace(1, 0, N - k0); mix *= fade
 
