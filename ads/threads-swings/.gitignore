@@ -1,0 +1,4 @@
+# 생성물·캡처 — 스크립트로 다시 만든다 (scripts/capture.sh → scripts/prep.py, scripts/make-audio.py). 캡처는 커밋하지 않는다(저장소 규칙)
+assets/cap/
+audio/*.wav
+node_modules/
