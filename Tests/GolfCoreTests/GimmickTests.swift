@@ -188,8 +188,9 @@ final class GimmickTests: XCTestCase {
         }
     }
 
-    func testDressPlacesThreeAndShowsOneEarly() {
-        var early = 0, rounds = 0, counts: [GimmickKind: Int] = [:]
+    func testDressPlacesTwoVolcanoesAndShowsOneEarly() {
+        var early = 0, rounds = 0, placed = 0
+        XCTAssertEqual(GimmickKind.inRotation, [.volcano], "깔때기는 편성에서 뺐다 (2026-10-06 판정 '너무 쉬워질 것 같다')")
         for seed: UInt32 in 1 ... 60 {
             let course = CourseGenerator.makeCourse(seed: seed)
             let out = GimmickKind.dress(course: course, seed: seed)
@@ -201,26 +202,21 @@ final class GimmickTests: XCTestCase {
             let kinds = out.map(\.gimmick)
             rounds += 1
             early += kinds.prefix(2).contains { $0 != nil } ? 1 : 0
-            XCTAssertLessThanOrEqual(kinds.compactMap(\.self).count, 3, "seed \(seed)")
-            XCTAssertGreaterThanOrEqual(kinds.compactMap(\.self).count, 2, "seed \(seed): 장치가 너무 적다")
-            // 세 토막에 하나씩 — 한 토막에 둘이 몰리지 않는다
-            for group in [0 ..< 2, 3 ..< 6, 6 ..< 9] {
-                XCTAssertLessThanOrEqual(kinds[group].compactMap(\.self).count, 1, "seed \(seed) \(group)")
-            }
-            XCTAssertNil(kinds[2], "3번 홀은 비워 둔다 (첫 토막은 1·2번)")
-            for (i, h) in out.enumerated() {
-                if let k = h.gimmick {
-                    counts[k, default: 0] += 1
-                    XCTAssertFalse(k == .funnel && h.par == 3, "seed \(seed) hole \(i + 1): 깔때기는 파3에 걸지 않는다")
-                } else {
-                    XCTAssertEqual(h.elevation, course[i].elevation, "장치 없는 홀은 그대로")
-                }
+            let count = kinds.compactMap(\.self).count
+            placed += count
+            XCTAssertLessThanOrEqual(count, 2, "seed \(seed): 한 종류뿐일 때는 두 홀까지")
+            XCTAssertGreaterThanOrEqual(count, 1, "seed \(seed): 장치가 없다")
+            XCTAssertFalse(kinds.contains(.funnel), "seed \(seed): 깔때기가 편성에 들어왔다")
+            // 앞 토막(1·2번)과 뒤 토막(7~9번)에 하나씩 — 가운데는 비운다
+            XCTAssertLessThanOrEqual(kinds[0 ..< 2].compactMap(\.self).count, 1, "seed \(seed)")
+            XCTAssertTrue(kinds[2 ..< 6].allSatisfy { $0 == nil }, "seed \(seed): 3~6번 홀은 비워 둔다")
+            XCTAssertLessThanOrEqual(kinds[6 ..< 9].compactMap(\.self).count, 1, "seed \(seed)")
+            for (i, h) in out.enumerated() where h.gimmick == nil {
+                XCTAssertEqual(h.elevation, course[i].elevation, "장치 없는 홀은 그대로")
             }
         }
         XCTAssertGreaterThan(Double(early) / Double(rounds), 0.9, "첫 장치가 1·2번 홀 안에 나오는 라운드 \(early)/\(rounds)")
-        for k in GimmickKind.allCases {
-            XCTAssertGreaterThan(counts[k] ?? 0, 40, "\(k)가 너무 드물다: \(counts[k] ?? 0)/\(rounds)라운드")
-        }
+        XCTAssertGreaterThan(Double(placed) / Double(rounds), 1.8, "라운드당 화산 \(Double(placed) / Double(rounds))홀")
     }
 
     func testForcedDressAndPinStaysPut() throws {
