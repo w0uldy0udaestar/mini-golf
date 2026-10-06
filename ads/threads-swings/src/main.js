@@ -37,7 +37,7 @@
   /* ── 배치 (px) ── */
   const PH = 484, PY = [124, 618, 1112];      // 세 칸: y 124–1596 (세로 안전 영역 100–1620), 칸 사이 10px
   const GL = 466, SC = 3.85, SX = 394;         // 칸 안 지면선 y · pt당 px(몸 키 341px = 칸 70%) · 스틱 x
-  const FF = { X: 608, G: 1150, S: CAP.scale }; // 3칸 전체 화면: 몸 키 926px (실캡처도 같은 배율)
+  const FF = { X: 608, G: 1150, S: CAP.scale }; // 3칸 전체 화면: 몸 키 926px (리그 벡터, 비트맵 없음)
   const ORDER = ["jump", "lock", "twirl"];
   const WORDS = ["뛴다", "고정", "돌린다"];
   const COL = { jump: "#22CFA0", lock: "#FF7A1C", twirl: "#6F45FF" };    // 민트 · 주황 · 보라 (포스터 단색)
@@ -48,7 +48,7 @@
   const F_IMP = 14;
   const SPOT = [[24, 84], [84, 140], [140, 212]];
   const F_WORD = [26, 86, 142];
-  const F_EXP = [212, 224], F_X = [224, 228], RIGF0 = 234;   // 벡터↔실캡처는 같은 자세라 4프레임에 바꾼다(겹친 반투명 유령을 줄인다)
+  const F_EXP = [212, 224], RIGF0 = 234;
   const F_REC = [276, 300], F_OUT = [326, 340], F_LA = 340, F_LB = 350, F_SWAP = 384;
 
   // ② 속도 램프: [프레임, 배속] 키 사이를 smoothstep(6프레임)으로 잇는다. 임팩트 f14–16은 히트스톱(0배)
@@ -65,7 +65,7 @@
     for (let f = 14; f < 461; f++) { for (let k = 0; k < 8; k++) t += speedAt(SPEED[n], f + (k + 0.5) / 8) / FPS / 8; tb[f + 1] = t; } TT[n] = tb; }
   const rigT = (n, f) => {
     if (f <= F_IMP) return (f - F_IMP) / FPS;                       // 훅: 실속도
-    if (n === EXP && f >= F_EXP[0]) return CAP.rigT;                 // 트월 뒤 정지 자세 = 실캡처 자세 (차이 0.1pt)
+    if (n === EXP && f >= F_EXP[0]) return CAP.rigT;                 // 트월 뒤 정지 자세(실캡처와 IoU 0.79로 맞춘 리그 표본)
     const i = Math.min(460, Math.floor(f)), u = f - Math.floor(f);
     return lerp(TT[n][Math.max(14, i)], TT[n][Math.min(461, i + 1)], u);
   };
@@ -100,8 +100,7 @@
     const el = h("div", "panel"); el.style.background = COL[name]; stage.appendChild(el);
     const content = h("div", "content"); el.appendChild(content);
     const svg = mk("svg", { width: 1080, height: 1920 }); content.appendChild(svg);
-    let cap = null;
-    if (name === EXP) { cap = h("img", "cap"); cap.src = CAP.file; content.insertBefore(cap, svg); }
+    const cap = null;   // 4차: 캡처 비트맵을 쓰지 않는다 — 관절선 비트도 60Hz 리그 벡터 스틱맨 그대로(확대해도 선명)
     const groundRim = mk("path", { fill: "none", stroke: RIM, "stroke-linecap": "round", "stroke-linejoin": "round" });
     const ground = mk("path", { fill: "none", stroke: "#FFFFFF", "stroke-linecap": "round", "stroke-linejoin": "round" });
     const rough = mk("path", { fill: "none", stroke: "#FFFFFF", "stroke-linecap": "round" });
@@ -281,19 +280,12 @@
       A.ta.setAttribute("points", pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "));
       PN.twirl.anno.setAttribute("opacity", (fade(160, F_EXP[0]) * clamp((o.r.phi - r0.phi) * 3)).toFixed(3)); }
 
-    // 3칸 전체 화면: 벡터 → 같은 자세 실캡처(흰 선만) 교차, ⑤ 관절선 reveal
+    // 3칸 전체 화면: 확대된 리그 벡터 스틱맨 위에 ⑤ 관절선 reveal
     const P3 = PN[EXP], o3 = out[EXP];
-    // 겹친 반투명 유령을 피하는 2단 교차: 실캡처(아래층)를 먼저 100%로 올리고, 그다음 위의 벡터를 걷어 낸다
-    const xcCap = smooth(seg(f, F_X[0] - 3, F_X[0] + 1)) * (1 - smooth(seg(f, F_REC[0] + 4, F_REC[0] + 10)));
-    const xc = smooth(seg(f, F_X[0] + 1, F_X[1] + 1)) * (1 - smooth(seg(f, F_REC[0], F_REC[0] + 6)));
-    P3.cap.style.left = (o3.X + CAP.rel[0] * o3.s).toFixed(2) + "px"; P3.cap.style.top = (o3.G + CAP.rel[1] * o3.s).toFixed(2) + "px";
-    P3.cap.style.width = (CAP.size[0] * o3.s).toFixed(2) + "px"; P3.cap.style.height = (CAP.size[1] * o3.s).toFixed(2) + "px";
-    P3.cap.style.opacity = xcCap.toFixed(3); P3.cap.style.display = xcCap > 0.001 ? "block" : "none";
-    P3.man.setAttribute("opacity", (1 - xc).toFixed(3));
-    for (const k of ["ground", "groundRim", "rough"]) P3[k].setAttribute("opacity", (1 - xc).toFixed(3));
+    // 4차: 벡터 → 벡터 핸드오프(교차 없음). 확대된 리그 벡터 스틱맨이 그대로 남고 그 위에 관절선이 그려진다
+    P3.man.setAttribute("opacity", 1);
     const away = 1 - smooth(seg(f, F_EXP[0] - 6, F_EXP[0])) * (1 - smooth(seg(f, F_REC[0], F_REC[1])));
-    for (const k of ["ball", "trailLine", "tee"]) P3[k].setAttribute("opacity", Math.min(1 - xc, away).toFixed(3));
-    P3.smear.setAttribute("opacity", (+P3.smear.getAttribute("opacity") * (1 - xc)).toFixed(3));
+    for (const k of ["ball", "trailLine", "tee"]) P3[k].setAttribute("opacity", away.toFixed(3));
     drawRig(f, o3);
     const kc = kin(f, RIGF0 + 8), co = 1 - smooth(seg(f, F_REC[0] - 2, F_REC[0] + 4));
     ffcap.style.opacity = (kc.on ? co : 0).toFixed(3);
@@ -361,5 +353,5 @@
     const pre = document.createElement("pre"); pre.id = "audit"; pre.textContent = JSON.stringify(res); document.body.appendChild(pre);
   }
   // 감사 모드는 이미지가 필요 없다(헤드리스 덤프가 디코드를 기다리지 않아 감사가 빠질 수 있었다)
-  Promise.all([document.fonts.ready, q.has("audit") ? null : PN[EXP].cap.decode().catch(() => null)]).then(() => { if (q.has("audit")) audit(); render(q.has("t") ? parseFloat(q.get("t")) : tl.time()); window.__ready = true; });
+  Promise.all([document.fonts.ready]).then(() => { if (q.has("audit")) audit(); render(q.has("t") ? parseFloat(q.get("t")) : tl.time()); window.__ready = true; });
 })();

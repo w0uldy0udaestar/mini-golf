@@ -1,106 +1,99 @@
 #!/usr/bin/env python3
-"""T3 회의 중 9홀 — 소재 준비. dist/cap/ad(실캡처)만 쓴다. 게임은 다시 실행하지 않는다.
+"""T3 회의 중 9홀 — 데이터 준비 (4차: 화면에 캡처 비트맵 0장, 전부 벡터).
 
-  python3 scripts/prep.py   → assets/gen/hole-*.png · seq-*-*.png · swing-*.png, data/holes.js
+  swiftc -O -I .build/debug ads/threads-terrain/tools/coursedump.swift .build/debug/GolfCore.o -o <bin>/coursedump
+  COURSEDUMP=<bin>/coursedump python3 scripts/prep.py   → data/holes.js
 
-1) 홀 판(plate): 실캡처 terrain-*.png(3840×2160, 2x, 알파)에서 세로 화면 조각(745pt 폭)과 띠(y 600~1080pt)만 잘라 낸다.
-   왼쪽 티 홀은 x 0~745pt, 오른쪽 티(미러) 홀은 x 1175~1920pt. 벡터 스틱맨(실제 리그)을 올릴 홀(1·4·9번)은
-   판에 찍힌 티 위 스틱맨·조준 라벨·공을 옆 평지 30pt 기둥으로 덮어 지운다. 3번 홀은 15초판 plate-ko(티를 이미 지운 판).
-2) 연번 클립(seq): 30초판 실캡처 연번(dist/cap/ad/30s/<장면>/fNNNNN.png, 29.3fps)에서 타임랩스 컷 길이만큼 잘라
-   1.5x(1118×720px)로 줄인다 — 2·5·7번 홀 컷은 판 대신 이 프레임이 그대로 재생된다(실제 스윙·퍼트·컵인).
-3) 밝기: 띠의 선화(채도 낮고 밝은 화소 = 지형선·러프 틱·스틱맨·공·HUD)를 흰색 100%로 올리고 알파를 ×1.35 한다.
-   어두운 채움(나무 속)과 채도 있는 화소(깃발 빨강·왕관)는 그대로 둔다. 15초판 스윙 크롭 5장도 같은 처리.
-4) 지형 프로파일: 지운 판의 알파에서 각 열의 가장 아래 불투명 화소(y 700~1002pt) = 지면선 (15초판 prep.py와 같은 방법).
+1) 지형: 게임 코스 생성기(GolfCore CourseGenerator.makeCourse)의 1m 표고·구간·장애물을 coursedump로 받아
+   GameScene과 같은 식으로 화면 pt로 바꾼다: pxPerM = 1920/worldW, vScale = min(1.4, max(1, min(9/pxPerM, (1080−136)/((표고 폭+66)·pxPerM)))),
+   groundBase = max(96, 84 − 최저 표고·pyPerM), y = 1080 − (groundBase + 표고·pyPerM)  (ads/threads-terrain/scripts/prep.py 와 같은 식).
+   지형선·러프 틱·그린·물·나무·깃발을 세로 조각(745pt) 좌표의 벡터로 저장한다.
+2) 리그: 2·5·7번 홀 컷은 30초판 실캡처 때 함께 받은 60Hz 리그 덤프(dist/cap/ad/30s/<장면>/game.log의 RIG 줄)를
+   캡처 프레임 벽시계(times.txt)에 맞춰 컷 프레임마다 한 포즈씩 뽑는다(15초판 prep.py와 같은 정렬, 캡처 지연 53ms 보정).
+   샷·컵인 시각(PLAY SHOT / PLAY HOLED)도 컷 프레임으로 바꿔 저장한다(공은 이 시각에 맞춘 코드 근사).
 """
-import json, os
+import json, os, re, subprocess
 import numpy as np
-from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__)) + "/.."
 CAP = HERE + "/../../dist/cap/ad"
-S15 = HERE + "/../mini-golf-15s/assets/gen"
-GEN = HERE + "/assets/gen"; DATA = HERE + "/data"
-os.makedirs(GEN, exist_ok=True)
-P = lambda v: int(round(v * 2))
-SW, Y0 = 745, 600            # 조각 폭(pt), 띠 위쪽(pt)
+DATA = HERE + "/data"
+BIN = os.environ.get("COURSEDUMP", "coursedump")
+SW = 745
+run = lambda *a: json.loads(subprocess.run([BIN, *map(str, a)], capture_output=True, text=True, check=True).stdout)
 
-NAVY = np.array([11, 30, 107], np.float32)   # 선화 테두리(케이싱): 흰 창·파스텔 타일 위에서도 흰 선이 읽히게
-
-def _dil(m, r):
-    """분리형 최대 필터(반경 r px) — 선을 굵게/케이싱 만들기"""
-    o = m.copy()
-    for d in range(1, r + 1):
-        o[:, d:] = np.maximum(o[:, d:], m[:, :-d]); o[:, :-d] = np.maximum(o[:, :-d], m[:, d:])
-    m2 = o.copy()
-    for d in range(1, r + 1):
-        o[d:, :] = np.maximum(o[d:, :], m2[:-d, :]); o[:-d, :] = np.maximum(o[:-d, :], m2[d:, :])
-    return o
-
-def whiten(a, keep_red_x=None):
-    """3차: 띠의 선화 전부를 흰색 100% 굵은 선(+1px)으로, 남색 케이싱(+3px)을 깐다.
-    어두운 채움(나무 속·연못)은 흰색 30% 알파. 빨강은 keep_red_x(px) 오른쪽의 깃발만 남기고 나머지(왕관·모자)는 흰색."""
-    a = a.astype(np.float32)
-    r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
-    lum = np.maximum(np.maximum(r, g), b)
-    gray = (np.abs(r - g) < 14) & (np.abs(g - b) < 14)
-    red = (r > 150) & (g < 120) & (b < 120) & (al > 40)
-    keep = np.zeros_like(red)
-    if keep_red_x is not None: keep[:, keep_red_x:] = red[:, keep_red_x:]
-    w = np.where(gray & (lum <= 120), 0.3, 1.0)
-    wa = np.clip(al * w * 1.35, 0, 255); wa[keep] = 0
-    wa = _dil(wa, 1)
-    ca = _dil(wa, 3) * 0.9
-    A = wa / 255 + (ca / 255) * (1 - wa / 255)
-    col = (255 * (wa / 255)[..., None] + NAVY * ((ca / 255) * (1 - wa / 255))[..., None]) / np.maximum(A, 1e-6)[..., None]
-    out = np.zeros(a.shape, np.float32); out[..., :3] = col; out[..., 3] = A * 255
-    out[keep] = a[keep]   # 깃발 빨강은 원본 그대로
-    return np.clip(out, 0, 255).astype(np.uint8)
-
-HOLES = [  # (번호, 원본, 미러, 지울 사각형 pt(x0,y0,x1,y1) 또는 None, 채울 기둥 x, HUD 실제 문구)
-    (1, "terrain-terraces", False, (60, 700, 236, 842.6), 30, "1번 홀 · 파 5 · 계단"),
-    (2, "terrain-cascade", True, None, None, "2번 홀 · 파 4 · 폭포"),
-    (3, "@plate-ko", False, None, None, "3번 홀 · 파 5 · 절벽 티"),
-    (4, "terrain-valley", True, (1700, 760, 1885, 905.5), 1885, "4번 홀 · 파 5 · 계곡"),
-    (5, "terrain-ridge", True, None, None, "5번 홀 · 파 4 · 능선"),
-    (7, "terrain-summit", False, None, None, "7번 홀 · 파 4 · 산정 그린"),
-    (9, "terrain-forest", True, (1690, 840, 1880, 982.0), 1660, "9번 홀 · 파 4 · 숲"),
-]
-# 연번 클립: 홀 → (장면, 조각 x 시작 pt, 장면 프레임 시작, 프레임 수, 컷 시작 광고 프레임, 장면 띠 위쪽 pt)
-SEQ = {
-    2: ("cascade-drive", 1175, 4, 24, 170, 480),   # 폭포 티샷: 톱 → 임팩트(≈장면 f18) → 공 출발
-    5: ("ridge", 850, 46, 24, 234, 480),           # 능선 급사면 둘째 샷: 임팩트(≈장면 f57)
-    7: ("holeout", 1175, 20, 26, 254, 360),        # 산정 그린 퍼트 → 컵인(장면 f44) — 게임 토스트(f49~) 전에 끊는다
+HOLES = {  # 광고 홀 → (시드, 홀, 조각 x 시작 pt, HUD 실제 문구)  — 시드·홀은 coursedump list로 아키타입을 확인했다
+    1: (1, 1, 0, "1번 홀 · 파 5 · 계단"), 2: (1, 2, 1175, "2번 홀 · 파 4 · 폭포"), 3: (2, 3, 0, "3번 홀 · 파 5 · 절벽 티"),
+    4: (2, 4, 1175, "4번 홀 · 파 5 · 계곡"), 5: (1, 5, 850, "5번 홀 · 파 4 · 능선"), 7: (1, 7, 1175, "7번 홀 · 파 4 · 산정 그린"),
+    9: (1, 9, 1175, "9번 홀 · 파 4 · 숲"),
 }
 out = {}
-for n, src, mirror, erase, fill_x, hud in HOLES:
-    path = f"{S15}/plate-ko.png" if src.startswith("@") else f"{CAP}/{src}.png"
-    a = np.array(Image.open(path).convert("RGBA"))
-    if erase:
-        x0, y0, x1, y1 = erase
-        tile = a[P(y0):P(y1) + 16, P(fill_x):P(fill_x + 30)].copy()
-        for xx in range(P(x0), P(x1), tile.shape[1]):
-            w = min(tile.shape[1], P(x1) - xx)
-            a[P(y0):P(y1) + 16, xx:xx + w] = tile[:, :w]
-    sx = 1920 - SW if mirror else 0
-    Image.fromarray(whiten(a[P(Y0):P(1080), P(sx):P(sx + SW)]), "RGBA").save(f"{GEN}/hole-{n}.png", optimize=True)
-    A = a[..., 3].astype(np.float32)
-    gy = []
-    for x in range(0, 1920):
-        col = A[P(700):P(1002), P(x):P(x) + 2].max(axis=1)
-        idx = np.nonzero(col > 90)[0]
-        gy.append(np.nan if len(idx) == 0 else (P(700) + idx[-1]) / 2 - 0.9)
-    v = np.array(gy); xs = np.arange(1920); ok = ~np.isnan(v); v = np.interp(xs, xs[ok], v[ok])
-    out[n] = {"sx": sx, "mirror": mirror, "hud": hud, "ground": [round(float(g), 1) for g in v]}
-    print(n, src, "slice", sx, "tee ground", round(float(v[153 if not mirror else 1767]), 1))
+for n, (seed, hn, sx, hud) in HOLES.items():
+    hj = run("hole", seed, hn)
+    e = np.array(hj["elev"], float); W = hj["worldW"]; ppm = 1920 / W
+    vs = min(1.4, max(1.0, min(9 / ppm, (1080 - 136) / ((e.max() - e.min() + 66) * ppm))))
+    pyp = ppm * vs; base = max(96, 84 - e.min() * pyp)
+    Y = lambda z: 1080 - (base + z * pyp)
+    gr = lambda xm: float(np.interp(xm, np.arange(len(e)), e))
+    segs = hj["segs"]
+    surf = lambda xm: next((s["type"] for s in segs if s["from"] <= xm < s["to"]), "fairway")
+    ground = [round(Y(gr(x / ppm)), 2) for x in range(1920)]
+    loc = lambda xpt: round(xpt - sx, 2)
+    x0m, x1m = (sx - 20) / ppm, (sx + SW + 20) / ppm
+    line = [[loc(x * ppm), round(Y(gr(x)), 2)] for x in np.arange(max(0, x0m), min(len(e) - 1, x1m), 0.5)]
+    ticks, lean = [], False
+    for g in np.arange(max(0, x0m) + 0.9, min(len(e) - 1, x1m), 1.5):
+        if surf(g) == "rough": ticks.append([loc(g * ppm), round(Y(gr(g)), 2), 1 if lean else 0])
+        lean = not lean
+    gs, ge = hj["greenStart"], hj["greenEnd"]
+    green = [[loc(x * ppm), round(Y(gr(x)), 2)] for x in np.arange(gs, ge + 0.01, 0.5)] if ge * ppm > sx - 20 and gs * ppm < sx + SW + 20 else []
+    water = []
+    for s in segs:
+        if s["type"] == "water" and s["to"] * ppm > sx and s["from"] * ppm < sx + SW:
+            lvl = min(Y(gr(s["from"])), Y(gr(s["to"])))
+            water.append({"lvl": round(lvl, 2), "pts": [[loc(x * ppm), round(Y(gr(x)), 2)] for x in np.arange(s["from"], s["to"] + 0.01, 0.5)]})
+    trees = [[loc(o["x"] * ppm), round(Y(gr(o["x"])), 2), round(Y(gr(o["x"]) + o["cy"]), 2), round(o["size"] * ppm, 2)]
+             for o in hj["obs"] if o["kind"] == "tree" and sx - 40 < o["x"] * ppm < sx + SW + 40]
+    flag = [loc(hj["holeX"] * ppm), round(Y(gr(hj["holeX"])), 2)] if sx - 10 < hj["holeX"] * ppm < sx + SW + 10 else None
+    out[n] = {"sx": sx, "mirror": hj["teeX"] > W / 2, "hud": hud, "ppm": round(ppm, 4), "ground": ground, "line": line, "ticks": ticks,
+              "green": green, "water": water, "trees": trees, "flag": flag, "teeX": round(hj["teeX"] * ppm, 2)}
+    print(n, f"seed {seed} h{hn} {hj['sig']} ppm {ppm:.3f} vs {vs:.2f} tee {hj['teeX'] * ppm:.0f}pt y {Y(gr(hj['teeX'])):.1f} · line {len(line)} ticks {len(ticks)} trees {len(trees)} flag {flag} water {len(water)}")
 
-for n, (scene, sx, s0, cnt, f0, top) in SEQ.items():
+# ── 2·5·7번 컷: 30초판 60Hz 리그 → 컷 프레임별 포즈 ──
+SEQ = {2: ("cascade-drive", 4, 24, 170), 5: ("ridge", 46, 24, 234), 7: ("holeout", 20, 26, 254)}
+CAP_LAG = 0.053
+for n, (scene, s0, cnt, f0) in SEQ.items():
+    log = open(f"{CAP}/30s/{scene}/game.log").read().splitlines()
+    rig, stick, ev = [], [], {}
+    for l in log:
+        p = l.split()
+        if len(p) > 2 and p[1].startswith("RIG["):
+            st = float(p[1][4:-1]); xy = [tuple(map(float, q.split(","))) for q in p[3:13]]; kv = dict(zip(p[13::2], p[14::2]))
+            rig.append({"recv": float(p[0]), "st": st, "mode": p[2], "pts": xy, "head": list(map(float, kv["head"].split(","))), "phi": float(kv["phi"]),
+                        "len": float(kv["len"]), "butt": float(kv["butt"]), "curved": int(kv["curved"]), "dir": int(kv["dir"])})
+        m = re.search(r"STICK\[([\d.]+)\] (\d+)", l)
+        if m: stick.append((float(m.group(1)), int(m.group(2))))
+        if "PLAY SHOT" in l: ev.setdefault("shots", []).append((float(p[0]), float(re.search(r"from ([\d.]+)", l).group(1))))
+        if "PLAY HOLED" in l: ev["holed"] = float(p[0])
+    off = np.percentile([r["recv"] - r["st"] for r in rig], 5)
+    ws = np.array([r["st"] + off for r in rig])
+    times = [l.split() for l in open(f"{CAP}/30s/{scene}/times.txt")]
+    frames = []
     for k in range(cnt):
-        a = np.array(Image.open(f"{CAP}/30s/{scene}/f{s0 + k:05d}.png").convert("RGBA"))
-        c = whiten(a[P(Y0 - top):P(1080 - top), P(sx):P(sx + SW)], keep_red_x=P(1655 - sx) if scene == "holeout" else None)
-        Image.fromarray(c, "RGBA").resize((1118, 720), Image.LANCZOS).save(f"{GEN}/seq-{n}-{k}.png", optimize=True)
-    out[n]["seq"] = {"scene": scene, "sx": sx, "s0": s0, "n": cnt, "f0": f0}
-    print("seq", n, scene, cnt, "frames from", s0)
-
-for nm in ["swing-top", "swing-down", "swing-impact", "swing-follow", "swing-finish"]:
-    Image.fromarray(whiten(np.array(Image.open(f"{S15}/{nm}.png").convert("RGBA"))), "RGBA").save(f"{GEN}/{nm}.png", optimize=True)
+        w = float(times[s0 + k][1]) - CAP_LAG
+        i = int(np.clip(np.searchsorted(ws, w), 1, len(rig) - 1)); a, b = rig[i - 1], rig[i]
+        u = float(np.clip((w - ws[i - 1]) / max(1e-6, ws[i] - ws[i - 1]), 0, 1)); L = lambda p, q: p + (q - p) * u
+        sx_ = float(np.interp(w, [s[0] + off for s in stick], [s[1] for s in stick]))
+        frames.append({"pts": [[round(L(p[0], q[0]), 2), round(L(p[1], q[1]), 2)] for p, q in zip(a["pts"], b["pts"])],
+                       "head": [round(L(a["head"][j], b["head"][j]), 2) for j in (0, 1)], "phi": round(L(a["phi"], b["phi"]), 4),
+                       "len": round(L(a["len"], b["len"]), 2), "butt": round(L(a["butt"], b["butt"]), 2),
+                       "curved": a["curved"] if u < .5 else b["curved"], "dir": a["dir"], "x": round(sx_, 2)})
+    walls = [float(times[s0 + k][1]) for k in range(cnt)]
+    shot = next((sh for sh in ev["shots"] if walls[0] - 1.5 <= sh[0] <= walls[-1] + 0.5), None)   # 이 컷 구간의 샷
+    ev["shot"] = shot[0] if shot else None
+    if shot:   # 샷 컷의 스틱맨은 공 자리(from m × ppm)에 서 있다 — STICK 로그는 드문드문이라 이 값이 정확하다
+        for fr in frames: fr["x"] = round(shot[1] * out[n]["ppm"], 2)
+    tof = lambda w: round(f0 + float(np.interp(w, walls, range(cnt))), 2) if w is not None else None
+    out[n]["seq"] = {"f0": f0, "n": cnt, "rig": frames, "shotF": tof(ev.get("shot")), "holedF": tof(ev.get("holed"))}
+    print("seq", n, scene, cnt, "shotF", out[n]["seq"]["shotF"], "holedF", out[n]["seq"]["holedF"], "stick x", frames[0]["x"], "dir", frames[0]["dir"])
 open(f"{DATA}/holes.js", "w").write("window.HOLES=" + json.dumps(out, separators=(",", ":"), ensure_ascii=False) + ";\n")

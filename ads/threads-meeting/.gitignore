@@ -3,3 +3,4 @@ assets/gen/
 node_modules/
 renders/
 qa/*.json
+audio/*.wav
