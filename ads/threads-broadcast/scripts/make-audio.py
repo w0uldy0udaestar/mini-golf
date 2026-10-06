@@ -4,7 +4,7 @@
   python3 scripts/make-audio.py   → audio/mix-ko.wav (+ mix-ko.json 측정값)
 
 · 효과음 레시피는 15초 광고 make-audio.py(= 게임 SoundKit.swift 이식)와 같다: 스윙 우시 · 드라이버 타격음 · 착지 탭 · 차임.
-· 타이밍은 src/main.js·data/shot.js와 같은 값: 임팩트 f11(타격음 1프레임 먼저) · 착지 SHOT.fLand · 튐 착지 · 엔드 f262.
+· 타이밍은 data/shot.js beats(실프레임, 히트스톱·속도 램프 반영): 임팩트 f11(타격음 1프레임 먼저) · 착지 · 튐 · 벙커 도장 · 해설 타자 · 엔드 와이프.
 · 바닥: 아주 낮은 야외 공기(저역 잡음) + 느린 패드(Fmaj9 → 엔드에서 해결). 중계석 해설 목소리는 넣지 않는다(자막이 말한다).
 · 라우드니스: 정적 게인 + 소프트 클립(tanh)으로 통합 -16 LUFS 목표, 트루피크 ≤ -2.5 dBFS.
 """
@@ -56,6 +56,14 @@ def chime():
     t = T(0.9); s = np.sin(2 * np.pi * 660 * t) * np.exp(-t / 0.3)
     t2 = np.clip(t - 0.14, 0, None); s += (t >= 0.14) * np.sin(2 * np.pi * 880 * t2) * np.exp(-t2 / 0.3)
     return s * 0.16
+def key(v):   # 타건(15초 광고 레시피) — 해설 타자기
+    t = T(0.05); n = LCG(1000 + v * 17).white(len(t))
+    f = [2600, 3100, 2300, 2850, 3400][v % 5]
+    s = biquad(n, "bp", f, 1.6) * np.exp(-t / 0.006) * 0.9 + np.sin(2 * np.pi * (420 + 40 * v) * t) * np.exp(-t / 0.008) * 0.25
+    return s * 0.30
+def stamp():   # 도장: 낮은 둔탁음 + 짧은 잡음
+    t = T(0.16); n = LCG(321).white(len(t))
+    return (np.sin(2 * np.pi * (95 - 40 * t) * t) * np.exp(-t / 0.05) * 0.9 + biquad(n, "lp", 700, 0.8) * np.exp(-t / 0.02) * 0.6) * 0.55
 def note(m): return 440 * 2 ** ((m - 69) / 12)
 def pad(freqs, d, amp, att=0.6, rel=0.8):
     t = T(d); s = np.zeros_like(t)
@@ -80,12 +88,18 @@ put(buf, pad([note(m) for m in (41, 53, 60, 64, 69)], 3.6, 0.085, att=0.9, rel=1
 # 스윙·임팩트 (임팩트 f11, 타격음은 한 프레임 먼저 — 15초 광고와 같은 규칙)
 put(buf, whoosh(0.26, 1.0), (11 - 8) / FPS, 1.4)
 put(buf, impact_wood(1.0), (11 - 1) / FPS, 1.8)
-# 착지 탭 → 튐 착지 → 굴림 끝(아주 작게)
-fL = SHOT["fLand"]; hop = SHOT["hop"]; fH1 = fL + (hop[0] - fL) / 0.625
-put(buf, bounce(28.4 / 2.5, 1100), fL / FPS, 2.0)        # LANDCUE vn 28.4 m/s 착지(화면 시간 배율로 눌러서)
-put(buf, bounce(6, 900), fH1 / FPS, 1.4)
-# 엔드카드 차임 (게임 배지 소리)
-put(buf, chime(), 262 / FPS, 1.6)
+# 3차: 실프레임 비트는 shot.js beats(히트스톱·속도 램프가 반영된 값)에서 읽는다
+Bt = SHOT["beats"]
+put(buf, bounce(28.4 / 2.5, 1100), Bt["landR"] / FPS, 2.0)   # LANDCUE vn 28.4 m/s 착지
+put(buf, bounce(6, 900), Bt["hopR"] / FPS, 1.4)
+put(buf, stamp(), round(Bt["restR"]) / FPS, 1.6)              # 벙커 도장
+CM1 = "이 샷, 코드 창 위를 넘어갑니다."; CM2 = "…벙커입니다."
+for i, c in enumerate(CM1):
+    if c != " ": put(buf, key(i), (Bt["cmt1"] + i * Bt["cmtRate"]) / FPS, 0.9)
+for i, c in enumerate(CM2):
+    put(buf, key(i + 3), (Bt["cmt2"] + i * Bt["cmtRate"]) / FPS, 0.9)
+put(buf, whoosh(0.5, 0.8), Bt["wipe"] / FPS, 1.2)               # 엔드 가로 와이프
+put(buf, chime(), (Bt["wipe"] + 14) / FPS, 1.6)                 # 엔드카드 차임 (게임 배지 소리)
 # 끝 0.15초 무음으로 닫기
 buf[int((DUR - 0.15) * SR):] *= 0
 

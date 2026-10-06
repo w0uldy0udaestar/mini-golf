@@ -1,0 +1,19 @@
+/* T2 「홀마다 다른 산」 — 컷마다 선명한 단색 바탕 · 흰 선화 · 한 단어(Pretendard ExtraBold) */
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Medium.woff2") format("woff2"); font-weight:500; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-Bold.woff2") format("woff2"); font-weight:700; font-display:block; }
+@font-face { font-family:"Pretendard"; src:url("../brand/fonts/Pretendard-ExtraBold.woff2") format("woff2"); font-weight:800; font-display:block; }
+@font-face { font-family:"JBM"; src:url("../brand/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); font-weight:500; font-display:block; }
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { background:#000; overflow:hidden; }
+#root { position:relative; overflow:hidden; font-family:"Pretendard", sans-serif; background:#36A2F0; }
+.w { position:absolute; left:0; top:0; white-space:nowrap; visibility:hidden; }
+.word { font-weight:800; letter-spacing:-0.04em; line-height:1.0; }
+.hook { font-weight:800; letter-spacing:-0.04em; line-height:1.08; }
+.new { font-weight:800; letter-spacing:0.02em; line-height:1; background:#FFD93B; padding:10px 22px 12px; border-radius:14px; }
+#end { position:absolute; left:104px; top:720px; visibility:hidden; }
+#end .r { position:relative; overflow:hidden; }
+#end .r > div { position:relative; left:0; }
+#end .dash { width:0; height:8px; border-radius:4px; background:#E8402F; margin:0 0 34px 4px; }
+#end .wm { font-weight:800; font-size:150px; letter-spacing:-0.045em; line-height:1.05; color:#0E0E10; }
+#end .meta { font-weight:700; font-size:46px; letter-spacing:-0.01em; color:#2A2A2A; margin-top:18px; }
+#end .url { font-family:"JBM", monospace; font-weight:500; font-size:36px; color:#2A2A2A; margin-top:16px; }

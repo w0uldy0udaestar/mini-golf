@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- T1 「거위가 공 위에 앉았다」 — 스레드용 세로 1080×1920 · 13초 · 한국어.
-     영상층 = assets/gen/footage.mp4 (scripts/bake.py가 게임 창 캡처로 굽는다), 글자층 = src/main.js 의 render(t).
+<!-- T1 「거위가 공 위에 앉았다」 v3 — 스레드용 세로 1080×1920 · 12.5초 · 한국어.
+     전부 벡터: src/main.js 의 render(t)가 게임 도형 치수 + data/scenes.js(캡처에서 뽑은 위치·시각)로 그린다.
      렌더: scripts/render.sh  ·  기획·비트 시트: plan.md -->
 <html lang="ko">
 <head>
@@ -8,11 +8,10 @@
 <meta name="viewport" content="width=1080, height=1920">
 <link rel="stylesheet" href="src/main.css">
 <script src="vendor/gsap.min.js"></script>
-<script src="data/cuts.js"></script>
+<script src="data/scenes.js"></script>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="13" data-fps="30" data-width="1080" data-height="1920" style="width:1080px;height:1920px">
-  <video id="footage" class="clip" src="assets/gen/footage.mp4" muted playsinline data-start="0" data-duration="13" data-track-index="0"></video>
+<div id="root" data-composition-id="main" data-start="0" data-duration="12.5" data-fps="30" data-width="1080" data-height="1920" style="width:1080px;height:1920px">
 </div>
 <script src="src/main.js"></script>
 </body>

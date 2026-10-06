@@ -36,6 +36,25 @@ for n in ["swing-top", "swing-down", "swing-impact", "swing-follow", "swing-fini
         c[b:d, a:cc, 3] = 0
     save(c, n)
 
+# 1b) 3차(밝은 중계 톤): 지형·HUD·스틱맨을 흰색 100% 굵은 선으로. 판은 지형 구간만 2px 팽창(HUD 글자는 알파만 올림), 크롭은 1px.
+#     깃발 빨강만 남기고(생중계 점과 함께 유일한 빨강) 나머지는 전부 흰색 — 스틱맨 왕관도 흰색.
+def whiten(a, dilate=1, keep_red=False, y_stop=None):
+    al = np.clip(a[..., 3] * 1.8, 0, 255)
+    m = al.copy()
+    for _ in range(dilate):
+        p_ = np.pad(m, 1, mode="edge")
+        m = np.maximum.reduce([p_[1:-1, 1:-1], p_[:-2, 1:-1], p_[2:, 1:-1], p_[1:-1, :-2], p_[1:-1, 2:]])
+    if y_stop is not None:
+        m[y_stop:] = al[y_stop:]
+    out = np.zeros_like(a); out[..., 0:3] = 255; out[..., 3] = m
+    if keep_red:
+        red = (a[..., 0] > 170) & (a[..., 1] < 120) & (a[..., 2] < 120) & (a[..., 3] > 60)
+        out[red, 0] = 217; out[red, 1] = 77; out[red, 2] = 61
+    return out
+save(whiten(load_gen := np.array(Image.open(f"{GEN}/plate-ko.png").convert("RGBA")).astype(np.float32), 2, True, P(1000)), "plate-ko")
+for n in ["swing-top", "swing-down", "swing-impact", "swing-follow", "swing-finish"]:
+    save(whiten(np.array(Image.open(f"{GEN}/{n}.png").convert("RGBA")).astype(np.float32), 0), n)   # 크롭은 팽창 없음(조준 라벨 글자가 뭉개지지 않게)
+
 # ── 2) 로그 ──
 log = open(f"{CAP}/logs/hero-drive.log").read().splitlines()
 def line(key):
@@ -108,11 +127,44 @@ t, x, y = path[-1]; pts.append([round(F_IMP + t / K * 30, 3), round(X0 + x * PXM
 f_land = F_IMP + (w_land - W_IMP) * 30; f_rest = F_IMP + (w_rest - W_IMP) * 30
 s184 = tr["ball"]["f184"]; f184 = F_IMP + (wall(184) - W_IMP) * 30
 
+# ── 5) 3차 모션: 실프레임 → 장면 프레임 표 (히트스톱 2f @임팩트, 정점 중심 0.3배속 9f + 앞뒤 3f 램프) ──
+HS, SLOW, SLOW_LEN, RAMP, NF = 2, 0.3, 9, 3, 360
+f_apex = F_IMP + ap[2] / K * 30
+def warp_table(fs):
+    def v(f):
+        if F_IMP <= f < F_IMP + HS: return 0.0
+        if f < fs: return 1.0
+        if f < fs + RAMP: return 1 - (1 - SLOW) * (f - fs) / RAMP
+        if f < fs + RAMP + SLOW_LEN: return SLOW
+        if f < fs + 2 * RAMP + SLOW_LEN: return SLOW + (1 - SLOW) * (f - fs - RAMP - SLOW_LEN) / RAMP
+        return 1.0
+    tab, acc, sub = [0.0], 0.0, 16
+    for i in range(1, (NF + 1) * sub + 1):
+        acc += v((i - 0.5) / sub) / sub
+        if i % sub == 0: tab.append(acc)
+    return tab
+def scene_at(tab, f):
+    i = min(len(tab) - 2, max(0, int(f))); return tab[i] + (tab[i + 1] - tab[i]) * (f - i)
+fs = f_apex - 1.3
+for _ in range(30):                                            # 느린 구간 한가운데에서 공이 정점에 닿게
+    tab = warp_table(fs); fs += f_apex - scene_at(tab, fs + RAMP + SLOW_LEN / 2)
+tab = warp_table(fs)
+def real_of(sf):
+    for i in range(len(tab) - 1):
+        if tab[i + 1] >= sf > tab[i] or tab[i] == sf: return i + (sf - tab[i]) / max(1e-9, tab[i + 1] - tab[i])
+    return float(len(tab) - 1)
+f_land = F_IMP + (w_land - W_IMP) * 30; f_rest = F_IMP + (w_rest - W_IMP) * 30
+f_h1 = f_land + (F_IMP + (wall(184) - W_IMP) * 30 - f_land) / 0.625
+R = {k: round(real_of(v_), 2) for k, v_ in {"apex": f_apex, "land": f_land, "hop": f_h1, "rest": f_rest}.items()}
+beats = {"imp": F_IMP, "hs": HS, "slow": [round(fs, 2), RAMP, SLOW_LEN, SLOW], "apexR": R["apex"], "landR": R["land"], "hopR": R["hop"], "restR": R["rest"],
+         "cmt1": 49, "cmtRate": 2, "cmt2": round(R["rest"]) + 10, "lbBlink": round(R["rest"]) + 15, "statsOut": 196, "tag": 204, "wipe": 255, "wipeLen": 18}
+
 nums = {"carry": round(land_x - tee_x), "total": round(rest_x - tee_x), "speed": round(v0), "apex": round(ap[0]),
         "hole": int(L_HOLE.split()[3]), "par": int(L_HOLE.split()[5]), "len": round(cup_x - hole_tee)}
 shot = {"pts": pts, "fLand": round(f_land, 2), "fRest": round(f_rest, 2), "xLand": round(X0 + (land_x - tee_x) * PXM, 2),
         "xRest": round(X0 + (rest_x - tee_x) * PXM, 2), "hop": [round(f184, 2), s184[0], s184[1]], "nums": nums,
-        "pxm": round(PXM, 4), "tee": [X0, Y0], "fApex": round(F_IMP + ap[2] / K * 30, 2)}
+        "pxm": round(PXM, 4), "tee": [X0, Y0], "fApex": round(F_IMP + ap[2] / K * 30, 2),
+        "warp": [round(x, 3) for x in tab], "beats": beats}
 open(f"{DATA}/shot.js", "w").write("window.SHOT=" + json.dumps(shot, separators=(",", ":")) + ";\n")
 
 print("로그:", L_HOLE.split(" ", 1)[1], "|", L_SHOT.split(" ", 1)[1], "|", L_LAND.split(" ", 1)[1], "|", L_REST.split(" ", 1)[1])
@@ -121,3 +173,4 @@ print(f"최적 미스힛 m {m_b:+.2f} · 바람 {w_b} m/s · v0 {v0:.2f} m/s · 
 print(f"근접 해 {len(good)}개: 볼 스피드 {spd_lo:.2f}–{spd_hi:.2f} m/s · 정점 {apx_lo:.1f}–{apx_hi:.1f} m")
 print(f"화면 시간 배율 K {K:.3f} (표본별 {[round(t_at_xpt(xp) / ts, 3) for ts, xp in samples]}) · 착지 f{f_land:.1f} · 정지 f{f_rest:.1f}")
 print("자막 숫자:", nums)
+print("3차 시간 왜곡: 느린 구간 시작 f%.2f · 실프레임 정점 %.1f · 착지 %.1f · 튐 %.1f · 정지 %.1f" % (fs, R["apex"], R["land"], R["hop"], R["rest"]))
