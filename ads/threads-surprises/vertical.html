@@ -1,7 +1,7 @@
 <!doctype html>
 <!-- T1 「거위가 공 위에 앉았다」 v3 — 스레드용 세로 1080×1920 · 12.5초 · 한국어.
      전부 벡터: src/main.js 의 render(t)가 게임 도형 치수 + data/scenes.js(캡처에서 뽑은 위치·시각)로 그린다.
-     렌더: scripts/render.sh  ·  기획·비트 시트: plan.md -->
+     소리: audio/mix.wav (scripts/make-audio.py — 전부 numpy 합성).  렌더: scripts/render.sh  ·  기획·비트 시트: plan.md -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -12,6 +12,7 @@
 </head>
 <body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="12.5" data-fps="30" data-width="1080" data-height="1920" style="width:1080px;height:1920px">
+  <audio id="mix" src="audio/mix.wav" data-start="0" data-duration="12.5" data-volume="1" data-track-index="8"></audio>
 </div>
 <script src="src/main.js"></script>
 </body>

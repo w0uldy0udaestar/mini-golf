@@ -92,23 +92,43 @@
   const H = window.HOLES, RIG = window.RIG, TR = window.TRAIL;
   const SCHED = [[1, 0], [2, 170], [3, 190], [4, 214], [5, 234], [7, 254], [9, 276]];
   const CUTS = SCHED.slice(1).map((s) => s[1]);
-  const plates = {}, seqs = {};
-  for (const [n] of SCHED) {
-    if (H[n].seq) { seqs[n] = []; for (let k = 0; k < H[n].seq.n; k++) { const e = px(h("img", "plate"), 0, 600 + OFFY, DW, 480); e.src = `assets/gen/seq-${n}-${k}.png`; e.style.visibility = "hidden"; desk.appendChild(e); seqs[n].push(e); } }
-    else { const e = px(h("img", "plate"), 0, 600 + OFFY, DW, 480); e.src = `assets/gen/hole-${n}.png`; e.style.visibility = "hidden"; desk.appendChild(e); plates[n] = e; }
-  }
-  const setImg = (e, vis, dx, blur) => { e.style.visibility = vis ? "visible" : "hidden"; if (vis) { e.style.transform = dx ? `translateX(${dx.toFixed(2)}px)` : ""; e.style.filter = blur ? "url(#whip)" : ""; } };
-  function showHole(n, f, vis, dx, blur) {
-    if (seqs[n]) { const sq = H[n].seq, k = clamp(f - sq.f0, 0, sq.n - 1); seqs[n].forEach((e, i) => setImg(e, vis && i === k, dx, blur)); }
-    else setImg(plates[n], vis, dx, blur);
-  }
-  const TEE_SHIFT = H[1].ground[153] - 859.6;
-  const SWING = ["swing-top", "swing-down", "swing-impact", "swing-follow", "swing-finish"];
-  const crops = SWING.map((n) => { const e = px(h("img", "crop"), 40, 716 + TEE_SHIFT + OFFY); e.src = `assets/gen/${n}.png`; e.style.visibility = "hidden"; desk.appendChild(e); return e; });
+  const NAVY = "#0B1E6B";
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg"); svg.id = "fx"; svg.setAttribute("width", DW); svg.setAttribute("height", DH); desk.appendChild(svg);
   const mk = (tag, a) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
-  const NAVY = "#0B1E6B";
+  // 홀 지형 = 게임 코스 생성기 표고의 벡터 (캡처 비트맵 없음): 물 → 러프 틱 → 지형선 → 그린 → 나무 → 깃발 → HUD 글자. 흰 선 + 남색 케이싱
+  const holeG = {};
+  const pl = (pts) => pts.map((q, i) => (i ? "L" : "M") + q[0].toFixed(2) + " " + (q[1] + OFFY).toFixed(2)).join(" ");
+  for (const [n] of SCHED) {
+    const Hn = H[n], g = mk("g", {}); g.style.visibility = "hidden"; svg.appendChild(g); holeG[n] = g;
+    for (const w of Hn.water) { const d = pl(w.pts) + ` L${w.pts[w.pts.length - 1][0]} ${w.lvl + OFFY} L${w.pts[0][0]} ${w.lvl + OFFY} Z`;
+      g.appendChild(mk("path", { d, fill: "rgba(255,255,255,.28)", stroke: "none" }));
+      g.appendChild(mk("path", { d: `M${w.pts[0][0]} ${w.lvl + OFFY} L${w.pts[w.pts.length - 1][0]} ${w.lvl + OFFY}`, stroke: "#FFFFFF", "stroke-width": 2, "stroke-dasharray": "6 5", fill: "none" })); }
+    const tk = Hn.ticks.map(([x, y, l]) => `M${x.toFixed(2)} ${(y + OFFY - 1).toFixed(2)} L${(x + (l ? 1.6 : -1.6)).toFixed(2)} ${(y + OFFY - 6).toFixed(2)}`).join(" ");
+    const line = pl(Hn.line);
+    g.appendChild(mk("path", { d: tk, stroke: NAVY, "stroke-width": 4.2, "stroke-linecap": "round", fill: "none" }));
+    g.appendChild(mk("path", { d: line, stroke: NAVY, "stroke-width": 7.4, "stroke-linecap": "round", "stroke-linejoin": "round", fill: "none" }));
+    g.appendChild(mk("path", { d: tk, stroke: "#FFFFFF", "stroke-width": 1.8, "stroke-linecap": "round", fill: "none" }));
+    g.appendChild(mk("path", { d: line, stroke: "#FFFFFF", "stroke-width": 3.4, "stroke-linecap": "round", "stroke-linejoin": "round", fill: "none" }));
+    if (Hn.green.length) { const gd = pl(Hn.green.map(([x, y]) => [x, y - 0.6]));
+      g.appendChild(mk("path", { d: gd, stroke: NAVY, "stroke-width": 10, "stroke-linecap": "round", fill: "none" }));
+      g.appendChild(mk("path", { d: gd, stroke: "#FFFFFF", "stroke-width": 6, "stroke-linecap": "round", fill: "none" })); }
+    for (const [x, gy, cy, sz] of Hn.trees) { const r = Math.max(9, sz * 0.5);
+      g.appendChild(mk("line", { x1: x, y1: gy + OFFY, x2: x, y2: cy + OFFY + r * 0.4, stroke: NAVY, "stroke-width": 7.5, "stroke-linecap": "round" }));
+      g.appendChild(mk("line", { x1: x, y1: gy + OFFY, x2: x, y2: cy + OFFY + r * 0.4, stroke: "#FFFFFF", "stroke-width": 3.6, "stroke-linecap": "round" }));
+      g.appendChild(mk("circle", { cx: x, cy: cy + OFFY, r, fill: "rgba(255,255,255,.22)", stroke: "#FFFFFF", "stroke-width": 3, "paint-order": "stroke" })); }
+    if (Hn.flag) { const [fx, fy] = Hn.flag, y0 = fy + OFFY;
+      g.appendChild(mk("line", { x1: fx, y1: y0, x2: fx, y2: y0 - 34, stroke: NAVY, "stroke-width": 5.4, "stroke-linecap": "round" }));
+      g.appendChild(mk("line", { x1: fx, y1: y0, x2: fx, y2: y0 - 34, stroke: "#FFFFFF", "stroke-width": 2.4, "stroke-linecap": "round" }));
+      g.appendChild(mk("path", { d: `M${fx + 1.2} ${y0 - 34} L${fx + 19} ${y0 - 28} L${fx + 1.2} ${y0 - 22} Z`, fill: "#E5483A", stroke: NAVY, "stroke-width": 1.2, "stroke-linejoin": "round" })); }
+    // HUD (게임 화면 아래 줄): 왼쪽 클럽, 오른쪽 홀 — 게임과 같은 자리(화면 가장자리 기준), 실제 값
+    const hudY = 1046 + OFFY;
+    if (!Hn.mirror && !Hn.seq) { const t1 = mk("text", { x: 14, y: hudY, class: "hud b" }); t1.textContent = "드라이버"; g.appendChild(t1);
+      const t2 = mk("text", { x: 14, y: hudY + 17, class: "hud s" }); t2.textContent = "우드"; g.appendChild(t2); }
+    const t3 = mk("text", { x: DW - 14, y: hudY, class: "hud b", "text-anchor": "end" }); t3.textContent = Hn.hud; g.appendChild(t3);
+    const t4 = mk("text", { x: DW - 14, y: hudY + 17, class: "hud s", "text-anchor": "end" }); t4.textContent = "타수 0 · 합계 E"; g.appendChild(t4);
+  }
+  function showHole(n, vis, dx, blur) { const g = holeG[n]; g.style.visibility = vis ? "visible" : "hidden"; if (vis) { g.setAttribute("transform", dx ? `translate(${dx.toFixed(2)} 0)` : ""); g.setAttribute("filter", blur ? "url(#whip)" : ""); } }
   const trailCase = mk("polyline", { fill: "none", stroke: NAVY, "stroke-width": 6.2, "stroke-linecap": "round", "stroke-linejoin": "round" }); svg.appendChild(trailCase);
   const trailEl = mk("polyline", { fill: "none", stroke: "#FFFFFF", "stroke-width": 3.2, "stroke-linecap": "round", "stroke-linejoin": "round" }); svg.appendChild(trailEl);
   const ghosts = [1, 2, 3, 4, 5, 6].map(() => { const c = mk("circle", { fill: "#FFFFFF", stroke: NAVY, "stroke-width": 1.4, r: 0, opacity: 0 }); svg.appendChild(c); return c; });
@@ -129,6 +149,7 @@
   }; for (const k of ["ctrail", "trail", "cbody", "cshaft", "cchead", "chead", "body", "shaft", "chead2", "grip", "head", "hat"]) g.appendChild(Q[k]); return { g, P: Q }; };
   const MEN = [mkMan(), mkMan()];
   const ballEl = h("div"); ballEl.id = "ball"; desk.appendChild(ballEl);
+  const BALLS = [0, 1].map(() => { const e = h("div", "ball2"); e.style.visibility = "hidden"; desk.appendChild(e); return e; });
   const cursor = h("div"); cursor.innerHTML = `<svg viewBox="0 0 22 32" width="22" height="32"><path d="M2 2 L2 25 L7.6 19.8 L11.4 28.6 L15 27 L11.3 18.4 L18.8 18.4 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
   cursor.style.cssText = "position:absolute;left:0;top:0;width:22px;height:32px;transform-origin:2px 2px"; desk.appendChild(cursor);
 
@@ -176,7 +197,7 @@
 
   /* ── 공 경로: 실제 드라이브 궤적의 아치 모양 그대로, 정점이 참가자 격자 윗줄 위를 지나게 ── */
   const F_IMP = 11, F_LAND = 84, APEX_Y = 330;     // F_* 는 '행동 시각'(히트스톱 2f 뒤로 밀린 시계) 기준
-  const BS = [153.5, 851.5 + TEE_SHIFT + OFFY];
+  const BS = [153.5, H[1].ground[153] + OFFY - 8.1];   // 티 위 공 중심 = 지면 + 8.1pt (공 반지름 + 티 페그, 실캡처와 같다)
   const LX = 600, BE = [LX, H[1].ground[LX] + OFFY - 5.5];
   let PATH = null, UT = null;
   (function buildPath() {
@@ -199,10 +220,10 @@
   /* ── 스틱맨 (실제 리그 → StickmanNode 렌더 규칙 그대로, 흰 선 + 남색 케이싱) ── */
   const MAN = { 1: { off: 0, C: 0 }, 3: { off: 40, C: 0 }, 4: { off: -39, C: -30 }, 9: { off: -2, C: 293 } };
   function drawMan(n, fr0, set) {
-    const P = set.P, M = MAN[n], Hn = H[n];
-    const r = RIG[clamp(fr0 + M.off, 0, RIG.length - 1)];
-    const plX = Hn.mirror ? 1920 - r.x + M.C : r.x;
-    const d = Hn.mirror ? -r.dir : r.dir;
+    const P = set.P, Hn = H[n];
+    let r, plX, d;
+    if (Hn.seq) { r = Hn.seq.rig[clamp(fr0 - Hn.seq.f0, 0, Hn.seq.n - 1)]; plX = r.x; d = r.dir; }   // 30초판 실캡처 때 받은 60Hz 리그
+    else { const M = MAN[n]; r = RIG[clamp(fr0 + M.off, 0, RIG.length - 1)]; plX = Hn.mirror ? 1920 - r.x + M.C : r.x; d = Hn.mirror ? -r.dir : r.dir; }
     const gx = plX - Hn.sx, gy = Hn.ground[Math.round(clamp(plX, 0, 1919))] + 0.6 + OFFY;
     const T = (p) => [gx + p[0] * d, gy - p[1]];
     const [hip, sh, f1, f2, k1, k2, grip, ht, el, et] = r.pts.map(T);
@@ -274,20 +295,27 @@
     const [tx, ty, sc] = camera(f);
     desk.style.transform = `translate(${tx.toFixed(3)}px,${ty.toFixed(3)}px) scale(${sc.toFixed(5)})`;
 
-    // 띠: 홀 판/연번 + 휩 팬
+    // 띠: 홀 벡터 + 휩 팬
     const k = holeAt(f), [n, fs] = SCHED[k];
     const st = stripAt(f), shown = new Set(st.map((s) => s[0]));
-    for (const [m] of SCHED) if (!shown.has(m)) showHole(m, f, false, 0, false);
-    st.forEach(([m, dx, blur]) => showHole(m, f, true, dx, blur));
+    for (const [m] of SCHED) if (!shown.has(m)) showHole(m, false, 0, false);
+    st.forEach(([m, dx, blur]) => showHole(m, true, dx, blur));
     const tm = TIMES[n];
     document.getElementById("clock").textContent = `${tm.slice(0, 2)}:${tm.slice(2)}`;
 
-    // 스틱맨: 1번 홀 실캡처 크롭(히트스톱 포함) → 리그 / 3·4·9번 리그 / 2·5·7번은 연번 속 실제 스틱맨
-    const CROP_AT = [[0, 10, 0], [10, 11, 1], [11, 14, 2], [14, 18, 3], [18, 21, 4]];
-    crops.forEach((e, i) => { const c = CROP_AT.find((r) => r[2] === i); e.style.visibility = fa >= c[0] && fa < c[1] ? "visible" : "hidden"; });
-    const want = st.filter(([m]) => MAN[m] && !(m === 1 && fa < 21));
+    // 스틱맨: 전부 실제 리그 벡터 — 1번(훅, 히트스톱 포함)·3·4·9번 = 15초판 hero-drive 리그, 2·5·7번 = 30초판 캡처 리그
+    const want = st;
     MEN.forEach((set, i) => { const w = want[i]; set.g.style.visibility = w ? "visible" : "hidden";
       if (w) { drawMan(w[0], w[0] === 1 ? fa : f, set); set.g.setAttribute("transform", w[1] ? `translate(${w[1].toFixed(2)} 0)` : ""); set.g.setAttribute("filter", w[2] ? "url(#whip)" : ""); } });
+    // 2·5·7번 컷의 공 (코드 근사: 로그의 샷·컵인 시각에 맞춘다) — 티/러프 위 → 샷에 출발, 7번은 퍼트로 굴러 컵에 든다
+    BALLS.forEach((b) => { b.style.visibility = "hidden"; });
+    st.forEach(([m, dx], i) => { const Hm = H[m]; if (!Hm.seq || !Hm.seq.shotF) return; const sq = Hm.seq, r0 = sq.rig[0], d = r0.dir, b = BALLS[i];
+      const x0 = r0.x - Hm.sx + d * 1.5, y0 = Hm.ground[Math.round(r0.x)] + OFFY - (m === 2 ? 8.1 : 5.5);
+      let bx = x0, by = y0, vis = true;
+      if (f > sq.shotF) { const tt = (f - sq.shotF) / FPS;
+        if (m === 7) { const cx = Hm.flag[0], u = clamp((f - sq.shotF) / (sq.holedF - sq.shotF)); bx = lerp(x0, cx, 1 - Math.pow(1 - u, 1.8)); by = Hm.ground[Math.round(bx + Hm.sx)] + OFFY - 5.5 + (u >= 1 ? 9 : 0); vis = f < sq.holedF + 2; }
+        else { bx = x0 + d * 760 * tt; by = y0 - (430 * tt - 450 * tt * tt); vis = bx > -20 && bx < DW + 20; } }
+      if (vis) { b.style.visibility = "visible"; b.style.transform = `translate(${(dx || 0).toFixed(2)}px,0)`; px(b, bx - 5.5, by - 5.5, 11, 11); } });
 
     // 공 + 궤적 + 잔상 (1번 홀) — 행동 시각 fa 기준
     const bo = 1 - smooth(seg(f, 158, 166));
@@ -384,7 +412,6 @@
       const tt = input.querySelector(".tt"); if (tt) for (const r of textRects(tt)) fr.items.push({ name: "typing", r });
       MEN.forEach((m) => { if (m.g.style.visibility === "visible" && !m.g.getAttribute("filter")) fr.items.push({ name: "man", r: R(m.g.getBoundingClientRect()) }); });
       if (clockBox.style.visibility === "visible") { const cb = clockBox.getBoundingClientRect(); for (const c of clockIn.querySelectorAll(".card,.holetag")) { const r = c.getBoundingClientRect(); const rr = [r.left, Math.max(r.top, cb.top), r.right, Math.min(r.bottom, cb.bottom)].map(Math.round); if (rr[3] - rr[1] > 8) fr.items.push({ name: "clock", r: rr }); } }
-      crops.forEach((e) => { if (e.style.visibility === "visible") fr.items.push({ name: "crop", r: R(e.getBoundingClientRect()) }); });
       if (ballEl.style.visibility === "visible") fr.items.push({ name: "ball", r: R(ballEl.getBoundingClientRect()) });
       if (parseFloat(cursor.style.opacity) > 0.3) fr.items.push({ name: "cursor", r: R(cursor.getBoundingClientRect()) });
       if (f >= 100 && f <= 150) fr.items.push({ name: "mute", r: R(tMute.getBoundingClientRect()) });

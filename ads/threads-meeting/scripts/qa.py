@@ -60,7 +60,10 @@ for f in A["frames"]:
         x0, y0, x1, y1 = it["r"]
         if x0 < X0 or y0 < Y0 or x1 > X1 or y1 > Y1: viol.setdefault(it["name"], []).append((f["f"], it["r"]))
 first = A["frames"][0]
-res = {"file": MP4, "probe": probe(MP4), "decoded": len(fr),
+lr = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", MP4, "-filter_complex", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True).stderr
+lt = lr[lr.rfind("Summary:"):]
+loud = {"I_LUFS": float(re.search(r"I:\s*(-?[\d.]+) LUFS", lt).group(1)), "TP_dBTP": float(re.search(r"Peak:\s*(-?[\d.]+) dBFS", lt).group(1))} if "Summary" in lr else None
+res = {"loud": loud, "file": MP4, "probe": probe(MP4), "decoded": len(fr),
        "diff": {"max": round(d[mx], 2), "maxFrame": mx, "over12": [i for i in range(len(d)) if d[i] > 12], "aba": aba,
                 "top5": sorted([(i, round(d[i], 2)) for i in range(len(d))], key=lambda x: -x[1])[:5]},
        "hold": {"ratio": round(sum(still) / len(still), 3), "longestStillFrames": best, "from": bi},

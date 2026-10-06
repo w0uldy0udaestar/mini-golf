@@ -84,16 +84,36 @@ def audit():
 
 def md5s(fr): return [hashlib.md5(f.tobytes()).hexdigest() for f in fr]
 
+def loud(p):
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", p, "-filter_complex", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True).stderr
+    t = r[r.rfind("Summary:"):]; g = lambda pat: float(re.search(pat, t).group(1))
+    return {"I": g(r"I:\s*(-?[\d.]+) LUFS"), "LRA": g(r"LRA:\s*(-?[\d.]+) LU"), "TP": g(r"Peak:\s*(-?[\d.]+) dBFS")}
+
+def audio_md5(p):
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", p, "-map", "0:a", "-f", "md5", "-"], capture_output=True, text=True).stdout.strip()
+    return r
+
+def audio_info(p):
+    j = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_streams", "-of", "json", p], capture_output=True, text=True).stdout)
+    a = j["streams"][0] if j["streams"] else {}
+    return {"codec": a.get("codec_name"), "sr": a.get("sample_rate"), "ch": a.get("channels"), "dur": a.get("duration"), "bitrate": a.get("bit_rate")}
+
+def first_sound(p):
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", p, "-map", "0:a", "-ac", "1", "-ar", "48000", "-f", "s16le", "-"], capture_output=True).stdout
+    x = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768
+    i = int(np.argmax(np.abs(x) > 10 ** (-50 / 20))); tail = x[-int(0.3 * 48000):]
+    return {"firstSec": round(i / 48000, 4), "last300msPeakDb": round(float(20 * np.log10(np.abs(tail).max() + 1e-9)), 1), "lastSampleDb": round(float(20 * np.log10(np.abs(x[-48:]).max() + 1e-9)), 1)}
+
 if __name__ == "__main__":
     p = sys.argv[1]; fr = frames(p)
     res = {"file": p, "probe": probe(p), "decoded": len(fr), "diff": diff_scan(fr), "holds": holds(fr), "first": first_frame(fr),
-           "flash": flash(p), "audit": audit()}
+           "flash": flash(p), "audit": audit(), "audio": audio_info(p), "loud": loud(p), "sound": first_sound(p), "audioMd5": audio_md5(p)}
     if len(sys.argv) > 2:
         fr2 = frames(sys.argv[2]); a, b = md5s(fr), md5s(fr2)
-        res["determinism"] = {"second": sys.argv[2], "frames": [len(a), len(b)], "identical": a == b,
+        res["determinism"] = {"second": sys.argv[2], "frames": [len(a), len(b)], "identical": a == b, "audioIdentical": res["audioMd5"] == audio_md5(sys.argv[2]),
                               "mismatch": [i for i in range(min(len(a), len(b))) if a[i] != b[i]][:20]}
     os.makedirs(WORK, exist_ok=True)
     json.dump(res, open(WORK + "/qa.json", "w"), ensure_ascii=False, indent=1)
-    for k in ("probe", "decoded", "diff", "holds", "first", "audit", "determinism"):
+    for k in ("probe", "decoded", "diff", "holds", "first", "audit", "audio", "loud", "sound", "audioMd5", "determinism"):
         if k in res: print(k, json.dumps(res[k], ensure_ascii=False)[:700])
     print("flash exit", res["flash"]["exit"], res["flash"]["out"][-400:])

@@ -6,7 +6,7 @@
  * 모든 상태는 render(t)가 t만 보고 계산한다. Math.random·Date·네트워크 없음.
  */
 (() => {
-  const FPS = 30, NF = 444, DUR = NF / FPS, W = 1080, H = 1920;
+  const FPS = 30, NF = 448, DUR = NF / FPS, W = 1080, H = 1920;   // 박 격자: 128.57bpm = 한 박 14프레임, 컷은 8분음표(7프레임) 경계
   const root = document.getElementById("root");
   const q = new URLSearchParams(location.search);
   const CUTS = window.CUTS, V = window.SCENE;
@@ -22,10 +22,11 @@
     return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`; };
 
   /* ── 타임라인 (프레임) ── */
-  const STARTS = [0, 48, 82, 116, 150, 184, 218, 252];   // 8 아키타입
-  const V0 = 286, V1 = 338, TAG0 = 338, END0 = 374;      // 화산 · 한 줄 · 엔드카드
-  const LF_LAND = [30, 18, 18, 18, 18, 18, 18, 18];      // 컷 안에서 착지 프레임
-  const FLASH = new Set([82, 184, 286]);                  // 1프레임 컬러 스왑 플래시로 들어가는 컷 (나머지는 휩 팬)
+  const STARTS = [0, 42, 77, 112, 147, 182, 217, 252];   // 8 아키타입 (절벽 3박, 나머지 2.5박)
+  const V0 = 287, V1 = 336, TAG0 = 336, END0 = 371;      // 화산 3.5박 · 한 줄 2.5박 · 엔드카드
+  const LF_LAND = [28, 14, 20, 28, 14, 14, 10, 12];      // 컷 안에서 핵심 사건 프레임(폭포 = 입수, 산정 = 꼭대기 착지)
+  const SPEED = { cliff: [1.8, 1.0], canyon: [1.6, 1.0], cascade: [0, 1.0], summit: [0, 1.0], island: [1.6, 1.4], ridge: [1.6, 2.2], terraces: [1.6, 0], forest: [1.4, 1.5] };
+  const FLASH = new Set([77, 182, 287]);                  // 1프레임 컬러 스왑 플래시로 들어가는 컷 (나머지는 휩 팬)
   const SP_IN = 1.6, SP_OUT = 1.0;                         // 착지 전 빨리감기 · 착지 뒤 실속도
   const VOLC_BG = "#2D5BFF", TAG_BG = "#FFD93B";
 
@@ -127,39 +128,88 @@
     c.globalAlpha = 1;
   }
 
-  /* ── 카메라 맞춤: 컷에서 보이는 공 경로·착지·스틱맨을 화면 아래쪽 영역(x 110–900, y 700–1430)에 ── */
-  function fitCam(pts) {
-    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    const bw = Math.max(40, x1 - x0), bh = Math.max(40, y1 - y0);
-    const s = clamp(Math.min(790 / bw, 730 / bh), 2.0, 9.0);
-    return { s, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: 505, sy: 1065 };
-  }
-  // 컷마다 지형 특징이 담기는 창(m) — 프로필을 보고 정했다(plan.md). 창 안의 지형·공·스틱맨을 맞춘다
-  const S_MIN = { canyon: 3.0, cascade: 3.2, summit: 3.4, island: 3.6, ridge: 3.0, terraces: 3.6, forest: 3.2 };
-  const WIN = { cliff: [36, 150], canyon: [140, 222], cascade: [190, 266], summit: [262, 328], island: [166, 222], ridge: [146, 258], terraces: [163, 226], forest: [146, 214] };
-  const CAMS = CUTS.map((cut, i) => {
-    const [xa, xb] = WIN[cut.key].map((m) => m * cut.ppm), pts = [];
-    for (const p of cut.terr) if (p[0] >= xa && p[0] <= xb) pts.push([p[0], p[1]]);
-    const land = LF_LAND[i], len = (STARTS[i + 1] ?? V0) - STARTS[i];
-    for (let lf = land - 6; lf <= len; lf += 2) { const b = ballAt(cut.ball, tauAt(lf, cut.land[0], land)); if (b[0] >= xa && b[0] <= xb) pts.push(b); }
-    const [sx, sy] = cut.stick;
-    const stickIn = sx >= xa && sx <= xb && ["cliff", "canyon", "cascade", "forest"].includes(cut.key);   // 산정·능선은 착지에 집중(스틱맨 없이 더 당긴다)
-    if (stickIn) pts.push([sx - 62 * MAN_K, sy - 100 * MAN_K], [sx + 18 * MAN_K, sy + 4]);
-    // 보강: 결정적 순간(착지점) 쪽으로 더 당긴다 — 최소 배율을 올리고 중심을 착지점 쪽으로 40% 끌어온다(지형 전체가 다 보일 필요 없음)
-    const cam = fitCam(pts), smin = S_MIN[cut.key] || 0;
-    if (smin > cam.s) {
-      const fy = (cut.terr.find((p) => p[0] >= cut.land[2]) || [0, cam.cy])[1];
-      cam.s = smin; cam.cx = lerp(cam.cx, cut.land[2], 0.4); cam.cy = lerp(cam.cy, fy - 20, 0.35);
-    }
-    // 스틱맨이 창 안에 있는 컷(협곡·폭포·숲)은 반쯤 잘리지 않게: 왼쪽 끝을 x≥40으로 밀고, 착지점이 x≤900을 넘으면 배율을 줄인다
-    if (stickIn) for (let it = 0; it < 30; it++) {
-      const L = (sx - 95 - cam.cx) * cam.s + cam.sx; if (L < 24) cam.cx -= (24 - L) / cam.s;
-      const R = (cut.land[2] + 8 - cam.cx) * cam.s + cam.sx; if (R > 920) cam.s *= 0.97; else break;
-    }
-    CUTS[i].stickIn = stickIn;
-    return cam;
+  /* ── 3차: 지형 실루엣이 주인공 — prep.py가 이미 화면 px로 맞춰 둔 데이터(폭 89%, 세로 과장)를 그대로 그린다 ── */
+  // 컷별 게임 시간 속도 [착지 전, 착지 뒤]. 0 = 자동(산정·폭포: 컷 첫 프레임이 첫 샷 τ=0 / 계단: 마지막 바운스가 컷 끝 6프레임 전)
+  CUTS.forEach((cut, i) => {
+    const len = (STARTS[i + 1] ?? V0) - STARTS[i], LF = LF_LAND[i], sp = SPEED[cut.key];
+    let tl = cut.land[0];
+    if (cut.key === "cascade") { const w = cut.ev.find((e) => e[1] === "water"); tl = w ? w[0] : tl; }
+    cut.tl = tl;
+    cut.spIn = sp[0] || (cut.key === "cascade" ? (tl - (cut.land[0] - 0.5)) / (LF / FPS) : tl / (LF / FPS));
+    const lastB = Math.max(...cut.ev.filter((e) => e[1] === "bounce" || e[1] === "water").map((e) => e[0]), tl);
+    cut.spOut = sp[1] || Math.max(1, (lastB - tl) / ((len - LF - 8) / FPS));
   });
+  const tauOf = (cut, i, lf) => tauAt(lf, cut.tl, LF_LAND[i], cut.spIn, cut.spOut);
+  const lfOfTau = (cut, i, tau) => { const LF = LF_LAND[i]; return tau <= cut.tl ? LF - (cut.tl - tau) / cut.spIn * FPS : LF + 2 + (tau - cut.tl) / cut.spOut * FPS; };
+  const WATER = "#1E6BFF";
+  function drawSil(c, cut, bg, lf, i) {
+    const T = cut.terr;
+    c.lineCap = "round"; c.lineJoin = "round";
+    // 땅 실루엣(바탕보다 어두운 같은 색)
+    c.fillStyle = shade(bg, 0.74); c.beginPath(); c.moveTo(T[0][0], 2400); for (const p of T) c.lineTo(p[0], p[1]); c.lineTo(T[T.length - 1][0], 2400); c.closePath(); c.fill();
+    // 절벽·협곡 벽 빗금: 가파른 면(화면 기울기 > 1.1) 아래 땅 속에 45° 빗금
+    if (cut.hatch) { c.save(); c.beginPath(); c.moveTo(T[0][0], 2400); for (const p of T) c.lineTo(p[0], p[1]); c.lineTo(T[T.length - 1][0], 2400); c.closePath(); c.clip();
+      c.strokeStyle = "rgba(255,255,255,0.42)"; c.lineWidth = 4; c.beginPath();
+      for (let k = 0; k < T.length - 1; k++) { const dx = T[k + 1][0] - T[k][0], dy = T[k + 1][1] - T[k][1]; if (Math.abs(dy / dx) < 1.1) continue;
+        for (let x = T[k][0] - 4; x < T[k + 1][0] + 4; x += 6) { if (Math.round(x) % 18 > 5) continue; const y = Math.min(T[k][1], T[k + 1][1]); c.moveTo(x - 30, y + 30); c.lineTo(x + 150, y + 210); } }
+      c.stroke(); c.restore(); }
+    // 물: 수면부터 화면 아래까지 파랑 채움 + 흰 수면선
+    for (let k = 0; k < T.length - 1; k++) if (T[k][2] === "water") { c.fillStyle = WATER; c.fillRect(T[k][0] - 0.5, T[k][1], T[k + 1][0] - T[k][0] + 1, 2400); }
+    c.strokeStyle = "#FFFFFF"; c.lineWidth = 6; c.setLineDash([22, 12]);
+    for (let k = 0; k < T.length - 1; k++) if (T[k][2] === "water") { c.beginPath(); c.moveTo(T[k][0], T[k][1]); c.lineTo(T[k + 1][0], T[k + 1][1]); c.stroke(); }
+    c.setLineDash([]);
+    // 지형선: 굵은 흰 선 7px, 그린 11px
+    const run = (pred, w) => { c.lineWidth = w; c.strokeStyle = "#FFFFFF"; c.beginPath(); let on = false;
+      for (let k = 0; k < T.length - 1; k++) { if (pred(T[k][2])) { if (!on) { c.moveTo(T[k][0], T[k][1]); on = true; } c.lineTo(T[k + 1][0], T[k + 1][1]); } else on = false; } c.stroke(); };
+    run((s) => s !== "water" && s !== "green", 7); run((s) => s === "green", 11);
+    // 러프 잔디 틱 (16px 간격)
+    c.lineWidth = 3; c.strokeStyle = "rgba(255,255,255,0.75)"; c.beginPath(); let lean = false;
+    for (let k = 0; k < T.length - 1; k++) if (T[k][2] === "rough") for (let x = T[k][0]; x < T[k + 1][0]; x += 16) {
+      const u = (x - T[k][0]) / Math.max(1e-6, T[k + 1][0] - T[k][0]), y = lerp(T[k][1], T[k + 1][1], u); c.moveTo(x, y); c.lineTo(x + (lean ? -2.5 : 3), y - (lean ? 9 : 12)); lean = !lean; }
+    c.stroke();
+    // 큰 나무: 줄기 + 6스캘럽 캐노피 (캐노피 바닥은 실제 높이 그대로, 반지름만 크게)
+    for (const [gx, gy, cy, r] of cut.trees) {
+      c.strokeStyle = "#FFFFFF"; c.lineWidth = 16; c.beginPath(); c.moveTo(gx, gy); c.lineTo(gx, cy + r * 0.2); c.stroke();
+      c.beginPath(); for (let k = 0; k < 6; k++) { const ph = Math.PI / 2 - k * Math.PI / 3; c.arc(gx + 0.6 * r * Math.cos(ph), cy - 0.6 * r * Math.sin(ph), 0.48 * r, -(ph + 1.199), -(ph - 1.199), false); }
+      c.closePath(); c.fillStyle = shade(bg, 0.6); c.fill(); c.strokeStyle = "#FFFFFF"; c.lineWidth = 8; c.stroke();
+    }
+    if (cut.flag) { const [x, y] = cut.flag; c.fillStyle = shade(bg, 0.4); c.fillRect(x - 13, y, 26, 20); c.fillStyle = "#FFFFFF"; c.fillRect(x - 3, y - 150, 6, 150);
+      c.fillStyle = "#E8402F"; c.beginPath(); c.moveTo(x + 3, y - 150); c.lineTo(x + 66, y - 128); c.lineTo(x + 3, y - 106); c.closePath(); c.fill(); }
+  }
+  function drawArch(c, i, lf, opt) {
+    const cut = CUTS[i], bg = cut.bg, LF = LF_LAND[i];
+    c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.fillStyle = opt.inv || bg; c.fillRect(0, 0, W, H);
+    const tau = tauOf(cut, i, lf), b = ballAt(cut.ball, tau);
+    const lx = cut.land[2], ly = (cut.terr.find((p) => p[0] >= lx) || [0, b[1] + 14])[1];
+    const d = lf - LF, pk = 1 + 0.15 * punchK(d), [shx, shy] = shakeXY(d, 18);
+    // 줌 펀치는 착지점 기준, 흔들림은 화면 평행이동
+    c.setTransform(pk, 0, 0, pk, lx - lx * pk + shx + (opt.dx || 0), ly - ly * pk + shy);
+    const rv = opt.noReveal || i === 0 ? 1 : outCubic(lf / 7);
+    c.save();
+    if (rv < 1) { c.beginPath(); c.rect(-200, -200, (W * rv - (opt.dx || 0)) / pk + 200 + lx * (1 - 1 / pk), 3000); c.clip(); }
+    drawSil(c, cut, bg, lf, i);
+    // 궤적선(이 컷에서 보이기 시작한 곳부터) · 스틱맨(작게) · 공(지름 28px, 검정 테두리)
+    const t0 = Math.max(0, tauOf(cut, i, 0) - 0.5), tr = [];
+    for (let k = 0; k <= 60; k++) tr.push(ballAt(cut.ball, lerp(t0, tau, k / 60)));
+    c.strokeStyle = "rgba(255,255,255,0.85)"; c.lineWidth = 5; c.beginPath(); c.moveTo(tr[0][0], tr[0][1]); for (const p of tr) c.lineTo(p[0], p[1]); c.stroke();
+    if (cut.stick) { c.save(); SCL = 1; drawManPx(c, rigAt(V.RIG_H, Math.min(1.6, 0.9 + lf / FPS)), cut.stick[0], cut.stick[1], 2.0); c.restore(); }
+    // 바운스마다 먼지, 입수마다 물결·물방울
+    for (const e of cut.ev) { const el = lfOfTau(cut, i, e[0]); const dd = (lf - el) / FPS; const ey = (cut.terr.find((p) => p[0] >= e[2]) || [0, ly])[1];
+      if (e[1] === "bounce") drawPuff(c, e[2], ey, dd); else if (e[1] === "water") drawSplash(c, e[2], ey, dd); }
+    if (cut.key === "island") drawSplash(c, lx - 8, ly, (lf - LF) / FPS, 0.6);   // 물가 착지에 튄 물방울
+    const inWater = cut.ev.some((e) => e[1] === "water" && tau > e[0] + 0.02);
+    if (!inWater) { c.fillStyle = "#FFFFFF"; c.beginPath(); c.arc(b[0], b[1], 14, 0, Math.PI * 2); c.fill(); c.lineWidth = 3.5; c.strokeStyle = "#0E0E10"; c.stroke(); }
+    c.restore(); c.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  function drawPuff(c, x, y, d) { if (d < 0 || d > 0.4) return; const u = clamp(d / 0.4); c.globalAlpha = 0.95 * (1 - u); c.fillStyle = "#FFFFFF";
+    for (const [dx, dy] of [[-16, 18], [-7, 26], [4, 28], [13, 20], [21, 12], [-24, 9]]) { c.beginPath(); c.arc(x + dx * outCubic(u) * 1.6, y - 4 - dy * outCubic(u) * 1.4 + 60 * u * u, 4.5, 0, 7); c.fill(); }
+    c.globalAlpha = 1; }
+  function drawSplash(c, x, y, d, k = 1) { if (d < 0 || d > 0.6) return; const u = clamp(d / 0.6);
+    c.globalAlpha = 1 - u; c.strokeStyle = "#FFFFFF"; c.lineWidth = 5; c.beginPath(); c.ellipse(x, y, (14 + u * 90) * k, (4 + u * 18) * k, 0, 0, Math.PI * 2); c.stroke();
+    c.fillStyle = "#FFFFFF"; for (const [dx, vy] of [[-22, 70], [-9, 95], [5, 105], [17, 85], [28, 60], [-30, 50]]) { const t = d; c.beginPath(); c.arc(x + dx * k * (1 + 2 * u), y - (vy * t - 260 * t * t) * 1.6 * k, 5, 0, 7); c.fill(); }
+    c.globalAlpha = 1; }
+  // 스틱맨(화면 px): 리그 단위 × k, 선은 게임 굵기 × k × 1.25
+  function drawManPx(c, r, gx, gy, k) { c.save(); c.translate(gx, gy); c.scale(k / MAN_K, k / MAN_K); drawMan(c, r, 0, 0); c.restore(); }
 
   /* ── 화산 컷: T2 1차의 실캡처·리그 데이터 (게임 화면 pt) ── */
   const VPPM = V.PPM, VG = V.GROUND, VGX0 = V.GX0;
@@ -186,10 +236,11 @@
 
   // 컷 i(0–7: 아키타입, 8: 화산)의 로컬 프레임 lf를 c에 그린다. inv: 플래시 프레임(바탕·선 색 맞바꿈)
   function drawCut(c, i, lf, opt = {}) {
+    if (i < 8) { drawArch(c, i, lf, opt); return { holedLf: 1e9 }; }
     const isV = i === 8, cut = isV ? VOLC : CUTS[i], bg = isV ? VOLC_BG : CUTS[i].bg;
     const land = isV ? V_LAND : LF_LAND[i];
     c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.fillStyle = opt.inv ? opt.inv : bg; c.fillRect(0, 0, W, H);
-    const cam = isV ? VCAM : CAMS[i];
+    const cam = VCAM;
     const d = lf - land, pk = 1 + 0.15 * punchK(d), [shx, shy] = shakeXY(d);
     let pk2 = 1, sh2 = [0, 0];
     let tau, b, holedLf = 1e9;
@@ -317,14 +368,35 @@
       const all = [...STARTS, V0]; let i = all.length - 1; while (i > 0 && f < all[i]) i--;
       if (f < TAG0 && (f - all[i]) >= 3 && (all[i + 1] ?? TAG0) - f > 3) {
         const lf = f - all[i];
-        if (i < 8) { const cam = CAMS[i], cut = CUTS[i], b = ballAt(cut.ball, tauAt(lf, cut.land[0], LF_LAND[i]));
-          const X = (b[0] - cam.cx) * cam.s + cam.sx, Y = (b[1] - cam.cy) * cam.s + cam.sy;
+        if (i < 8) { const cut = CUTS[i], b = ballAt(cut.ball, tauOf(cut, i, lf));
+          const X = b[0], Y = b[1];
           fr.items.push({ name: "ball", r: [X - 20, Y - 20, X + 20, Y + 20].map(Math.round) }); }
       }
       out.frames.push(fr);
     }
-    out.cams = CAMS.map((c) => ({ s: +c.s.toFixed(2) }));
+    out.cams = CUTS.map((c) => ({ key: c.key, vx: +c.vx.toFixed(1), spIn: +c.spIn.toFixed(2), spOut: +c.spOut.toFixed(2) }));
     const pre = document.createElement("pre"); pre.id = "audit"; pre.textContent = JSON.stringify(out); document.body.appendChild(pre);
   }
-  document.fonts.ready.then(() => { if (q.has("audit")) audit(); render(q.has("t") ? parseFloat(q.get("t")) : tl.time()); });
+  // ?sfx=1 : 효과음 큐(전역 프레임)를 <pre id="sfx">에 — scripts/make-audio.py가 읽는다(그림과 소리의 단일 출처)
+  function sfx() {
+    const out = [], all = [...STARTS, V0, TAG0, END0];
+    const clubKind = (cl) => /DR|3W|5W/.test(cl) ? "driver" : /SW|PW|8I|9I/.test(cl) ? "wedge" : "iron";
+    CUTS.forEach((cut, i) => {
+      const f0 = STARTS[i], len = all[i + 1] - f0;
+      if (i > 0) out.push([f0, FLASH.has(f0) ? "flash" : "whoosh"]);
+      out.push([f0 + 1, "impact-" + clubKind(cut.club || "7I")]);
+      let first = true;
+      for (const e of cut.ev) { const lf = Math.round(lfOfTau(cut, i, e[0])); if (lf < 0 || lf >= len) continue;
+        if (e[1] === "water") out.push([f0 + lf, "splash"]); else if (e[1] === "bounce") { out.push([f0 + lf, first ? "thud" : "tok"]); first = false; } }
+      if (cut.key === "summit") { let t = 0; for (const e of cut.ev) if (e[1] === "bounce" && e[0] > t + 1.5) { t = e[0]; } }
+      if (cut.key === "forest" && cut.trees.length) { const tx = cut.trees[0][0]; for (let lf = 0; lf < len; lf++) { const b = ballAt(cut.ball, tauOf(cut, i, lf)); if (b[0] >= tx - 40) { out.push([f0 + lf, "swish"]); break; } } }
+      if (cut.key === "island") out.push([f0 + LF_LAND[i] + 1, "splash-small"]);
+    });
+    out.push([V0, "flash"], [V0 + 1, "impact-wedge"], [V0 + V_LAND, "thud"]);
+    const hl = Math.round(V_LAND + 2 + (VT_HOLED - VTL) / 0.75 * FPS); out.push([V0 + hl, "cup"], [V0 + hl + 1, "chime"]);
+    out.push([TAG0 - 3, "whoosh"], [END0, "whoosh-up"], [END0 + 8, "end-chime"]);
+    out.sort((a, b) => a[0] - b[0]);
+    const pre = document.createElement("pre"); pre.id = "sfx"; pre.textContent = JSON.stringify({ fps: FPS, nf: NF, cues: out }); document.body.appendChild(pre);
+  }
+  document.fonts.ready.then(() => { if (q.has("audit")) audit(); if (q.has("sfx")) sfx(); render(q.has("t") ? parseFloat(q.get("t")) : tl.time()); });
 })();

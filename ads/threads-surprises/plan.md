@@ -10,6 +10,11 @@
 - **결정론 보강**: 블러 필터는 휩 프레임에만 건다. 창의 진하기는 그룹 투명도 대신 색 자체를 섞는다. 초안에서 이 두 경로가 렌더마다 다른 화소를 냈다.
 - 지난 판의 `bake.py`·`footage.mp4`(캡처 확대 영상층)는 지웠다.
 
+## v3.1 (4차 요청) — 소리
+- `scripts/make-audio.py` → `audio/mix.wav`(48kHz 스테레오, `<audio>`로 컴포지션에 붙임, HyperFrames가 AAC로 인코딩). 15초 편의 SoundKit 이식 레시피(LCG·biquad·나무 타격·우시·차임)를 재사용하고 동물 소리는 배음 합성으로 새로 만들었다. 외부 음원 없음.
+- 사건 시각은 main.js와 같은 상수(컷·히트스톱·자막 단어 2f 간격·풀백·문장·엔드카드)로 계산해 프레임 시각에 놓는다. 비트 123.43BPM은 문장 시작(8.75초)이 정확히 18박째가 되게 고른 값이다.
+- 라우드니스: 정적 게인 반복 + 부드러운 무릎 클리퍼(−8 → 천장 −3.2 dBFS). 납품 mp4 실측 −14.1 LUFS / −3.0 dBTP.
+
 ## 비트 시트 v3 (초)
 | 초 | 화면 | 자막 |
 |---|---|---|
@@ -105,6 +110,8 @@
 ```sh
 cd ads/threads-surprises
 python3 scripts/track_cat.py      # (캡처를 새로 찍었을 때만) 고양이 추적 → data/cat-track.json
+python3 scripts/extract.py        # (v3) 캡처에서 위치·시각 → data/scenes.js
+python3 scripts/make-audio.py     # (v3.1) 합성 사운드 → audio/mix.wav
 python3 scripts/bake.py           # 영상층 → assets/gen/footage.mp4 + data/cuts.js  (--check: 컷별 구도 확인 시트)
 ./scripts/render.sh high          # → dist/ads/threads/t1-surprises-v-ko.mp4
 python3 scripts/qa.py dist/…mp4 [두번째 렌더.mp4]   # 차분·정지·플래시·안전 영역·결정론

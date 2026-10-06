@@ -80,3 +80,7 @@ html, body { background:var(--cobalt); overflow:hidden; }
 #endlayer .l1 { position:absolute; font-weight:800; color:var(--cobalt); white-space:nowrap; }
 #endlayer .l2 { position:absolute; font-weight:600; color:#4A5060; white-space:nowrap; }
 #endlayer .url { position:absolute; font-family:"JBM", monospace; font-weight:500; color:#0E1016; white-space:nowrap; }
+.ball2 { position:absolute; border-radius:50%; background:#FFFFFF; box-shadow:0 0 0 1.6px var(--navy); }
+.hud { font-family:"Pretendard", sans-serif; fill:#FFFFFF; paint-order:stroke; stroke:var(--navy); stroke-width:2.4px; stroke-linejoin:round; }
+.hud.b { font-size:14px; font-weight:800; }
+.hud.s { font-size:10.5px; font-weight:600; }
