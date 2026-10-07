@@ -6,7 +6,7 @@
   COURSEDUMP=<bin>/coursedump python3 scripts/prep.py
 
 화면 맵: 지형의 핵심 구간 [xa, xb](m)을 x 60–1020(폭 89%)에. 세로는 실제 표고 × 과장(가로 px/m의 2.5~8배 — 실루엣 높이 ≤ 760px),
-실루엣 바닥 y≈1460. 공은 같은 맵(접지점 → 반지름만큼 위가 중심). 여러 샷(산정 계단 오르기)은 이어 붙인다. 화산 컷은 ../threads-volcano 데이터.
+실루엣 바닥 y≈1460. 공은 같은 맵(접지점 → 반지름만큼 위가 중심). 여러 샷(산정 계단 오르기)은 이어 붙인다. 화산 컷은 data/volcano-scene.js(폐기된 threads-volcano 1차 소스에서 옮겨 둔 지형·공·리그 데이터).
 """
 import json, os, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__)) + "/.."
@@ -65,6 +65,6 @@ for c in CUTS:
     out.append({**{k: v for k, v in c.items() if k not in ("shots",)}, "club": c["shots"][0][1], "hpx": hpx, "vx": vx, "terr": terr, "trees": trees, "flag": flag,
                 "ball": ball, "ev": evs, "land": land, "stick": stick, "T": round(t0, 3)})
     print(c["key"], f"hpx {hpx:.2f} vx {vx:.2f}(실제 대비 ×{vx:.1f}) 높이 {hext:.0f}px land {land[1]}@{land[0]:.2f}s x{land[2]} trees {len(trees)} flag {flag is not None} stick {stick is not None} T {t0:.2f} ev {len(evs)}")
-vol = open(HERE + "/../threads-volcano/data/scene.js").read()
+vol = open(HERE + "/data/volcano-scene.js").read()
 open(HERE + "/data/cuts.js", "w").write("window.CUTS=" + json.dumps(out, separators=(",", ":"), ensure_ascii=False) + ";\n" + vol)
 print("wrote data/cuts.js")
