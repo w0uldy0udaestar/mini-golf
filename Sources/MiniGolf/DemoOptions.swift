@@ -50,7 +50,7 @@ struct DemoOptions: Equatable {
     var lang: Lang? // --lang ko|en: 표시 언어 지정 (저장 안 함 — 영어 화면 관찰)
     var weather: Weather? // --weather clear|rain|gale: 9홀 전부 그 날씨로 강제 (M6 — 실플레이에서도 듣는다: 날씨만 고르고 치는 용도)
     var mission: MissionKind? // --mission KIND: 모든 홀에 그 미션 (M6 관찰)
-    var gimmick: GimmickKind? // --gimmick volcano|funnel: 들어가는 홀 전부에 그 장치 그린 (M7 — 날씨처럼 실플레이에서도 듣는다)
+    var gimmick: GimmickKind? // --gimmick volcano|funnel|mesa|dune|potBunker: 들어가는 홀 전부에 그 장치 (M7 — 날씨처럼 실플레이에서도 듣는다)
 
     init() {}
 
@@ -105,6 +105,9 @@ struct DemoOptions: Equatable {
         lang = value("--lang").flatMap(Lang.init(rawValue:))
         weather = value("--weather").flatMap(Weather.init(rawValue:))
         mission = value("--mission").flatMap(MissionKind.init(rawValue:))
-        gimmick = value("--gimmick").flatMap(GimmickKind.init(rawValue:))
+        gimmick = value("--gimmick")
+            .flatMap { v in
+                GimmickKind.allCases.first { $0.rawValue.lowercased() == v.lowercased() }
+            } // potbunker도 통한다
     }
 }

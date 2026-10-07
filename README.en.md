@@ -201,8 +201,12 @@ More loft means more spin and less ball speed — wedges fly short and check up 
   Clear three to unlock the **Sun visor**
 - **Hole weather** — the weather changes from hole to hole: clear (about six holes in ten) · **Rain** (the ball rolls less and greens are slower — drives roll about 40% less, carry is unchanged) ·
   **Gale** (4.5–8 m/s). The same bad weather never comes two holes in a row. Rain streaks and wind lines are drawn only just above the ground, so they never cover your work higher up the screen
-- **Volcano greens** — two holes a round grow a cone where the green was (the first one almost always within holes 1–2). The cup sits in the crater on top:
-  land it in the crater and it rolls into the cup; miss and it tumbles down the slope to the foot (standing at the foot selects a sand-wedge lob for you). Volcano holes are always clear weather
+- **Trick holes, 4 kinds** — three holes a round (one each in the front, middle and back third; the first almost always within holes 1–2) are reshaped by one big
+  piece of terrain. Three of the four kinds appear, shuffled every round: **Volcano** (a cone where the green was — land it in the crater and it rolls into the cup;
+  miss and it tumbles down to the foot) · **Mesa** (a flat green on top of cliffs — you have to hold the plateau: short hits the cliff and drops to the foot, long
+  rolls off the back) · **Giant Dune** (a tall sand ridge in front of the green — carry it, or lay up at its foot and lob over) · **Pot Bunker** (a deep sand pit in
+  the drive landing zone on par 4s and 5s, in front of the green on par 3s — only a clean full driver clears it, and only a sand wedge gets you out).
+  Standing on the flat band at the foot of a slope selects a sand-wedge lob for you. Trick holes are always clear weather
 - **Records, badges, hats** — rounds add up: lifetime stats and 15 badges (First birdie · Hole in one · Canyon tamer · Valley walker · Cascade diver · Forest ranger ·
   Summiteer…), with your badge count **unlocking hats for the stickman** (Straw hat → Propeller cap → Top hat → Crown), and missions unlocking the Sun visor.
   New badges are announced after you start aiming on the next hole. ⛳️ menu → Records · Hat
@@ -277,7 +281,7 @@ Clicking another window only releases the keyboard — the game keeps going. Cli
 
 ```sh
 swift build          # debug build
-swift test           # 126 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · trick greens · save-format compatibility)
+swift test           # 128 XCTest cases (ballistic invariants · lip-out boundaries · course stats · balance bot · pose invariants · mission rules · weather physics · trick greens · save-format compatibility)
 swiftformat --lint . # style check
 ```
 
@@ -314,7 +318,7 @@ docs/                motion catalog · QA report · research notes
 | `--demo-memes` | Cycles through all 12 meme showpieces |
 | `--seed N` | Fix the course seed |
 | `--weather W` | Force one weather on all nine holes (`clear` / `rain` / `gale`) — works outside observation modes too |
-| `--gimmick K` | Put that trick green on every hole it fits (`volcano` / `funnel` — the punchbowl is out of the rotation and only shows here) — works outside observation modes too |
+| `--gimmick K` | Put that trick on every hole it fits (`volcano` / `mesa` / `dune` / `potBunker` / `funnel` — the punchbowl is out of the rotation and only shows here) — works outside observation modes too |
 | `--lang L` | Set the display language (`ko` / `en`, not saved) |
 | `--mission KIND` | Put that mission on every hole (`noDriver` · `fairwayTee` · `longDrive` · `greenInReg` · `midIronGreen` · `shapeShot` · `closeApproach` · `noBunker` · `birdie`) |
 | `--demo-range` | Start in the driving range, cycling clubs every shot (watch the scale ticks and markers) |
@@ -344,7 +348,7 @@ Instrumentation logs: `AIM` · `FLAVOR[epoch]` · `MOTION` · `HOLED` · `OUTBOU
 - [x] Player trademark touches — Tiger's club twirl and uppercut, Bryson's straight arms and arm-lock putting, Rory's impact jump and finish recoil
 - [x] Multiple displays — pick and remember from ⛳️ menu → Display
 - [x] 9 hole missions · hole-by-hole weather (Rain · Gale)
-- [x] Trick greens, first batch (Volcano — Punchbowl left out of the rotation)
+- [x] Trick holes, 4 kinds — Volcano · Mesa · Giant Dune · Pot Bunker (Punchbowl left out of the rotation)
 - [x] Driving range — carry and total distance per club
 - [x] Custom summon shortcut — set it yourself from the ⛳️ menu
 - [x] English UI — ⛳️ menu → Language
