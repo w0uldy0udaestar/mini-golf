@@ -34,8 +34,8 @@ public enum GimmickKind: String, Sendable, CaseIterable {
             )
         case .dune: L("그린 앞 모래 언덕을 넘기거나, 발치에 끊고 띄워 넘긴다", "Carry the dune, or lay up at its foot and lob over")
         case .potBunker: L(
-                "항아리 벙커에 빠지면 샌드웨지로만 나온다 — 넘기거나 앞에 끊는다",
-                "Fall in the pot bunker and only a sand wedge gets out — carry it or lay up"
+                "항아리 벙커에 빠지면 띄워서만 나온다 — 넘기거나 앞에 끊는다",
+                "Fall in the pot bunker and only a lofted escape gets out — carry it or lay up"
             )
         }
     }
@@ -89,9 +89,6 @@ public extension GimmickKind {
         var kinds = inRotation
         for i in stride(from: kinds.count - 1, through: 1, by: -1) { // 종류 순서는 라운드마다 섞는다
             kinds.swapAt(i, Int(rand.next() * Double(i + 1)))
-        }
-        if kinds.count == 1 {
-            groups.remove(at: 1)
         }
         var used: Set<GimmickKind> = []
         for group in groups where !group.isEmpty {
@@ -231,14 +228,31 @@ public extension Hole {
         gimmickShape.map { Self.gimmickKnots(center: gimmickCenter, shape: $0, dir: holeX >= teeX ? 1 : -1) }
     }
 
-    /// 티에서 풀 드라이버의 캐리(첫 착지까지, m) — 착지 지대 장애물의 자리를 잡는 기준. 바람·표고는 이 홀 그대로. 착지 없이 끝나면 nil
+    /// 티에서 풀 드라이버의 캐리(첫 착지까지, m) — 착지 지대 장애물의 자리를 잡는 기준. 바람·표고는 이 홀 그대로, **나무는 뺀 사본**으로 잰다:
+    /// 캐노피 충돌도 `.bounce`라 숲 홀에서 캐리가 185~205m로 잘렸고, 그 자리에 놓인 구덩이는 이음 띠에 걸친 나무까지 지워 어떤 드라이브도
+    /// 안 빠지는 가짜 해저드가 됐다(리뷰 F1, 60시드 420홀 중 4홀). 착지 없이 끝나면 nil
     func fullDriveCarry() -> Double? {
         guard let driver = ClubTable.all.first(where: { $0.id == "DR" }) else { return nil }
+        let bare = Hole(
+            par: par, dist: dist, holeX: holeX, worldW: worldW, greenStart: greenStart, greenEnd: greenEnd,
+            apronStart: apronStart,
+            segments: segments, elevation: elevation, waterRange: waterRange, greenSlope: greenSlope, teeX: teeX,
+            obstacles: [],
+            signature: signature, wind: wind, gimmick: gimmick, gimmickX: gimmickX
+        )
+        let dir: Double = holeX >= teeX ? 1 : -1
         var b = BallState(x: teeX, y: ground(at: teeX))
-        Ballistics.launch(&b, club: driver, heightPct: 1, lie: .tee, dir: holeX >= teeX ? 1 : -1)
+        Ballistics.launch(
+            &b,
+            club: driver,
+            heightPct: 1,
+            lie: .tee,
+            dir: dir,
+            slope: slope(at: teeX) * Phys.stanceSlopeRatio
+        )
         var t = 0.0
         while t < 20 {
-            switch Ballistics.step(&b, hole: self) {
+            switch Ballistics.step(&b, hole: bare) {
             case .bounce, .water, .holed: return abs(b.x - teeX)
             case .wall: return nil
             default: break
@@ -246,6 +260,21 @@ public extension Hole {
             t += Phys.dt
         }
         return nil
+    }
+
+    /// 착지 지대 항아리가 진짜 해저드인가 — 얹은 뒤 게임과 같은 드라이브(캐노피 자동 펀치·스탠스 경사 포함)로 확인한다:
+    /// 풀 드라이버(1.0)는 반대쪽 테두리를 넘겨 모래 밖에 서고, 한두 칸 덜 친 드라이브(0.88~0.96) 중 하나는 구덩이에 빠져야 한다.
+    /// 아니면 그 자리는 버린다(다음 후보로) — 캐리를 나무 없이 재도 실제 드라이브가 다른 나무에 걸리는 홀이 있다
+    func potBunkerTrapWorks() -> Bool {
+        guard gimmick == .potBunker, par >= 4, let k = gimmickKnots else { return true }
+        let dir: Double = holeX >= teeX ? 1 : -1
+        let farRim = dir > 0 ? k.rim.upperBound : k.rim.lowerBound
+        func rest(_ power: Double) -> (x: Double, inPit: Bool)? {
+            guard let x = MissionKind.driveRest(self, weather: .clear, heightPct: power) else { return nil }
+            return (x, k.rim.contains(x) && surface(at: x) == .bunker)
+        }
+        guard let full = rest(1.0), !full.inPit, (full.x - farRim) * dir > 0 else { return false }
+        return [0.88, 0.92, 0.96].contains { rest($0)?.inPit == true }
     }
 
     /// 장치의 중심 후보 — 그린을 바꾸는 장치는 컵 하나. 사구는 마루가 에이프런 앞 (반대쪽 발치 + 띠 + 최소 이음) 만큼 앞에서 시작해
@@ -279,6 +308,10 @@ public extension Hole {
         guard gimmick == nil else { return nil }
         for c in gimmickAnchors(kind, shape: shape) {
             if let layout = gimmickLayout(kind, shape: shape, center: c) {
+                if kind == .potBunker, par >= 4,
+                   dressed(kind, shape: shape, layout: layout).potBunkerTrapWorks() == false {
+                    continue // 가짜 해저드가 되는 자리 — 다음 후보 (리뷰 F1)
+                }
                 return layout
             }
         }
@@ -330,14 +363,29 @@ public extension Hole {
     /// 장치를 얹은 사본. 얹을 자리가 안 나오면 nil — 물·절벽에 걸치거나 월드 밖으로 나가는 홀, 그린 앞 자리가 안 나오는 홀
     func withGimmick(_ kind: GimmickKind, shape custom: GimmickShape? = nil) -> Hole? {
         let shape = custom ?? GimmickShape.shape(for: kind, worldW: worldW)
-        guard let (c, k, extent) = gimmickLayout(kind, shape: shape) else { return nil }
+        guard let layout = gimmickLayout(kind, shape: shape) else { return nil }
+        return dressed(kind, shape: shape, layout: layout)
+    }
+
+    /// 정해진 자리에 장치를 얹는다 (검증 없음 — `gimmickLayout`이 자리를 고른다)
+    private func dressed(
+        _ kind: GimmickKind, shape: GimmickShape, layout: (
+            center: Double,
+            knots: GimmickKnots,
+            extent: ClosedRange<Double>
+        )
+    ) -> Hole {
+        let (c, k, extent) = layout
         let dir: Double = holeX >= teeX ? 1 : -1
         let z0 = ground(at: c)
         let lo = extent.lowerBound, hi = extent.upperBound
 
         let rimZ = kind.isRaised ? shape.height : 0.0 // 안쪽 면 가장자리의 높이
-        let bowlDepth = kind == .volcano ? shape.bowlSlope * shape.bowlHalf : kind.isRaised ? 0 : shape
-            .height // 가장자리에서 바닥까지
+        let bowlDepth: Double = switch kind { // 가장자리에서 바닥까지
+        case .volcano: shape.bowlSlope * shape.bowlHalf
+        case .funnel, .potBunker: shape.height
+        case .mesa, .dune: 0
+        }
         /// 자리 x의 높이 (z0 기준) — 띠 안쪽만
         func profile(_ x: Double) -> Double {
             if k.rim.lowerBound < k.rim.upperBound, k.rim.contains(x) { // 안쪽 면: 가장자리에서 바닥까지 곧은 비탈 (메사는 평평한 꼭대기)
@@ -370,8 +418,10 @@ public extension Hole {
         // 그린을 바꾸는 장치: 원래 그린·에이프런은 장치가 대신한다 — 장치 밖에 남는 조각까지 페어웨이로 바꾼다. 남겨 두면(원래 그린은 18~28m에
         // 핀이 한쪽으로 치우쳐 깔때기 홀의 64%에서 띠 밖으로 삐져나왔다) 그 위에서 퍼터가 잡히고 '온그린'·미션 성공 판정이 났다.
         // 장치에 걸친 원래 벙커는 통째로 러프로 — 0.2m짜리 모래 토막이 남았다 (리뷰 M-1). 장애물은 그린·에이프런을 그대로 둔다
-        // 장애물과 에이프런 사이에 남은 원래 그린사이드 벙커도 러프로 — 장애물을 넘긴 로브가 곧장 모래에 떨어졌다(프로브: 창 1칸). 해저드는 하나면 된다
-        let gap = kind.replacesGreen ? lo ... hi : dir > 0 ? lo ... apronStart : apronStart ... hi
+        // 장애물 너머에 남은 원래 벙커도 러프로 — 사구는 에이프런까지(넘긴 로브가 곧장 그린사이드 벙커에 떨어졌다, 프로브: 창 1칸), 항아리는 탈출 샷이
+        // 닿는 40m까지만(착지 지대 항아리가 150m 떨어진 그린사이드 벙커까지 지웠다 — 리뷰 F4). 해저드는 하나면 된다
+        let reach = kind == .dune ? apronStart : dir > 0 ? min(apronStart, hi + 40) : max(apronStart, lo - 40)
+        let gap = kind.replacesGreen ? lo ... hi : dir > 0 ? lo ... reach : reach ... hi
         var segs = segments.map { seg -> Segment in
             switch seg.type {
             case .green where kind.replacesGreen, .apron where kind.replacesGreen: Segment(

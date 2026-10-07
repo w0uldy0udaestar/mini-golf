@@ -113,12 +113,24 @@ final class GimmickTests: XCTestCase {
                 XCTAssertEqual(h.surface(at: k.rim.upperBound - 1), .bunker, tag)
                 XCTAssertEqual(h.surface(at: k.rim.lowerBound - 1), .fairway, tag)
                 XCTAssertEqual(h.surface(at: k.rim.upperBound + 1), .fairway, tag)
-                if h.par >= 4 { // 반대쪽 테두리는 풀 드라이버 캐리의 여유 앞 — 자리가 안 나오면 5m씩 최대 20m 티 쪽으로 밀린다
-                    let carry = try XCTUnwrap(d.base.fullDriveCarry())
-                    let farRim = abs((dir > 0 ? k.rim.upperBound : k.rim.lowerBound) - h.teeX)
-                    let want = carry - Hole.driveClearMargin(carry: carry)
-                    XCTAssertLessThanOrEqual(farRim, want + 1.01, "\(tag): 반대쪽 테두리 \(farRim)m, 풀 드라이버 캐리 \(carry)m")
-                    XCTAssertGreaterThanOrEqual(farRim, want - 21.01, "\(tag): 반대쪽 테두리 \(farRim)m, 풀 드라이버 캐리 \(carry)m")
+                if h.par >= 4 { // 진짜 해저드인가 — 게임과 같은 드라이브로: 풀 드라이버는 넘겨 모래 밖에 서고, 한두 칸 덜 친 드라이브 중 하나는 빠진다 (리뷰 F1)
+                    let farRim = dir > 0 ? k.rim.upperBound : k.rim.lowerBound
+                    let full = try XCTUnwrap(
+                        MissionKind.driveRest(h, weather: .clear, heightPct: 1.0),
+                        "\(tag): 풀 드라이버가 물에 빠졌다"
+                    )
+                    XCTAssertNotEqual(h.surface(at: full), .bunker, "\(tag): 풀 드라이버가 모래에 섰다")
+                    XCTAssertGreaterThan(
+                        (full - farRim) * dir,
+                        0,
+                        "\(tag): 풀 드라이버 \(abs(full - h.teeX))m가 테두리 \(abs(farRim - h.teeX))m를 못 넘겼다"
+                    )
+                    let trapped = [0.88, 0.92, 0.96].contains { p in
+                        guard let x = MissionKind.driveRest(h, weather: .clear, heightPct: p) else { return false }
+                        return k.rim.contains(x) && h.surface(at: x) == .bunker
+                    }
+                    XCTAssertTrue(trapped, "\(tag): 덜 친 드라이브가 하나도 안 빠진다 — 가짜 해저드")
+                    XCTAssertTrue(h.potBunkerTrapWorks(), tag)
                 }
             }
             if d.kind.isRaised { // 화면 끝 릴리프(46px)가 공을 비탈 위에 올려놓지 않는다 — 폭 1280pt 화면 기준, 반대편 발치가 릴리프 거리 밖 (리뷰 M-2)
@@ -299,6 +311,20 @@ final class GimmickTests: XCTestCase {
                     "par \(d.hole.par): 꼭대기 \(x - d.hole.holeX)m에 놓은 공이 \(r.x - x)m 움직였다"
                 )
                 XCTAssertEqual(d.hole.surface(at: r.x), .green)
+            }
+            // 가장자리 0.4~0.65m 띠(경사 측정에 절벽이 섞여 0.15~0.175)에 놓은 공은 안쪽으로 밀려 서거나(절벽 1.5 — 거기 서면 퍼팅 스탠스가 절벽 아래다,
+            // 리뷰 F3) 정지 한계를 넘는 홀(절벽 1.75)에선 스스로 굴러 떨어져 발치로 간다 — 가장자리 띠에 남지만 않으면 된다
+            for (rim, inward) in [(k.rim.lowerBound, 1.0), (k.rim.upperBound, -1.0)] {
+                for delta in [0.4, 0.5, 0.6] {
+                    let r = release(d.hole, at: rim + inward * delta)
+                    let inside = (r.x - rim) * inward
+                    XCTAssertFalse(r.holed)
+                    XCTAssertTrue(
+                        inside >= 0.7 || inside <= -0.5,
+                        "par \(d.hole.par): 가장자리 \(delta)m에 놓은 공이 가장자리 띠 \(inside)m에 남았다"
+                    )
+                    XCTAssertEqual(d.hole.surface(at: r.x) == .green, inside >= 0.7) // 떨어진 공은 발치 띠나 그 너머(그린만 아니면)
+                }
             }
         }
     }

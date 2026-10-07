@@ -364,6 +364,10 @@ public enum Ballistics {
         if kind.isBowl, hole.surface(at: b.x) == .green { // 분지 안: 컵 쪽으로
             guard abs(b.x - hole.holeX) >= Phys.cupHalfWidth else { return false }
             b.vx = -away * 1.5
+        } else if kind == .mesa, hole.surface(at: b.x) == .green,
+                  min(b.x - k.rim.lowerBound, k.rim.upperBound - b.x) < 0.7 {
+            // 메사 꼭대기 가장자리 0.4~0.65m 띠(경사 측정에 절벽이 섞여 0.17 아래)에 선 공을 퍼팅하려면 스틱맨이 절벽 아래에 선다(리뷰 F3) — 안쪽으로
+            b.vx = -away * 1.5
         } else if kind.isRaised, k.foot.contains(b.x), hole.surface(at: b.x) != .green {
             // 비탈 위(화산 봉우리·메사 절벽·사구 모래면): 바깥으로. 메사 꼭대기(평평한 그린)는 서는 자리라 뺀다 — 화산 테두리는 러프라 여기 걸린다
             b.vx = away * 1.5
