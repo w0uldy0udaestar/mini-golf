@@ -37,14 +37,23 @@ public enum MissionKind: String, Sendable, CaseIterable {
         case .longDrive:
             hole.par >= 4 && hole.dist >= 330 && Self.longDriveReachable(hole, weather: weather)
         case .greenInReg: MissionBot.reachesGreenInRegulation(hole, weather: weather)
-        case .noBunker: hole.segments.contains { $0.type == .bunker }
+        case .noBunker: hole.gimmick != .dune && hole.segments
+            .contains { $0.type == .bunker } // 사구 모래면엔 공이 서지 않아 무조건 성공 (리뷰 F7)
         default: true
         }
     }
 
-    /// 미스힛 없는 드라이버 풀샷이 티에서 멈춘 자리까지의 거리(m). 물에 빠지면 0. 경사 라이·캐노피 자동 펀치는 게임과 같은 규칙
+    /// 미스힛 없는 드라이버 풀샷이 티에서 멈춘 자리까지의 거리(m). 물·벙커에 빠지면 0(항아리 벙커 바닥에 선 드라이브는 깨끗하지 않다 — 리뷰 F2).
+    /// 경사 라이·캐노피 자동 펀치는 게임과 같은 규칙
     static func cleanDrive(_ hole: Hole, weather: Weather, heightPct: Double = 1) -> Double {
-        guard let driver = ClubTable.all.first(where: { $0.id == "DR" }) else { return 0 }
+        guard let x = driveRest(hole, weather: weather, heightPct: heightPct),
+              hole.surface(at: x) != .bunker else { return 0 }
+        return abs(x - hole.teeX)
+    }
+
+    /// 미스힛 없는 드라이버가 멈춘 자리 x (물에 빠지면 nil). 항아리 벙커 배치 검증(`Hole.potBunkerTrapWorks`)도 같은 샷을 쓴다
+    static func driveRest(_ hole: Hole, weather: Weather, heightPct: Double = 1) -> Double? {
+        guard let driver = ClubTable.all.first(where: { $0.id == "DR" }) else { return nil }
         let dir: Double = hole.holeX >= hole.teeX ? 1 : -1
         var b = BallState(x: hole.teeX, y: hole.ground(at: hole.teeX))
         Ballistics.launch(
@@ -54,11 +63,11 @@ public enum MissionKind: String, Sendable, CaseIterable {
         var t = 0.0
         while b.phase != .rest, t < 60 {
             if Ballistics.step(&b, hole: hole, weather: weather) == .water {
-                return 0
+                return nil
             }
             t += Phys.dt
         }
-        return abs(b.x - hole.teeX)
+        return b.x
     }
 
     /// 추첨 가중치 — 버디는 스코어 미션이라 드물게
@@ -163,8 +172,8 @@ public struct MissionTracker: Sendable, Equatable {
                 state = surface == .fairway || surface == .apron || surface == .green ? .cleared : .failed
             }
         case .longDrive:
-            if shots == 1 {
-                state = abs(x - lastFromX) >= MissionKind.longDriveMeters ? .cleared : .failed
+            if shots == 1 { // 항아리 벙커 바닥(250m 안팎)에 빠진 드라이브는 '넘긴' 게 아니다 (리뷰 F2)
+                state = abs(x - lastFromX) >= MissionKind.longDriveMeters && surface != .bunker ? .cleared : .failed
             }
         case .greenInReg:
             if surface == .green, strokes <= par - 2 {

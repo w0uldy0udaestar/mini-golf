@@ -274,9 +274,14 @@ public enum Ballistics {
         var x = b.x
         var steps = 0
         let down: Double = hole.slope(at: b.x) > 0 ? -0.5 : 0.5 // 내리막 방향 (고정)
+        var passedBottom = false
         while steps < 200 {
             let s = hole.slope(at: x)
-            if abs(s) <= settleTail || s * down > 0 { // 완경사에 닿았거나 바닥을 지나 오르막(부호 반전)
+            if abs(s) <= settleTail { // 완경사에 닿았다
+                break
+            }
+            if s * down > 0 { // 바닥을 지나 오르막(부호 반전)
+                passedBottom = true
                 break
             }
             // 직선 언덕 사면(경사가 4m 앞까지 일정, ≤ 0.3)에 들어섰으면 거기서 선다 — 러프·페어웨이 정지 마찰이 붙잡는 곳을 바닥까지 미끄러뜨리지
@@ -286,6 +291,9 @@ public enum Ballistics {
             }
             x += down
             steps += 1
+        }
+        if passedBottom { // 뾰족한 V(항아리 벙커, 2026-10-07)는 0.5m 걸음이 바닥을 건너뛰어 끝 자리 경사가 0.3을 살짝 넘길 수 있다 — 마지막 걸음 안의 가장 낮은 자리로
+            x = stride(from: x - down, through: x, by: down / 5).min { hole.ground(at: $0) < hole.ground(at: $1) } ?? x
         }
         x = min(max(x, 0.5), hole.worldW - 0.5)
         // 200스텝 소진(좁은 V 양벽 진동)·경계 클램프로 여전히 급경사면 이동을 포기한다 — 현 생성기는 V 바닥이 항상 완경사라
@@ -351,13 +359,17 @@ public enum Ballistics {
     /// 재서 꼭짓점이 둥글어진다 — 그린 쪽 0.3m, 러프 쪽 1cm). 거기 걸린 공을 치려면 스틱맨이 바깥 비탈 3m 아래에 서게 된다(캡처로 확인).
     /// 1.5m/s면 마루의 반대쪽 기울기(최대 1.6m/s² × 0.2m)를 넘는다. 컵 구역은 캡처가 처리한다
     static func tipOffGimmick(_ b: inout BallState, hole: Hole) -> Bool {
-        guard let kind = hole.gimmick else { return false }
-        let away: Double = b.x >= hole.holeX ? 1 : -1
-        if hole.surface(at: b.x) == .green {
+        guard let kind = hole.gimmick, let k = hole.gimmickKnots else { return false }
+        let away: Double = b.x >= hole.gimmickCenter ? 1 : -1
+        if kind.isBowl, hole.surface(at: b.x) == .green { // 분지 안: 컵 쪽으로
             guard abs(b.x - hole.holeX) >= Phys.cupHalfWidth else { return false }
             b.vx = -away * 1.5
-        } else if kind == .volcano,
-                  Hole.gimmickKnots(cup: hole.holeX, shape: .volcano(worldW: hole.worldW)).foot.contains(b.x) {
+        } else if kind == .mesa, hole.surface(at: b.x) == .green,
+                  min(b.x - k.rim.lowerBound, k.rim.upperBound - b.x) < 0.7 {
+            // 메사 꼭대기 가장자리 0.4~0.65m 띠(경사 측정에 절벽이 섞여 0.17 아래)에 선 공을 퍼팅하려면 스틱맨이 절벽 아래에 선다(리뷰 F3) — 안쪽으로
+            b.vx = -away * 1.5
+        } else if kind.isRaised, k.foot.contains(b.x), hole.surface(at: b.x) != .green {
+            // 비탈 위(화산 봉우리·메사 절벽·사구 모래면): 바깥으로. 메사 꼭대기(평평한 그린)는 서는 자리라 뺀다 — 화산 테두리는 러프라 여기 걸린다
             b.vx = away * 1.5
         } else {
             return false
@@ -499,7 +511,7 @@ public enum Ballistics {
                         return .water
                     }
                     if abs(b.x - hole.holeX) < Phys.cupHalfWidth + 0.05 {
-                        if hole.gimmick != nil { // 장치 그린: 분지 바닥에서 멈춘 공은 들어간 것 — 밀어내면 컵 옆 급경사 벽에 선다 (리뷰 m-4)
+                        if hole.gimmick?.isBowl == true { // 분지 바닥에서 멈춘 공은 들어간 것 — 밀어내면 컵 옆 급경사 벽에 선다 (리뷰 m-4)
                             return .holed
                         }
                         b.x = hole.holeX + (b.x >= hole.holeX ? 1 : -1) * (Phys.cupHalfWidth + 0.05)
@@ -546,7 +558,7 @@ public enum Ballistics {
         if b.lipped {
             if abs(b.x - hole.holeX) > Phys.cupHalfWidth + 0.2 {
                 b.lipped = false
-            } else if hole.gimmick != nil, b.phase == .roll, abs(b.vx) <= Phys.captureRoll,
+            } else if hole.gimmick?.isBowl == true, b.phase == .roll, abs(b.vx) <= Phys.captureRoll,
                       abs(b.x - hole.holeX) < Phys.cupHalfWidth {
                 // 장치 그린(M7): 컵이 분지 바닥이라 턱에 맞고 튄 공도 도로 굴러 들어온다 — 튀어 오른 뒤 내려앉으면 들어간 것으로 친다.
                 // 보통 그린의 규칙(컵 옆에 걸쳐 선다)을 쓰면 깔때기 바닥에서 공이 컵을 깔고 앉은 채 2.5초 떨다가 옆으로 밀려났다 (프로브 실측)

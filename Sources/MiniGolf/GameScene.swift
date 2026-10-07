@@ -766,12 +766,15 @@ final class GameScene: SKScene {
         if strokes > 0 || demo.pickupForce, hole.surface(at: ball.x) == .green, !club.isPutter { // 관찰 모드는 첫 샷도 퍼터
             clubIdx = ClubTable.all.firstIndex { $0.isPutter } ?? clubIdx
         }
-        // 화산 발치에 서면 샌드웨지 로브로 자동 전환 (M7 — 그린의 퍼터 전환과 같은 관례): 띄워서 분화구에 떨어뜨려야 하는 자리고,
+        // 솟은 장치(화산·메사·사구)의 발치 띠에 서면 샌드웨지 로브로 자동 전환 (M7 — 그린의 퍼터 전환과 같은 관례): 띄워서 올려야 하는 자리고,
         // 샷 종류 키(Tab)를 안 써 본 사람도 '로브'라는 답이 있다는 것을 HUD에서 본다. 이후 ←→·Tab으로 자유 변경
-        if strokes > 0, hole.gimmick == .volcano, hole.surface(at: ball.x) != .green {
-            let k = Hole.gimmickKnots(cup: hole.holeX, shape: .volcano(worldW: hole.worldW))
-            // 평평한 띠 위에서만 — 띠 밖 2m만 나가도 이 조합이 닿지 않는 자리가 3분의 1이고, 비탈 위에선 발사각이 90°를 넘는다 (리뷰 m-1)
-            if k.collar.contains(ball.x), !k.foot.contains(ball.x) {
+        if strokes > 0, let kind = hole.gimmick, kind.lobsFromFoot, hole.surface(at: ball.x) != .green,
+           let k = hole.gimmickKnots {
+            // 평평한 띠 위에서만 — 띠 밖 2m만 나가도 이 조합이 닿지 않는 자리가 3분의 1이고, 비탈 위에선 발사각이 90°를 넘는다 (리뷰 m-1).
+            // 사구는 티 쪽 띠만 — 그린 쪽 띠(3m)는 넘긴 공이 서는 자리라 띄울 일이 없다
+            let dir = hole.holeX >= hole.teeX ? 1.0 : -1.0
+            let onNear = (ball.x - hole.gimmickCenter) * dir < 0
+            if k.collar.contains(ball.x), !k.foot.contains(ball.x), kind != .dune || onNear {
                 clubIdx = ClubTable.all.firstIndex { $0.id == "SW" } ?? clubIdx
                 shotShape = .lob
             }
