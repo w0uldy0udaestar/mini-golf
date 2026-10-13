@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.swift) command -v swiftformat >/dev/null && swiftformat \"$f\" --quiet >/dev/null 2>&1 || true ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

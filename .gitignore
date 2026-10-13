@@ -33,3 +33,6 @@ node_modules/
 
 # 내부 작업 메모 — 공개 저장소에 올리지 않는다 (로컬 전용)
 HANDOFF.md
+
+# 옛 HANDOFF 이력 (HANDOFF.md와 같이 로컬 전용)
+docs/handoff-archive/
